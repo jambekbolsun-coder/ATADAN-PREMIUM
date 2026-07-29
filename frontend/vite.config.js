@@ -1,10 +1,24 @@
-import { defineConfig } from 'vite'
+﻿import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 export default defineConfig({
+  base: '/ATADAN-PREMIUM/',
   plugins: [react()],
-  server: { port: 5173, proxy: { '/api': 'http://localhost:8000' } },
-  preview: { port: 4173 },
-  build: { sourcemap: true, chunkSizeWarningLimit: 900 },
-  test: { environment: 'jsdom', globals: true }
+  server: {
+    port: 5173,
+    proxy: {
+      '/api': 'http://localhost:8000'
+    }
+  },
+  preview: {
+    port: 4173
+  },
+  build: {
+    sourcemap: true,
+    chunkSizeWarningLimit: 900
+  },
+  test: {
+    environment: 'jsdom',
+    globals: true
+  }
 })
