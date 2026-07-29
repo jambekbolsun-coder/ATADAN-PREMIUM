@@ -1,0 +1,13 @@
+{
+  "brandTagline":"吉尔吉斯斯坦 CHANGFA 拖拉机",
+  "topbar":"首付低至10% • 售后服务与配件",
+  "nav":{"home":"首页","catalog":"产品目录","series":"系列","selector":"选型","compare":"对比","leasing":"融资租赁","service":"服务","parts":"配件","about":"关于我们","contacts":"联系","blog":"知识中心"},
+  "actions":{"catalog":"打开目录","select":"选择拖拉机","details":"查看详情","compare":"加入对比","removeCompare":"移除","favorite":"收藏","whatsapp":"WhatsApp咨询","consult":"获取建议","price":"询价","availability":"查询库存","route":"查看路线","submit":"提交需求","reset":"重置","back":"返回","read":"阅读文章"},
+  "home":{"eyebrow":"农业机械官方供应商","title":"为您的经营成果而工作的设备","lead":"根据土地面积、土壤和农具推荐CHANGFA拖拉机，并在吉尔吉斯斯坦提供租赁、服务和配件支持。","popular":"热门机型","power":"按马力选择","jobs":"按作业类型选择","leasingTitle":"清晰易懂的融资租赁","serviceTitle":"购买后的持续支持","why":"农户选择ATADAN的原因","steps":"从需求到下田作业","realPhotos":"设备实拍图片","finalTitle":"告诉我们拖拉机需要完成什么工作"},
+  "catalog":{"title":"CHANGFA拖拉机目录","lead":"对比马力、重量、变速箱和用途。未确认的价格不会展示。","search":"搜索型号","power":"马力","series":"系列","job":"用途","cabin":"驾驶室","creeper":"爬行挡","stock":"库存","sort":"排序","found":"个机型","empty":"没有符合筛选条件的机型。","all":"全部","yes":"有","any":"不限","priceRequest":"价格面议","inStock":"确认库存"},
+  "model":{"specs":"技术参数","simple":"简单说明","benefit":"实际价值","recommended":"适用客户","works":"适合作业","leasing":"租赁测算","colors":"颜色展示","colorNote":"颜色配置器仅用于外观示例。所选颜色是否可供订购需向经理确认。","configurationNote":"下单前由经理确认准确配置和技术参数。","related":"相似机型","equipment":"配套农具","service":"服务与配件"},
+  "leasing":{"title":"融资租赁计算器","lead":"仅供参考，最终条件由银行审核后确定。","price":"设备价格","down":"首付款","rate":"年利率","term":"期限","months":"个月","financed":"融资金额","monthly":"预计月供","warning":"未包含保险、手续费、季节性还款安排和银行其他要求。"},
+  "forms":{"name":"姓名","phone":"电话","message":"您需要什么设备？","consent":"提交即表示同意隐私政策。","success":"感谢，需求已保存。","error":"提交失败，请通过WhatsApp联系我们。","required":"请填写必填项"},
+  "footer":{"address":"比什凯克市舍甫琴科街114号","company":"ATADAN — CHANGFA拖拉机、融资租赁支持、售后服务与配件。","rights":"版权所有。","legal":"法律信息"},
+  "common":{"hp":"马力","kg":"公斤","mm":"毫米","priceRequest":"价格面议","from":"起","years":"年","warranty":"质保","service":"服务","parts":"配件","leasing":"融资租赁","notConfirmed":"需经理确认"}
+}

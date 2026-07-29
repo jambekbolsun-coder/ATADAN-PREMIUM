@@ -1,0 +1,4 @@
+import { useState } from 'react'
+import { useTranslation } from 'react-i18next'
+const colors=[['Фирменный зелёный','#23744b'],['Тёмно-зелёный','#0b3e28'],['Графитовый','#343a3a'],['Чёрный','#151515'],['Серебристый','#9aa4a4'],['Красный','#8f2b22'],['Синий','#24558a'],['Песочный','#a88b5c']]
+export default function ColorConfigurator({image}){const {t}=useTranslation(); const [selected,setSelected]=useState(colors[0]); return <div className="color-config"><div className="color-stage" style={{'--demo-color':selected[1]}}><img src={image} alt="Демонстрационный вид трактора"/></div><div className="color-controls">{colors.map(c=><button key={c[0]} className={selected[0]===c[0]?'active':''} onClick={()=>setSelected(c)} title={c[0]}><span style={{background:c[1]}}/>{c[0]}</button>)}</div><p className="notice">{t('model.colorNote')}</p></div>}
