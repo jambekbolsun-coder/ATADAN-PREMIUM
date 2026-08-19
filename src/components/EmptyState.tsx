@@ -1,0 +1,2 @@
+import { Tractor as TractorIcon } from 'lucide-react'
+export function EmptyState({ title, text }: { title: string; text: string }) { return <div className="rounded-[32px] border border-dashed border-neutral-300 bg-white px-6 py-14 text-center"><div className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-atadan-50 text-atadan-700"><TractorIcon /></div><h3 className="mt-5 text-xl font-bold">{title}</h3><p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-neutral-500">{text}</p></div> }
