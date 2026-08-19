@@ -4,5 +4,50 @@ import { copy } from '../lib/i18n'
 import { trackEvent } from '../lib/analytics'
 import type { InstallmentProgram, Locale } from '../lib/types'
 import { WhatsAppButton } from './WhatsAppButton'
-function money(value:number,currency:string,locale:Locale){const lang=locale==='kg'?'ky-KG':locale==='en'?'en-US':'ru-RU';return new Intl.NumberFormat(lang,{maximumFractionDigits:0}).format(Math.max(0,value))+` ${currency}`}
-export function InstallmentCalculator({price,currency,program,locale,tractorId,model,phone}:{price:number;currency:string;program:InstallmentProgram;locale:Locale;tractorId:string;model:string;phone?:string}){const t=copy(locale);const terms=program.terms_months?.length?program.terms_months:[6,12,18,24,36];const [term,setTerm]=useState(terms[0]);const minDown=Math.max(0,Math.min(90,Number(program.min_down_payment_percent||0)));const [downPercent,setDownPercent]=useState(minDown);const calc=useMemo(()=>{const down=price*downPercent/100;const principal=Math.max(0,price-down);let financed=principal;let monthly=0;if(program.calculation_type==='annual_rate'&&Number(program.annual_rate_percent)>0){const r=Number(program.annual_rate_percent)/100/12;monthly=principal*(r*Math.pow(1+r,term))/(Math.pow(1+r,term)-1);financed=monthly*term}else{const markup=program.calculation_type==='flat_markup'?Number(program.markup_percent||0)/100:0;financed=principal*(1+markup);monthly=financed/term}return{down,principal,monthly,total:down+financed}},[price,downPercent,term,program]);const disclaimer=locale==='kg'?program.disclaimer_kg:locale==='en'?program.disclaimer_en:program.disclaimer_ru;const wa=locale==='kg'?`Саламатсызбы! ${model} трактору боюнча бөлүп төлөө шарттарын тактагым келет. Баасы: ${money(price,currency,locale)}, баштапкы төлөм: ${money(calc.down,currency,locale)}, мөөнөт: ${term} ай, алдын ала төлөм: ${money(calc.monthly,currency,locale)} айына.`:locale==='en'?`Hello! I want to confirm installment terms for ${model}. Price: ${money(price,currency,locale)}, down payment: ${money(calc.down,currency,locale)}, term: ${term} months, preliminary payment: ${money(calc.monthly,currency,locale)} per month.`:`Здравствуйте! Хочу уточнить условия рассрочки на ${model}. Цена: ${money(price,currency,locale)}, первый взнос: ${money(calc.down,currency,locale)}, срок: ${term} мес., предварительный платёж: ${money(calc.monthly,currency,locale)} в месяц.`;return <section className="rounded-[36px] bg-[#101510] p-6 text-white sm:p-9 lg:p-12" onMouseEnter={()=>trackEvent('installment_open',{tractorId,locale})}><div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-atadan-500 text-[#102006]"><Calculator size={20}/></div><div><p className="text-xs font-bold uppercase tracking-[.2em] text-atadan-300">{t.installment}</p><h2 className="mt-1 text-2xl font-bold">{t.calculate}</h2></div></div><div className="mt-8 grid gap-8 lg:grid-cols-[1fr_.9fr]"><div className="space-y-7"><label className="block"><div className="mb-3 flex justify-between text-sm"><span>{t.downPayment}</span><b>{Math.round(downPercent)}%</b></div><input className="w-full accent-[#58d000]" type="range" min={minDown} max={80} step={5} value={downPercent} onChange={e=>setDownPercent(Number(e.target.value))}/><div className="mt-2 text-sm text-white/55">{money(calc.down,currency,locale)}</div></label><div><div className="mb-3 text-sm">{t.term}</div><div className="flex flex-wrap gap-2">{terms.map(m=><button key={m} onClick={()=>setTerm(m)} className={`min-h-11 rounded-full px-4 text-sm font-bold ${m===term?'bg-atadan-500 text-[#102006]':'bg-white/8 text-white hover:bg-white/12'}`}>{m} {t.months}</button>)}</div></div></div><div className="rounded-[28px] bg-white p-6 text-[#101510]"><div className="text-sm text-neutral-500">{t.monthly}</div><div className="mt-2 text-3xl font-extrabold tracking-[-.04em] sm:text-4xl">{money(calc.monthly,currency,locale)}</div><dl className="mt-6 space-y-3 border-t border-neutral-100 pt-5 text-sm"><div className="flex justify-between gap-4"><dt className="text-neutral-500">{t.financing}</dt><dd className="font-semibold">{money(calc.principal,currency,locale)}</dd></div><div className="flex justify-between gap-4"><dt className="text-neutral-500">{t.total}</dt><dd className="font-semibold">{money(calc.total,currency,locale)}</dd></div></dl><p className="mt-5 text-xs leading-5 text-neutral-400">{disclaimer}</p><WhatsAppButton phone={phone} message={wa} locale={locale} tractorId={tractorId} location="installment" className="mt-5 w-full"/></div></div></section>}
+
+function money(value: number, currency: string, locale: Locale) {
+  const lang = locale === 'kg' ? 'ky-KG' : locale === 'en' ? 'en-US' : 'ru-RU'
+  return new Intl.NumberFormat(lang, { maximumFractionDigits: 0 }).format(Math.max(0, value)) + ` ${currency}`
+}
+
+export function InstallmentCalculator({ price, currency, program, locale, tractorId, model, phone }: { price: number; currency: string; program: InstallmentProgram; locale: Locale; tractorId: string; model: string; phone?: string }) {
+  const t = copy(locale)
+  const terms = program.terms_months?.length ? program.terms_months : [6, 12, 18, 24, 36]
+  const [term, setTerm] = useState(terms[0])
+  const minDown = Math.max(0, Math.min(90, Number(program.min_down_payment_percent || 0)))
+  const [downPercent, setDownPercent] = useState(minDown)
+  const complete = (nextTerm = term, nextDown = downPercent) => trackEvent('installment_completed', { tractorId, locale, metadata: { term_months: nextTerm, down_payment_percent: nextDown } })
+  const calc = useMemo(() => {
+    const down = price * downPercent / 100
+    const principal = Math.max(0, price - down)
+    let financed = principal
+    let monthly = 0
+    if (program.calculation_type === 'annual_rate' && Number(program.annual_rate_percent) > 0) {
+      const r = Number(program.annual_rate_percent) / 100 / 12
+      monthly = principal * (r * Math.pow(1 + r, term)) / (Math.pow(1 + r, term) - 1)
+      financed = monthly * term
+    } else {
+      const markup = program.calculation_type === 'flat_markup' ? Number(program.markup_percent || 0) / 100 : 0
+      financed = principal * (1 + markup)
+      monthly = financed / term
+    }
+    return { down, principal, monthly, total: down + financed }
+  }, [price, downPercent, term, program])
+  const disclaimer = locale === 'kg' ? program.disclaimer_kg : locale === 'en' ? program.disclaimer_en : program.disclaimer_ru
+  const wa = locale === 'kg'
+    ? `Саламатсызбы! ${model} трактору боюнча бөлүп төлөө шарттарын тактагым келет. Баасы: ${money(price, currency, locale)}, баштапкы төлөм: ${money(calc.down, currency, locale)}, мөөнөт: ${term} ай, алдын ала төлөм: ${money(calc.monthly, currency, locale)} айына.`
+    : locale === 'en'
+      ? `Hello! I want to confirm installment terms for ${model}. Price: ${money(price, currency, locale)}, down payment: ${money(calc.down, currency, locale)}, term: ${term} months, preliminary payment: ${money(calc.monthly, currency, locale)} per month.`
+      : `Здравствуйте! Хочу уточнить условия рассрочки на ${model}. Цена: ${money(price, currency, locale)}, первый взнос: ${money(calc.down, currency, locale)}, срок: ${term} мес., предварительный платёж: ${money(calc.monthly, currency, locale)} в месяц.`
+
+  return <section className="rounded-[36px] bg-[#101510] p-6 text-white sm:p-9 lg:p-12" onMouseEnter={() => trackEvent('installment_open', { tractorId, locale })}>
+    <div className="flex items-center gap-3"><div className="grid h-11 w-11 place-items-center rounded-2xl bg-atadan-500 text-[#102006]"><Calculator size={20} /></div><div><p className="text-xs font-bold uppercase tracking-[.2em] text-atadan-300">{t.installment}</p><h2 className="mt-1 text-2xl font-bold">{t.calculate}</h2></div></div>
+    <div className="mt-8 grid gap-8 lg:grid-cols-[1fr_.9fr]">
+      <div className="space-y-7">
+        <label className="block"><div className="mb-3 flex justify-between text-sm"><span>{t.downPayment}</span><b>{Math.round(downPercent)}%</b></div><input className="w-full accent-[#58d000]" type="range" min={minDown} max={80} step={5} value={downPercent} onChange={e => setDownPercent(Number(e.target.value))} onPointerUp={() => complete()} onKeyUp={() => complete()} /><div className="mt-2 text-sm text-white/55">{money(calc.down, currency, locale)}</div></label>
+        <div><div className="mb-3 text-sm">{t.term}</div><div className="flex flex-wrap gap-2">{terms.map(m => <button key={m} onClick={() => { setTerm(m); complete(m, downPercent) }} className={`min-h-11 rounded-full px-4 text-sm font-bold ${m === term ? 'bg-atadan-500 text-[#102006]' : 'bg-white/8 text-white hover:bg-white/12'}`}>{m} {t.months}</button>)}</div></div>
+      </div>
+      <div className="rounded-[28px] bg-white p-6 text-[#101510]"><div className="text-sm text-neutral-500">{t.monthly}</div><div className="mt-2 text-3xl font-extrabold tracking-[-.04em] sm:text-4xl">{money(calc.monthly, currency, locale)}</div><dl className="mt-6 space-y-3 border-t border-neutral-100 pt-5 text-sm"><div className="flex justify-between gap-4"><dt className="text-neutral-500">{t.financing}</dt><dd className="font-semibold">{money(calc.principal, currency, locale)}</dd></div><div className="flex justify-between gap-4"><dt className="text-neutral-500">{t.total}</dt><dd className="font-semibold">{money(calc.total, currency, locale)}</dd></div></dl><p className="mt-5 text-xs leading-5 text-neutral-400">{disclaimer}</p><WhatsAppButton phone={phone} message={wa} locale={locale} tractorId={tractorId} location="installment" className="mt-5 w-full" /></div>
+    </div>
+  </section>
+}
