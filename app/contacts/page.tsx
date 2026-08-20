@@ -1,0 +1,6 @@
+import type { Metadata } from "next";
+import { Clock3, MapPin, MessageCircle, Phone } from "lucide-react";
+import { LeadForm } from "../components/LeadForm";
+
+export const metadata: Metadata = { title: "Контакты ATADAN Changfa", description: "Связаться с официальным дистрибьютором тракторов Changfa в Кыргызстане." };
+export default function ContactsPage() { return <main><section className="page-hero contact-hero"><span className="eyebrow">Свяжитесь с ATADAN</span><h1>Обсудим вашу задачу</h1><p>Позвоните, напишите в WhatsApp или оставьте заявку — ответим и поможем выбрать трактор.</p></section><section className="section-shell contacts-grid"><div className="contact-cards"><a href="tel:+996706131404"><i><Phone /></i><span><small>Телефон</small><strong>+996 706 131 404</strong></span></a><a href="https://wa.me/996706131404" target="_blank" rel="noreferrer"><i><MessageCircle /></i><span><small>WhatsApp</small><strong>Написать менеджеру</strong></span></a><div><i><MapPin /></i><span><small>Регион работы</small><strong>Кыргызстан</strong></span></div><div><i><Clock3 /></i><span><small>Ответ на заявку</small><strong>В рабочее время</strong></span></div></div><div className="contact-form-card"><span className="section-label">Оставить заявку</span><h2>Мы перезвоним</h2><LeadForm /></div></section></main>; }
