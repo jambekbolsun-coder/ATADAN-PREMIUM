@@ -53,11 +53,13 @@ export function AdminDashboard() {
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
-    const password = String(new FormData(event.currentTarget).get("password") ?? "");
-    const response = await fetch("/api/admin/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ password }) });
+    const form = new FormData(event.currentTarget);
+    const username = String(form.get("username") ?? "");
+    const password = String(form.get("password") ?? "");
+    const response = await fetch("/api/admin/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
     setLoading(false);
     if (response.ok) void load();
-    else setToast("Неверный пароль");
+    else setToast("Неверный логин или пароль");
   }
 
   async function action(payload: Record<string, unknown>) {
@@ -80,6 +82,7 @@ export function AdminDashboard() {
       <div className="admin-login-brand"><Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={360} height={125} /><span>Панель управления</span></div>
       <form className="admin-login-card" onSubmit={login}>
         <span className="admin-lock"><CircleUserRound size={25} /></span><h1>Вход в админку</h1><p>Управление каталогом, заявками и аналитикой.</p>
+        <label><span>Логин</span><input name="username" required autoComplete="username" placeholder="Введите логин" /></label>
         <label><span>Пароль</span><input name="password" type="password" required autoComplete="current-password" placeholder="Введите пароль" /></label>
         {toast ? <div className="admin-error">{toast}</div> : null}
         <button type="submit" className="admin-primary" disabled={loading}>{loading ? <LoaderCircle className="spin" /> : null} Войти</button>
@@ -146,9 +149,37 @@ function Profile({ data, save }: { data: DashboardData | null; save: (profile: {
   return <div className="admin-content"><form className="admin-panel profile-form" onSubmit={submit}><div className="profile-avatar">A</div><div><span className="panel-kicker">Настройки</span><h2>Профиль администратора</h2></div><label><span>Имя</span><input name="displayName" defaultValue={data?.profile?.display_name} required /></label><label><span>Рабочий телефон</span><input name="phone" defaultValue={data?.profile?.phone} required /></label><label><span>Email</span><input name="email" type="email" defaultValue={data?.profile?.email} required /></label><button type="submit" className="admin-primary">Сохранить профиль</button></form></div>;
 }
 
-function emptyProduct(): TractorType { return { id: crypto.randomUUID(), slug: "", model: "", hp: 50, category: "Универсальные", farmArea: "до 30 га", price: null, inStock: true, image: "/images/tractors/cfb504-x.png", description: "", comfort: "", specs: {} }; }
+function emptyProduct(): TractorType { return { id: crypto.randomUUID(), slug: "", model: "", hp: 50, category: "Универсальные", farmArea: "до 30 га", price: null, inStock: true, image: "/images/tractors/cfb504-x.png", images: ["/images/tractors/cfb504-x.png"], videoUrl: null, description: "", comfort: "", specs: {} }; }
 
 function ProductEditor({ product, close, save }: { product: TractorType; close: () => void; save: (product: TractorType) => void }) {
-  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const f = new FormData(event.currentTarget); const model = String(f.get("model")); save({ ...product, model, slug: String(f.get("slug")) || model.toLowerCase().replace(/[^a-z0-9]+/g, "-"), hp: Number(f.get("hp")), category: String(f.get("category")), farmArea: String(f.get("farmArea")), price: f.get("price") ? Number(f.get("price")) : null, inStock: f.get("inStock") === "on", image: String(f.get("image")), description: String(f.get("description")), comfort: String(f.get("comfort")) }); }
-  return <div className="editor-overlay"><button className="editor-backdrop" type="button" onClick={close} aria-label="Закрыть редактор" /><form className="product-editor" onSubmit={submit}><header><div><span>Карточка товара</span><h2>{product.model || "Новый трактор"}</h2></div><button type="button" onClick={close}><X /></button></header><div className="editor-fields"><label><span>Модель</span><input name="model" defaultValue={product.model} required /></label><label><span>Slug</span><input name="slug" defaultValue={product.slug} placeholder="создастся автоматически" /></label><label><span>Мощность, л.с.</span><input name="hp" type="number" min="20" max="500" defaultValue={product.hp} required /></label><label><span>Категория</span><select name="category" defaultValue={product.category}><option>Универсальные</option><option>Средний класс</option><option>Тяжёлый класс</option></select></label><label><span>Площадь</span><input name="farmArea" defaultValue={product.farmArea} /></label><label><span>Цена, сом</span><input name="price" type="number" defaultValue={product.price ?? ""} placeholder="Цена по запросу" /></label><label className="full"><span>Изображение</span><input name="image" defaultValue={product.image} required /></label><label className="full"><span>Описание</span><textarea name="description" rows={4} defaultValue={product.description} /></label><label className="full"><span>Комфорт</span><textarea name="comfort" rows={3} defaultValue={product.comfort} /></label><label className="editor-check full"><input type="checkbox" name="inStock" defaultChecked={product.inStock} /><span>Есть в наличии</span></label></div><footer><button type="button" onClick={close}>Отмена</button><button className="admin-primary" type="submit">Сохранить</button></footer></form></div>;
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const f = new FormData(event.currentTarget);
+    const model = String(f.get("model"));
+    const image = String(f.get("image")).trim();
+    const images = String(f.get("images") ?? "").split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    const specs = Object.fromEntries(String(f.get("specs") ?? "").split(/\r?\n/).map((line) => {
+      const separator = line.indexOf(":");
+      return separator > 0 ? [line.slice(0, separator).trim(), line.slice(separator + 1).trim()] : null;
+    }).filter((entry): entry is [string, string] => Boolean(entry?.[0] && entry?.[1])));
+    save({
+      ...product,
+      model,
+      slug: String(f.get("slug")) || model.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+      hp: Number(f.get("hp")),
+      category: String(f.get("category")),
+      farmArea: String(f.get("farmArea")),
+      price: f.get("price") ? Number(f.get("price")) : null,
+      inStock: f.get("inStock") === "on",
+      image,
+      images: Array.from(new Set([image, ...images])),
+      videoUrl: String(f.get("videoUrl") ?? "").trim() || null,
+      description: String(f.get("description")),
+      comfort: String(f.get("comfort")),
+      specs,
+    });
+  }
+  const gallery = (product.images?.length ? product.images : [product.image]).join("\n");
+  const specs = Object.entries(product.specs).map(([label, value]) => `${label}: ${value}`).join("\n");
+  return <div className="editor-overlay"><button className="editor-backdrop" type="button" onClick={close} aria-label="Закрыть редактор" /><form className="product-editor" onSubmit={submit}><header><div><span>Карточка товара</span><h2>{product.model || "Новый трактор"}</h2></div><button type="button" onClick={close}><X /></button></header><div className="editor-fields"><label><span>Модель</span><input name="model" defaultValue={product.model} required /></label><label><span>Slug</span><input name="slug" defaultValue={product.slug} placeholder="создастся автоматически" /></label><label><span>Мощность, л.с.</span><input name="hp" type="number" min="20" max="500" defaultValue={product.hp} required /></label><label><span>Категория</span><select name="category" defaultValue={product.category}><option>Универсальные</option><option>Средний класс</option><option>Тяжёлый класс</option></select></label><label><span>Площадь</span><input name="farmArea" defaultValue={product.farmArea} /></label><label><span>Цена, сом</span><input name="price" type="number" defaultValue={product.price ?? ""} placeholder="Цена по запросу" /></label><label className="full"><span>Основное изображение</span><input name="image" defaultValue={product.image} required /><small>Путь /images/... или публичная ссылка из Supabase Storage.</small></label><label className="full"><span>Галерея — одно фото на строку</span><textarea name="images" rows={5} defaultValue={gallery} /><small>Первым будет основное изображение. Можно добавить несколько фотографий.</small></label><label className="full"><span>Видео товара</span><input name="videoUrl" type="url" defaultValue={product.videoUrl ?? ""} placeholder="https://.../video.mp4" /><small>Видео сохраняется в карточке и будет готово для будущего показа на сайте.</small></label><label className="full"><span>Описание</span><textarea name="description" rows={4} defaultValue={product.description} /></label><label className="full"><span>Комфорт</span><textarea name="comfort" rows={3} defaultValue={product.comfort} /></label><label className="full"><span>Характеристики — название: значение</span><textarea name="specs" rows={10} defaultValue={specs} placeholder="Модель двигателя: CF...&#10;Колёсная база: 2200 мм" /></label><label className="editor-check full"><input type="checkbox" name="inStock" defaultChecked={product.inStock} /><span>Есть в наличии</span></label></div><footer><button type="button" onClick={close}>Отмена</button><button className="admin-primary" type="submit">Сохранить</button></footer></form></div>;
 }

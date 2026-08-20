@@ -2,10 +2,12 @@
 
 import { CheckCircle2, LoaderCircle, MessageCircle } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { useI18n } from "./I18n";
 
 export function LeadForm({ tractorSlug, tractorModel, compact = false }: { tractorSlug?: string; tractorModel?: string; compact?: boolean }) {
   const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState("");
+  const { t } = useI18n();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -34,19 +36,19 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false }: { tract
   }
 
   if (state === "success") {
-    return <div className="form-success" role="status"><CheckCircle2 /><div><strong>Заявка принята</strong><p>Мы сохранили ваши контакты и открыли WhatsApp для быстрого сообщения.</p></div></div>;
+    return <div className="form-success" role="status"><CheckCircle2 /><div><strong>{t("lead.success")}</strong><p>{t("lead.successText")}</p></div></div>;
   }
 
   return (
     <form className={`lead-form ${compact ? "compact" : ""}`} onSubmit={submit}>
-      <label><span>Ваше имя</span><input name="name" minLength={2} maxLength={120} required placeholder="Например, Азамат" autoComplete="name" /></label>
-      <label><span>Телефон</span><input name="phone" required placeholder="+996 ___ ___ ___" autoComplete="tel" inputMode="tel" /></label>
-      {!compact ? <label className="wide"><span>Комментарий</span><textarea name="message" maxLength={1000} rows={3} placeholder="Площадь хозяйства, задачи или интересующая модель" /></label> : null}
-      <label className="consent wide"><input type="checkbox" required /><span>Согласен на обработку контактных данных</span></label>
+      <label><span>{t("lead.name")}</span><input name="name" minLength={2} maxLength={120} required placeholder={t("lead.namePlaceholder")} autoComplete="name" /></label>
+      <label><span>{t("lead.phone")}</span><input name="phone" required placeholder="+996 ___ ___ ___" autoComplete="tel" inputMode="tel" /></label>
+      {!compact ? <label className="wide"><span>{t("lead.message")}</span><textarea name="message" maxLength={1000} rows={3} placeholder={t("lead.messagePlaceholder")} /></label> : null}
+      <label className="consent wide"><input type="checkbox" required /><span>{t("lead.consent")}</span></label>
       {state === "error" ? <p className="form-error wide" role="alert">{error}</p> : null}
       <button className="primary-btn wide" type="submit" disabled={state === "loading"}>
         {state === "loading" ? <LoaderCircle className="spin" size={19} /> : <MessageCircle size={19} />}
-        {state === "loading" ? "Отправляем…" : "Отправить заявку"}
+        {state === "loading" ? t("lead.sending") : t("lead.send")}
       </button>
     </form>
   );

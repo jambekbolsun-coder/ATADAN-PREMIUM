@@ -8,6 +8,8 @@ export type Tractor = {
   price: number | null;
   inStock: boolean;
   image: string;
+  images?: string[];
+  videoUrl?: string | null;
   imageUrl?: string;
   sourceUrl?: string;
   description: string;

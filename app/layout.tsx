@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://atadan-changfa.bekbolsunjamshutov.chatgpt.site"),
   title: "ATADAN Changfa — тракторы в Кыргызстане",
   description: "Официальный дистрибьютор тракторов Changfa. Подбор техники, рассрочка, гарантия и сервис в Кыргызстане.",
   icons: {
@@ -25,6 +26,13 @@ export const metadata: Metadata = {
     description: "Каталог тракторов Changfa от 50 до 240 л.с., рассрочка, гарантия и сервис.",
     type: "website",
     locale: "ru_KG",
+    images: [{ url: "/images/hero/atadan-field-wide.png", width: 1916, height: 817, alt: "Трактор Changfa в поле — ATADAN" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "ATADAN Changfa — тракторы в Кыргызстане",
+    description: "Каталог тракторов Changfa от 50 до 240 л.с., рассрочка, гарантия и сервис.",
+    images: ["/images/hero/atadan-field-wide.png"],
   },
 };
 
