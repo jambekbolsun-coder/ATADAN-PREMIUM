@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "./SiteLink";
 import { BarChart3, Check, ChevronRight, CircleUserRound, Gauge, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageSquareText, PackagePlus, Pencil, Plus, Search, Settings, Trash2, Tractor, UsersRound, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { Lead, Tractor as TractorType } from "../types";

@@ -1,5 +1,5 @@
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "./SiteLink";
 import { ArrowUpRight, Gauge, Sprout } from "lucide-react";
 import type { Tractor } from "../types";
 import { formatPrice } from "../lib/format";

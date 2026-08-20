@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "../../components/SiteLink";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowUpRight, BadgeCheck, Banknote, Gauge, MessageCircle, ShieldCheck, Sprout, Wrench } from "lucide-react";
 import { LeadForm } from "../../components/LeadForm";

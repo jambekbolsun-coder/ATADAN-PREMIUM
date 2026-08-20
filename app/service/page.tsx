@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import Link from "next/link";
+import { Link } from "../components/SiteLink";
 import { ArrowUpRight, ClipboardCheck, Cog, Headphones, PackageCheck, Wrench } from "lucide-react";
 
 export const metadata: Metadata = { title: "Сервис тракторов Changfa | ATADAN", description: "Гарантийная поддержка, регламентное обслуживание и запчасти для тракторов Changfa." };

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "../components/SiteLink";
 import { ArrowUpRight, BadgeCheck, Handshake, HeartHandshake, Sprout } from "lucide-react";
 
 export const metadata: Metadata = { title: "О компании ATADAN Changfa", description: "ATADAN — официальный дистрибьютор тракторов Changfa в Кыргызстане, 6 лет на рынке." };
