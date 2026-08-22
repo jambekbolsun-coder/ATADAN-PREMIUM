@@ -6,6 +6,8 @@ export type Tractor = {
   category: string;
   farmArea: string;
   price: number | null;
+  discountPercent?: number | null;
+  promotionLabel?: string | null;
   inStock: boolean;
   image: string;
   images?: string[];

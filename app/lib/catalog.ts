@@ -30,17 +30,26 @@ function seriesFor(model: string) {
   return "";
 }
 
+function highResolutionProductImage(image: string) {
+  const match = image.match(/^\/images\/tractors\/(.+)\.png$/i);
+  return match ? `/images/tractors-4k/${match[1]}.webp` : image;
+}
+
 function withGallery(tractor: Tractor): Tractor {
+  const primaryImage = highResolutionProductImage(tractor.image);
   const curated = tractor.images?.filter(Boolean) ?? [];
   const hasCustomGallery = curated.length > 1 || (curated.length === 1 && curated[0] !== tractor.image);
-  const gallery = hasCustomGallery ? [tractor.image, ...curated] : [tractor.image, ...(seriesGalleries[seriesFor(tractor.model)] ?? [])];
-  const fiveViews = [
+  const gallery = hasCustomGallery
+    ? [primaryImage, ...curated.map(highResolutionProductImage)]
+    : [primaryImage, ...(seriesGalleries[seriesFor(tractor.model)] ?? [])];
+  const detailedViews = [
     ...gallery,
+    "/images/series/changfa-cabin-4k.webp",
+    "/images/series/changfa-engine-4k.webp",
     "/images/series/changfa-rear.webp",
     "/images/series/changfa-side.webp",
-    "/images/banners/about.webp",
   ];
-  return { ...tractor, images: Array.from(new Set(fiveViews)).slice(0, 5) };
+  return { ...tractor, image: primaryImage, images: Array.from(new Set(detailedViews)).slice(0, 7) };
 }
 
 export async function getCatalog(): Promise<Tractor[]> {

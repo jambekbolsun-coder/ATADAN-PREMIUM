@@ -12,14 +12,16 @@ import { useI18n } from "./I18n";
 
 export function ProductDetailClient({ tractor, related }: { tractor: Tractor; related: Tractor[] }) {
   const { t } = useI18n();
-  const rawGallery = (tractor.images?.length ? tractor.images : [tractor.image]).slice(0, 5);
-  const preferredIndex = rawGallery.findIndex((image) => !image.includes("/images/tractors/"));
+  const rawGallery = (tractor.images?.length ? tractor.images : [tractor.image]).slice(0, 7);
+  const preferredIndex = rawGallery.findIndex((image) => !image.includes("/images/tractors"));
   const gallery = preferredIndex > 0 ? [rawGallery[preferredIndex], ...rawGallery.filter((_, index) => index !== preferredIndex)] : rawGallery;
   const [activeImage, setActiveImage] = useState(0);
   const [specsOpen, setSpecsOpen] = useState(false);
   const specs = Object.entries(tractor.specs);
   const visibleSpecs = specsOpen ? specs : specs.slice(0, 8);
-  const monthly = tractor.price ? Math.ceil(tractor.price / 36) : null;
+  const discount = Math.min(90, Math.max(0, tractor.discountPercent ?? 0));
+  const salePrice = tractor.price && discount ? Math.round(tractor.price * (1 - discount / 100)) : tractor.price;
+  const monthly = salePrice ? Math.ceil(salePrice / 36) : null;
 
   function moveGallery(direction: -1 | 1) {
     setActiveImage((current) => (current + direction + gallery.length) % gallery.length);
@@ -30,13 +32,14 @@ export function ProductDetailClient({ tractor, related }: { tractor: Tractor; re
       <div className="product-breadcrumb-v3"><Link href="/catalog"><ArrowLeft size={17} />{t("product.back")}</Link><span>Changfa {tractor.model}</span></div>
       <div className="product-detail-grid">
         <div className="product-gallery" aria-label={t("product.gallery")}>
-          <div className={`gallery-main ${gallery[activeImage].includes("/images/tractors/") ? "product-cutout" : "series-photo"}`}>
+          <div className={`gallery-main ${gallery[activeImage].includes("/images/tractors") ? "product-cutout" : "series-photo"}`}>
             <span className={`stock-badge ${tractor.inStock ? "available" : "order"}`}>{tractor.inStock ? t("product.inStock") : t("product.onOrder")}</span>
+            {discount ? <span className="promotion-badge detail-promo"><small>{tractor.promotionLabel || t("product.promo")}</small><strong>−{discount}%</strong></span> : null}
             <Image key={gallery[activeImage]} src={gallery[activeImage]} alt={`Changfa ${tractor.model} — ${t("product.photo", { current: activeImage + 1, total: gallery.length })}`} fill priority={activeImage === 0} sizes="(max-width: 900px) 100vw, 58vw" />
             {gallery.length > 1 ? <div className="gallery-arrows"><button type="button" onClick={() => moveGallery(-1)} aria-label={t("product.prevPhoto")}><ArrowLeft /></button><button type="button" onClick={() => moveGallery(1)} aria-label={t("product.nextPhoto")}><ArrowRight /></button></div> : null}
             <span className="gallery-count">{t("product.photo", { current: activeImage + 1, total: gallery.length })}</span>
           </div>
-          {gallery.length > 1 ? <div className="gallery-thumbs">{gallery.map((image, index) => <button type="button" className={`${activeImage === index ? "active" : ""} ${image.includes("/images/tractors/") ? "cutout-thumb" : ""}`} aria-label={t("product.photo", { current: index + 1, total: gallery.length })} onClick={() => setActiveImage(index)} key={`${image}-${index}`}><Image src={image} alt="" fill sizes="96px" /></button>)}</div> : null}
+          {gallery.length > 1 ? <div className="gallery-thumbs">{gallery.map((image, index) => <button type="button" className={`${activeImage === index ? "active" : ""} ${image.includes("/images/tractors") ? "cutout-thumb" : ""}`} aria-label={t("product.photo", { current: index + 1, total: gallery.length })} aria-current={activeImage === index ? "true" : undefined} onClick={() => setActiveImage(index)} key={`${image}-${index}`}><Image src={image} alt="" fill sizes="96px" /></button>)}</div> : null}
           <p className="gallery-origin"><BadgeCheck size={17} />{t("product.gallery")}</p>
         </div>
 
@@ -49,7 +52,7 @@ export function ProductDetailClient({ tractor, related }: { tractor: Tractor; re
             <div><Sprout /><span>{t("product.area")}<strong>{tractor.farmArea}</strong></span></div>
             <div><BadgeCheck /><span>{t("product.drive")}<strong>4×4</strong></span></div>
           </div>
-          <div className="buy-price"><span>{t("product.cost")}</span><strong>{tractor.price ? formatPrice(tractor.price) : t("product.priceOnRequest")}</strong><small>{t("product.costNote")}</small></div>
+          <div className={`buy-price ${discount ? "has-discount" : ""}`}><span>{t("product.cost")}</span>{discount && tractor.price ? <del>{formatPrice(tractor.price)}</del> : null}<strong>{salePrice ? formatPrice(salePrice) : t("product.priceOnRequest")}</strong><small>{t("product.costNote")}</small></div>
           <div className="installment-panel"><Banknote /><div><span>{t("product.installment")}</span><strong>{monthly ? `${new Intl.NumberFormat("ru-RU").format(monthly)} сом / ${t("common.month")}` : t("product.fromMonthly")}</strong></div></div>
           <div className="buy-actions"><a className="hero-primary" href="#request"><MessageCircle size={18} />{t("product.offer")}</a><a className="call-action" href="tel:+996706131404">{t("product.phone")}</a></div>
           <div className="buy-assurance"><ShieldCheck size={18} /><span>{t("product.assurance")}</span></div>

@@ -1,7 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { ArrowDown, ArrowUpRight, BadgeCheck, Banknote, Camera as Instagram, Headphones, ShieldCheck, Wrench } from "lucide-react";
+import { ArrowDown, ArrowUpRight, BadgeCheck, Banknote, Camera as Instagram, Headphones, Pause, Play, ShieldCheck, Wrench } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { Tractor } from "../types";
 import { Link } from "./SiteLink";
 import { LeadForm } from "./LeadForm";
@@ -9,22 +10,40 @@ import { MotionReveal } from "./MotionReveal";
 import { TractorCard } from "./TractorCard";
 import { useI18n } from "./I18n";
 
+const heroSlides = [
+  { image: "/images/hero/atadan-field-wide.png", mobile: "/images/hero/atadan-field-mobile.png", key: "slide1", position: "center" },
+  { image: "/images/hero/changfa-highway-4k.webp", key: "slide2", position: "center" },
+  { image: "/images/hero/changfa-lineup-4k.webp", key: "slide3", position: "center" },
+] as const;
+
 export function HomeContent({ tractors }: { tractors: Tractor[] }) {
   const { t } = useI18n();
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [interacting, setInteracting] = useState(false);
   const featured = [50, 90, 140, 240].map((hp) => tractors.find((tractor) => tractor.hp === hp)).filter((tractor): tractor is Tractor => Boolean(tractor));
+  useEffect(() => {
+    if (paused || interacting || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const timer = window.setInterval(() => setActiveSlide((current) => (current + 1) % heroSlides.length), 3000);
+    return () => window.clearInterval(timer);
+  }, [interacting, paused]);
+
+  const slide = heroSlides[activeSlide];
   return <main className="home-v3">
     <MotionReveal className="home-hero-v3">
-      <section className="hero-stage">
-        <div className="hero-media" aria-hidden="true">
-          <Image className="hero-wide-image" src="/images/hero/atadan-field-wide.png" alt="" fill priority sizes="100vw" />
-          <Image className="hero-mobile-image" src="/images/hero/atadan-field-mobile.png" alt="" fill priority sizes="100vw" />
+      <section className="hero-stage hero-carousel" aria-roledescription="carousel" aria-label="Changfa ATADAN" onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)} onFocusCapture={() => setInteracting(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setInteracting(false); }}>
+        <div className="hero-media hero-slides" aria-hidden="true">
+          {heroSlides.map((item, index) => <div className={`hero-slide ${activeSlide === index ? "active" : ""}`} key={item.key}>
+            <Image className={item.mobile ? "hero-wide-image" : ""} src={item.image} alt="" fill priority={index === 0} sizes="100vw" style={{ objectPosition: item.position }} />
+            {item.mobile ? <Image className="hero-mobile-image" src={item.mobile} alt="" fill priority sizes="100vw" /> : null}
+          </div>)}
         </div>
         <div className="hero-shade" />
         <div className="hero-content-v3 section-shell">
-          <div className="hero-copy-v3">
-            <span className="hero-kicker" data-reveal><i />{t("home.kicker")}</span>
-            <h1 data-reveal>{t("home.title")}</h1>
-            <p data-reveal>{t("home.subtitle")}</p>
+          <div className="hero-copy-v3" key={slide.key}>
+            <span className="hero-kicker hero-copy-enter" data-reveal><i />{t(`home.${slide.key}.kicker`)}</span>
+            <h1 className="hero-copy-enter" data-reveal>{t(`home.${slide.key}.title`)}</h1>
+            <p className="hero-copy-enter" data-reveal>{t(`home.${slide.key}.text`)}</p>
             <div className="hero-actions-v3" data-reveal>
               <Link className="hero-primary" href="/catalog">{t("home.catalogCta")}<ArrowUpRight size={19} /></Link>
               <a className="hero-secondary" href="https://wa.me/996706131404" target="_blank" rel="noreferrer">{t("home.consultCta")}</a>
@@ -35,6 +54,10 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
               <span><strong>50–240</strong>{t("home.powerRange")}</span>
             </div>
           </div>
+        </div>
+        <div className="hero-carousel-controls">
+          <div className="hero-dots">{heroSlides.map((item, index) => <button type="button" className={activeSlide === index ? "active" : ""} aria-label={t("home.carouselSlide", { current: index + 1 })} aria-current={activeSlide === index ? "true" : undefined} onClick={() => setActiveSlide(index)} key={item.key}><span /></button>)}</div>
+          <button type="button" className="hero-pause" aria-label={paused ? t("home.carouselPlay") : t("home.carouselPause")} aria-pressed={paused} onClick={() => setPaused((value) => !value)}>{paused ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}</button>
         </div>
         <a className="hero-scroll" href="#lineup"><ArrowDown size={17} />{t("home.scroll")}</a>
       </section>

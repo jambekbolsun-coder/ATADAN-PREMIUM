@@ -3,8 +3,8 @@
 import Image from "next/image";
 import { Link } from "./SiteLink";
 import { ArrowUpRight, Camera as Instagram, Menu, Phone, Search, ShieldCheck, X } from "lucide-react";
-import { FormEvent, useState } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { LanguageSwitcher, useI18n } from "./I18n";
 
 const nav = [
@@ -17,20 +17,12 @@ const nav = [
 
 function HeaderSearch({ mobile = false, close }: { mobile?: boolean; close?: () => void }) {
   const [query, setQuery] = useState("");
-  const router = useRouter();
   const { t } = useI18n();
 
-  function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const value = query.trim();
-    router.push(value ? `/catalog?search=${encodeURIComponent(value)}` : "/catalog");
-    close?.();
-  }
-
   return (
-    <form className={`header-search ${mobile ? "mobile" : ""}`} role="search" onSubmit={submit}>
+    <form className={`header-search ${mobile ? "mobile" : ""}`} role="search" action="/catalog" method="get" onSubmit={close}>
       <Search size={16} aria-hidden="true" />
-      <input value={query} onChange={(event) => setQuery(event.target.value)} aria-label={t("catalog.search")} placeholder={t("catalog.search")} />
+      <input name="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label={t("catalog.search")} placeholder={t("catalog.search")} />
       <button type="submit" aria-label={t("catalog.search")}><ArrowUpRight size={15} /></button>
     </form>
   );
