@@ -1405,3 +1405,7 @@ body { background:var(--atadan-paper); }
 @media (prefers-reduced-motion:reduce) {
   .hero-slide,.hero-copy-enter,.comfort-explainer-grid article { animation:none!important; transition:none!important; transform:none!important; }
 }
+
+/* WCAG contrast for compact footer details on their fixed surfaces. */
+.footer-contact small { color:#173b1c; opacity:1; }
+.footer-bottom { color:#a9b9ae; }
