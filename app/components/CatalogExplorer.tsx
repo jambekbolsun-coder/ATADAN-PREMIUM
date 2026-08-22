@@ -14,9 +14,9 @@ const ranges = [
   { label: "200–240 л.с.", min: 200, max: 240 },
 ];
 
-export function CatalogExplorer({ tractors, initialPower }: { tractors: Tractor[]; initialPower?: number }) {
+export function CatalogExplorer({ tractors, initialPower, initialQuery = "" }: { tractors: Tractor[]; initialPower?: number; initialQuery?: string }) {
   const { t } = useI18n();
-  const [query, setQuery] = useState("");
+  const [query, setQuery] = useState(initialQuery);
   const [range, setRange] = useState(() => {
     if (!initialPower) return 0;
     const found = ranges.findIndex((item, index) => index > 0 && initialPower >= item.min && initialPower <= item.max);

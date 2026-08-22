@@ -12,11 +12,13 @@ import { useI18n } from "./I18n";
 
 export function ProductDetailClient({ tractor, related }: { tractor: Tractor; related: Tractor[] }) {
   const { t } = useI18n();
-  const gallery = tractor.images?.length ? tractor.images : [tractor.image];
+  const rawGallery = (tractor.images?.length ? tractor.images : [tractor.image]).slice(0, 5);
+  const preferredIndex = rawGallery.findIndex((image) => !image.includes("/images/tractors/"));
+  const gallery = preferredIndex > 0 ? [rawGallery[preferredIndex], ...rawGallery.filter((_, index) => index !== preferredIndex)] : rawGallery;
   const [activeImage, setActiveImage] = useState(0);
   const [specsOpen, setSpecsOpen] = useState(false);
   const specs = Object.entries(tractor.specs);
-  const visibleSpecs = specsOpen ? specs : specs.slice(0, 6);
+  const visibleSpecs = specsOpen ? specs : specs.slice(0, 8);
   const monthly = tractor.price ? Math.ceil(tractor.price / 36) : null;
 
   function moveGallery(direction: -1 | 1) {
@@ -28,13 +30,13 @@ export function ProductDetailClient({ tractor, related }: { tractor: Tractor; re
       <div className="product-breadcrumb-v3"><Link href="/catalog"><ArrowLeft size={17} />{t("product.back")}</Link><span>Changfa {tractor.model}</span></div>
       <div className="product-detail-grid">
         <div className="product-gallery" aria-label={t("product.gallery")}>
-          <div className={`gallery-main ${activeImage === 0 ? "product-cutout" : "series-photo"}`}>
+          <div className={`gallery-main ${gallery[activeImage].includes("/images/tractors/") ? "product-cutout" : "series-photo"}`}>
             <span className={`stock-badge ${tractor.inStock ? "available" : "order"}`}>{tractor.inStock ? t("product.inStock") : t("product.onOrder")}</span>
             <Image key={gallery[activeImage]} src={gallery[activeImage]} alt={`Changfa ${tractor.model} — ${t("product.photo", { current: activeImage + 1, total: gallery.length })}`} fill priority={activeImage === 0} sizes="(max-width: 900px) 100vw, 58vw" />
             {gallery.length > 1 ? <div className="gallery-arrows"><button type="button" onClick={() => moveGallery(-1)} aria-label={t("product.prevPhoto")}><ArrowLeft /></button><button type="button" onClick={() => moveGallery(1)} aria-label={t("product.nextPhoto")}><ArrowRight /></button></div> : null}
             <span className="gallery-count">{t("product.photo", { current: activeImage + 1, total: gallery.length })}</span>
           </div>
-          {gallery.length > 1 ? <div className="gallery-thumbs">{gallery.map((image, index) => <button type="button" className={activeImage === index ? "active" : ""} aria-label={t("product.photo", { current: index + 1, total: gallery.length })} onClick={() => setActiveImage(index)} key={`${image}-${index}`}><Image src={image} alt="" fill sizes="96px" /></button>)}</div> : null}
+          {gallery.length > 1 ? <div className="gallery-thumbs">{gallery.map((image, index) => <button type="button" className={`${activeImage === index ? "active" : ""} ${image.includes("/images/tractors/") ? "cutout-thumb" : ""}`} aria-label={t("product.photo", { current: index + 1, total: gallery.length })} onClick={() => setActiveImage(index)} key={`${image}-${index}`}><Image src={image} alt="" fill sizes="96px" /></button>)}</div> : null}
           <p className="gallery-origin"><BadgeCheck size={17} />{t("product.gallery")}</p>
         </div>
 
@@ -65,10 +67,14 @@ export function ProductDetailClient({ tractor, related }: { tractor: Tractor; re
     </section>
 
     <section className="product-specs-v3 section-shell">
-      <div className="specs-heading"><div><span className="section-label">{t("product.specLabel")}</span><h2>{t("product.specTitle")}</h2></div><p>{t("product.specNote")}</p></div>
-      <div className={`specs-grid-v3 ${specsOpen ? "expanded" : ""}`}>{visibleSpecs.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
-      {specs.length > 6 ? <button type="button" className={`specs-toggle ${specsOpen ? "open" : ""}`} onClick={() => setSpecsOpen((value) => !value)} aria-expanded={specsOpen}>{specsOpen ? t("product.hide") : t("product.showMore")}<ChevronDown size={18} /></button> : null}
-      {tractor.sourceUrl ? <a className="source-link-v3" href={tractor.sourceUrl} target="_blank" rel="noreferrer">{t("product.source")}<ArrowUpRight size={17} /></a> : null}
+      <div className="specs-feed-card">
+        <div className="specs-heading"><div><span className="section-label">{t("product.specLabel")}</span><h2>{t("product.specTitle")}</h2></div><p>{t("product.specNote")}</p></div>
+        <div className={`specs-grid-v3 ${specsOpen ? "expanded" : ""}`}>{visibleSpecs.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
+        <div className="specs-footer">
+          {specs.length > 8 ? <button type="button" className={`specs-toggle ${specsOpen ? "open" : ""}`} onClick={() => setSpecsOpen((value) => !value)} aria-expanded={specsOpen}>{specsOpen ? t("product.hide") : t("product.showMore")}<ChevronDown size={18} /></button> : null}
+          {tractor.sourceUrl ? <a className="source-link-v3" href={tractor.sourceUrl} target="_blank" rel="noreferrer">{t("product.source")}<ArrowUpRight size={17} /></a> : null}
+        </div>
+      </div>
     </section>
 
     <section className="product-request-v3" id="request"><div className="section-shell product-request-inner"><div><span className="section-label light">{t("product.requestLabel")}</span><h2>{t("product.requestTitle", { model: tractor.model })}</h2><p>{t("product.requestText")}</p></div><LeadForm tractorSlug={tractor.slug} tractorModel={tractor.model} /></div></section>

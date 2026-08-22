@@ -40,13 +40,13 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false }: { tract
   }
 
   return (
-    <form className={`lead-form ${compact ? "compact" : ""}`} onSubmit={submit}>
+    <form className={`lead-form ${compact ? "compact" : ""} ${state === "loading" ? "is-sending" : ""}`} onSubmit={submit} aria-busy={state === "loading"}>
       <label><span>{t("lead.name")}</span><input name="name" minLength={2} maxLength={120} required placeholder={t("lead.namePlaceholder")} autoComplete="name" /></label>
       <label><span>{t("lead.phone")}</span><input name="phone" required placeholder="+996 ___ ___ ___" autoComplete="tel" inputMode="tel" /></label>
       {!compact ? <label className="wide"><span>{t("lead.message")}</span><textarea name="message" maxLength={1000} rows={3} placeholder={t("lead.messagePlaceholder")} /></label> : null}
       <label className="consent wide"><input type="checkbox" required /><span>{t("lead.consent")}</span></label>
       {state === "error" ? <p className="form-error wide" role="alert">{error}</p> : null}
-      <button className="primary-btn wide" type="submit" disabled={state === "loading"}>
+      <button className="primary-btn wide submit-lead" type="submit" disabled={state === "loading"}>
         {state === "loading" ? <LoaderCircle className="spin" size={19} /> : <MessageCircle size={19} />}
         {state === "loading" ? t("lead.sending") : t("lead.send")}
       </button>

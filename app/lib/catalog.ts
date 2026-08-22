@@ -34,7 +34,13 @@ function withGallery(tractor: Tractor): Tractor {
   const curated = tractor.images?.filter(Boolean) ?? [];
   const hasCustomGallery = curated.length > 1 || (curated.length === 1 && curated[0] !== tractor.image);
   const gallery = hasCustomGallery ? [tractor.image, ...curated] : [tractor.image, ...(seriesGalleries[seriesFor(tractor.model)] ?? [])];
-  return { ...tractor, images: Array.from(new Set(gallery)) };
+  const fiveViews = [
+    ...gallery,
+    "/images/series/changfa-rear.png",
+    "/images/series/changfa-side.png",
+    "/images/banners/about.png",
+  ];
+  return { ...tractor, images: Array.from(new Set(fiveViews)).slice(0, 5) };
 }
 
 export async function getCatalog(): Promise<Tractor[]> {

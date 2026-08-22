@@ -608,6 +608,12 @@ export function Trans({ id, values }: { id: string; values?: Record<string, stri
 export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   const { locale, setLocale } = useI18n();
   return <div className={`language-switcher ${compact ? "compact" : ""}`} aria-label="Language / Язык / Тил">
-    {(["ru", "ky", "en"] as Locale[]).map((item) => <button type="button" className={locale === item ? "active" : ""} aria-pressed={locale === item} onClick={() => setLocale(item)} key={item}>{item.toUpperCase()}</button>)}
+    {(["ru", "ky", "en"] as Locale[]).map((item) => <button type="button" className={locale === item ? "active" : ""} aria-pressed={locale === item} onClick={() => setLocale(item)} key={item}><FlagIcon locale={item} />{item.toUpperCase()}</button>)}
   </div>;
+}
+
+function FlagIcon({ locale }: { locale: Locale }) {
+  if (locale === "ru") return <svg className="language-flag" viewBox="0 0 24 16" aria-hidden="true"><path fill="#fff" d="M0 0h24v5.34H0z"/><path fill="#1769c2" d="M0 5.33h24v5.34H0z"/><path fill="#e33b3b" d="M0 10.66h24V16H0z"/></svg>;
+  if (locale === "ky") return <svg className="language-flag" viewBox="0 0 24 16" aria-hidden="true"><path fill="#e43a35" d="M0 0h24v16H0z"/><circle cx="12" cy="8" r="4.4" fill="#ffdb3b"/><circle cx="12" cy="8" r="2.25" fill="#e43a35"/><path d="M12 2v2M12 12v2M6 8h2M16 8h2M7.75 3.75l1.4 1.4M14.85 10.85l1.4 1.4M16.25 3.75l-1.4 1.4M9.15 10.85l-1.4 1.4" stroke="#ffdb3b" strokeWidth="1.1"/></svg>;
+  return <svg className="language-flag" viewBox="0 0 24 16" aria-hidden="true"><path fill="#18377f" d="M0 0h24v16H0z"/><path d="M0 0l24 16M24 0L0 16" stroke="#fff" strokeWidth="3.4"/><path d="M0 0l24 16M24 0L0 16" stroke="#d83543" strokeWidth="1.5"/><path d="M12 0v16M0 8h24" stroke="#fff" strokeWidth="5"/><path d="M12 0v16M0 8h24" stroke="#d83543" strokeWidth="2.6"/></svg>;
 }

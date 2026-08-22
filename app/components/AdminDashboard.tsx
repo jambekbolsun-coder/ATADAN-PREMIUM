@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { BarChart3, Check, ChevronRight, CircleUserRound, Gauge, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageSquareText, PackagePlus, Pencil, Plus, Search, Settings, Trash2, Tractor, UsersRound, X } from "lucide-react";
+import { BarChart3, Bell, Check, ChevronRight, CircleUserRound, Gauge, ImagePlus, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageSquareText, PackagePlus, PanelsTopLeft, Pencil, Plus, Search, Settings, Trash2, Tractor, Upload, UsersRound, Warehouse, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import type { Lead, Tractor as TractorType } from "../types";
 
@@ -20,6 +20,8 @@ const sections = [
   ["products", "Товары", Tractor],
   ["leads", "Заявки", MessageSquareText],
   ["analytics", "Аналитика", BarChart3],
+  ["inventory", "Склад", Warehouse],
+  ["content", "Контент сайта", PanelsTopLeft],
   ["profile", "Профиль", Settings],
 ] as const;
 
@@ -31,6 +33,7 @@ export function AdminDashboard() {
   const [sidebar, setSidebar] = useState(false);
   const [productEditor, setProductEditor] = useState<TractorType | null>(null);
   const [toast, setToast] = useState("");
+  const [avatar, setAvatar] = useState<string | null>(() => typeof window === "undefined" ? null : window.localStorage.getItem("atadan-admin-avatar"));
 
   const load = useCallback(async () => {
     const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
@@ -76,6 +79,12 @@ export function AdminDashboard() {
     setData(null);
   }
 
+  function saveAvatar(value: string) {
+    window.localStorage.setItem("atadan-admin-avatar", value);
+    setAvatar(value);
+    setToast("Фото профиля обновлено");
+  }
+
   if (authenticated === null) return <div className="admin-loader"><LoaderCircle className="spin" /><span>Загружаем кабинет</span></div>;
   if (!authenticated) return (
     <main className="admin-login-page">
@@ -97,21 +106,27 @@ export function AdminDashboard() {
       <aside className={`admin-sidebar ${sidebar ? "is-open" : ""}`}>
         <div className="admin-logo"><Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={240} height={83} /><button type="button" onClick={() => setSidebar(false)} aria-label="Закрыть меню"><X /></button></div>
         <nav>{sections.map(([id, label, Icon]) => <button type="button" className={section === id ? "active" : ""} onClick={() => { setSection(id); setSidebar(false); }} key={id}><Icon size={19} />{label}{id === "leads" && newLeads ? <b>{newLeads}</b> : null}</button>)}</nav>
-        <div className="admin-sidebar-footer"><div className="admin-avatar">A</div><div><strong>{data?.profile?.display_name ?? "Администратор"}</strong><span>{data?.profile?.email}</span></div><button type="button" onClick={logout} aria-label="Выйти"><LogOut size={18} /></button></div>
+        <div className="admin-sidebar-footer"><AvatarVisual avatar={avatar} size={38} /><div><strong>{data?.profile?.display_name ?? "Администратор"}</strong><span>{data?.profile?.email}</span></div><button type="button" onClick={logout} aria-label="Выйти"><LogOut size={18} /></button></div>
       </aside>
       <section className="admin-main">
-        <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)}><Menu /></button><div><span>ATADAN / Админка</span><h1>{sections.find(([id]) => id === section)?.[1]}</h1></div><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></header>
+        <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / Панель управления</span><h1>{sections.find(([id]) => id === section)?.[1]}</h1></div><div className="admin-header-tools"><button type="button" aria-label="Уведомления"><Bell size={18} />{newLeads ? <b>{newLeads}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
         {section === "overview" ? <Overview data={data} newLeads={newLeads} setSection={setSection} /> : null}
         {section === "products" ? <Products data={data} edit={setProductEditor} remove={(slug) => action({ action: "delete_product", slug })} /> : null}
         {section === "leads" ? <Leads data={data} update={(id, status) => action({ action: "lead_status", id, status })} /> : null}
         {section === "analytics" ? <Analytics data={data} /> : null}
-        {section === "profile" ? <Profile data={data} save={(profile) => action({ action: "save_profile", profile })} /> : null}
+        {section === "inventory" ? <Inventory data={data} edit={setProductEditor} /> : null}
+        {section === "content" ? <ContentCenter /> : null}
+        {section === "profile" ? <Profile data={data} avatar={avatar} saveAvatar={saveAvatar} save={(profile) => action({ action: "save_profile", profile })} /> : null}
       </section>
       {section === "products" ? <button type="button" className="admin-fab" onClick={() => setProductEditor(emptyProduct())}><Plus /> Добавить трактор</button> : null}
       {productEditor ? <ProductEditor product={productEditor} close={() => setProductEditor(null)} save={async (product) => { await action({ action: "save_product", product }); setProductEditor(null); }} /> : null}
       {toast ? <div className="admin-toast"><Check size={16} />{toast}<button type="button" onClick={() => setToast("")}><X size={14} /></button></div> : null}
     </main>
   );
+}
+
+function AvatarVisual({ avatar, size }: { avatar: string | null; size: number }) {
+  return avatar ? <span className="admin-avatar-image" style={{ width: size, height: size }}><Image src={avatar} alt="Фото администратора" width={size} height={size} unoptimized /></span> : <span className="admin-avatar" style={{ width: size, height: size }}>A</span>;
 }
 
 function Overview({ data, newLeads, setSection }: { data: DashboardData | null; newLeads: number; setSection: (value: "leads" | "products") => void }) {
@@ -144,9 +159,30 @@ function Analytics({ data }: { data: DashboardData | null }) {
   return <div className="admin-content"><div className="admin-stats"><Metric label="Всего просмотров" value={data?.totals?.views ?? 0} icon={Gauge} note="с запуска сайта" /><Metric label="Уникальные посетители" value={data?.totals?.visitors ?? 0} icon={UsersRound} note="по устройствам" /><Metric label="Интерес к моделям" value={data?.popular.reduce((sum, item) => sum + Number(item.views), 0) ?? 0} icon={Tractor} note="просмотров карточек" /></div><div className="admin-two-col"><div className="admin-panel"><div className="panel-head"><div><span>Последние 7 дней</span><h2>Трафик сайта</h2></div></div><div className="bar-chart">{data?.daily.map((day) => <div key={day.day}><span style={{ height: `${Math.max(8, Number(day.views) / max * 100)}%` }} title={`${day.views} просмотров`} /><small>{new Date(day.day).toLocaleDateString("ru-RU", { weekday: "short" })}</small></div>)}</div></div><div className="admin-panel"><div className="panel-head"><div><span>Модели</span><h2>Что смотрят чаще</h2></div></div><ol className="popular-list">{data?.popular.map((item, index) => <li key={item.tractor_slug}><b>{index + 1}</b><span>{data.catalog.find((p) => p.slug === item.tractor_slug)?.model ?? item.tractor_slug}</span><strong>{item.views}</strong></li>)}</ol></div></div></div>;
 }
 
-function Profile({ data, save }: { data: DashboardData | null; save: (profile: { displayName: string; phone: string; email: string }) => void }) {
+function Inventory({ data, edit }: { data: DashboardData | null; edit: (product: TractorType) => void }) {
+  const catalog = data?.catalog ?? [];
+  const inStock = catalog.filter((item) => item.inStock);
+  const onOrder = catalog.filter((item) => !item.inStock);
+  return <div className="admin-content"><div className="inventory-summary"><article><span>Всего позиций</span><strong>{catalog.length}</strong><small>в каталоге Changfa</small></article><article className="positive"><span>В наличии</span><strong>{inStock.length}</strong><small>готовы к продаже</small></article><article className="warning"><span>Под заказ</span><strong>{onOrder.length}</strong><small>ожидают поставки</small></article></div><div className="admin-panel"><div className="panel-head"><div><span>Оперативный контроль</span><h2>Статус техники</h2></div></div><div className="inventory-list">{catalog.map((product) => <button type="button" onClick={() => edit(product)} key={product.slug}><Image src={product.image} alt="" width={72} height={55} /><span><strong>{product.model}</strong><small>{product.hp} л.с. · {product.category}</small></span><i className={product.inStock ? "available" : "order"}>{product.inStock ? "В наличии" : "Под заказ"}</i><ChevronRight size={17} /></button>)}</div></div></div>;
+}
+
+function ContentCenter() {
+  const pages = [["Главная", "/"], ["Каталог", "/catalog"], ["Рассрочка", "/finance"], ["Сервис", "/service"], ["О компании", "/about"], ["Контакты", "/contacts"]] as const;
+  return <div className="admin-content"><div className="admin-panel content-center"><div className="content-intro"><i><PanelsTopLeft /></i><div><span className="panel-kicker">Структура сайта</span><h2>Публичные разделы ATADAN</h2><p>Быстрый контроль ключевых страниц и переход к просмотру в новой вкладке.</p></div></div><div className="content-page-grid">{pages.map(([label, href], index) => <Link href={href} target="_blank" key={href}><span>0{index + 1}</span><strong>{label}</strong><small>Опубликовано</small><ChevronRight /></Link>)}</div><div className="content-note"><ImagePlus size={20} /><div><strong>Изображения товаров</strong><p>Фотографии и видео редактируются в разделе «Товары». Для каждой модели доступна галерея из нескольких кадров.</p></div></div></div></div>;
+}
+
+function Profile({ data, save, avatar, saveAvatar }: { data: DashboardData | null; save: (profile: { displayName: string; phone: string; email: string }) => void; avatar: string | null; saveAvatar: (value: string) => void }) {
+  const [avatarError, setAvatarError] = useState("");
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const f = new FormData(event.currentTarget); save({ displayName: String(f.get("displayName")), phone: String(f.get("phone")), email: String(f.get("email")) }); }
-  return <div className="admin-content"><form className="admin-panel profile-form" onSubmit={submit}><div className="profile-avatar">A</div><div><span className="panel-kicker">Настройки</span><h2>Профиль администратора</h2></div><label><span>Имя</span><input name="displayName" defaultValue={data?.profile?.display_name} required /></label><label><span>Рабочий телефон</span><input name="phone" defaultValue={data?.profile?.phone} required /></label><label><span>Email</span><input name="email" type="email" defaultValue={data?.profile?.email} required /></label><button type="submit" className="admin-primary">Сохранить профиль</button></form></div>;
+  function chooseAvatar(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/") || file.size > 2_000_000) { setAvatarError("Выберите изображение до 2 МБ"); return; }
+    const reader = new FileReader();
+    reader.onload = () => { if (typeof reader.result === "string") { saveAvatar(reader.result); setAvatarError(""); } };
+    reader.readAsDataURL(file);
+  }
+  return <div className="admin-content"><form className="admin-panel profile-form" onSubmit={submit}><div className="profile-heading"><AvatarVisual avatar={avatar} size={92} /><div><span className="panel-kicker">Настройки аккаунта</span><h2>Профиль администратора</h2><label className="avatar-upload"><Upload size={16} /><span>Загрузить фото</span><input type="file" accept="image/*" onChange={chooseAvatar} /></label>{avatarError ? <small className="avatar-error">{avatarError}</small> : null}</div></div><div className="profile-fields"><label><span>Имя</span><input name="displayName" defaultValue={data?.profile?.display_name} required /></label><label><span>Рабочий телефон</span><input name="phone" defaultValue={data?.profile?.phone} required /></label><label><span>Email</span><input name="email" type="email" defaultValue={data?.profile?.email} required /></label></div><button type="submit" className="admin-primary">Сохранить профиль</button></form></div>;
 }
 
 function emptyProduct(): TractorType { return { id: crypto.randomUUID(), slug: "", model: "", hp: 50, category: "Универсальные", farmArea: "до 30 га", price: null, inStock: true, image: "/images/tractors/cfb504-x.png", images: ["/images/tractors/cfb504-x.png"], videoUrl: null, description: "", comfort: "", specs: {} }; }
