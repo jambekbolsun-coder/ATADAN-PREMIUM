@@ -36,9 +36,9 @@ function withGallery(tractor: Tractor): Tractor {
   const gallery = hasCustomGallery ? [tractor.image, ...curated] : [tractor.image, ...(seriesGalleries[seriesFor(tractor.model)] ?? [])];
   const fiveViews = [
     ...gallery,
-    "/images/series/changfa-rear.png",
-    "/images/series/changfa-side.png",
-    "/images/banners/about.png",
+    "/images/series/changfa-rear.webp",
+    "/images/series/changfa-side.webp",
+    "/images/banners/about.webp",
   ];
   return { ...tractor, images: Array.from(new Set(fiveViews)).slice(0, 5) };
 }

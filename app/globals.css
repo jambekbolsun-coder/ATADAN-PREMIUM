@@ -1136,7 +1136,7 @@ body { background:var(--atadan-paper); }
 .profile-fields label:last-child { grid-column:1/-1; }
 
 /* Branded animated 404 */
-.not-found { position:relative; min-height:calc(100svh - 106px); margin:12px; padding:60px 24px; border-radius:28px; overflow:hidden; isolation:isolate; background:#071f14 url('/images/banners/about.png') center/cover no-repeat; color:white; text-align:left; align-items:flex-start; }
+.not-found { position:relative; min-height:calc(100svh - 106px); margin:12px; padding:60px 24px; border-radius:28px; overflow:hidden; isolation:isolate; background:#071f14 url('/images/banners/about.webp') center/cover no-repeat; color:white; text-align:left; align-items:flex-start; }
 .not-found::before { content:""; position:absolute; inset:0; z-index:-1; background:linear-gradient(90deg,rgba(3,17,9,.95),rgba(4,22,12,.72) 52%,rgba(4,20,11,.24)); }
 .not-found-content { width:min(1272px,100%); margin:auto; position:relative; z-index:3; }
 .not-found-kicker { color:#a7dc8e; display:flex; align-items:center; gap:9px; font-size:10px; font-weight:850; text-transform:uppercase; letter-spacing:.14em; }

@@ -9,5 +9,5 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   const tractors = await getCatalog();
   const { power, search } = await searchParams;
   const initialPower = Number.parseInt(power ?? "", 10);
-  return <main><PageHero image="/images/banners/catalog.png" kickerId="catalog.kicker" titleId="catalog.title" subtitleId="catalog.subtitle" values={{ count: tractors.length }} /><div className="section-shell catalog-shell"><CatalogExplorer tractors={tractors} initialPower={Number.isFinite(initialPower) ? initialPower : undefined} initialQuery={search ?? ""} /></div></main>;
+  return <main><PageHero image="/images/banners/catalog.webp" kickerId="catalog.kicker" titleId="catalog.title" subtitleId="catalog.subtitle" values={{ count: tractors.length }} /><div className="section-shell catalog-shell"><CatalogExplorer tractors={tractors} initialPower={Number.isFinite(initialPower) ? initialPower : undefined} initialQuery={search ?? ""} /></div></main>;
 }
