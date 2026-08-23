@@ -16,7 +16,7 @@ export default function ContactsPage() {
         <div><i><MapPin /></i><span><small><Trans id="contacts.region" /></small><strong><Trans id="footer.region" /></strong></span></div>
         <div><i><Clock3 /></i><span><small><Trans id="contacts.response" /></small><strong><Trans id="contacts.hours" /></strong></span></div>
       </div>
-      <div className="contact-form-card"><span className="section-label"><Trans id="contacts.formLabel" /></span><h2><Trans id="contacts.formTitle" /></h2><LeadForm /></div>
+      <div className="contact-form-card"><span className="section-label"><Trans id="contacts.formLabel" /></span><h2><Trans id="contacts.formTitle" /></h2><p className="contact-form-note"><Trans id="contacts.formNote" /></p><LeadForm /></div>
     </section>
   </main>;
 }

@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { Link } from "./SiteLink";
 import { ArrowUpRight, Camera as Instagram, Menu, Phone, Search, ShieldCheck, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { LanguageSwitcher, useI18n } from "./I18n";
 
@@ -30,13 +30,22 @@ function HeaderSearch({ mobile = false, close }: { mobile?: boolean; close?: () 
 
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
+  const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
   const { t } = useI18n();
+  const isHome = pathname === "/";
+
+  useEffect(() => {
+    const updateHeader = () => setScrolled(window.scrollY > 36);
+    updateHeader();
+    window.addEventListener("scroll", updateHeader, { passive: true });
+    return () => window.removeEventListener("scroll", updateHeader);
+  }, []);
 
   const isActive = (href: string) => pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
 
   return (
-    <header className="site-header-shell">
+    <header className={`site-header-shell${isHome ? " is-home" : ""}${scrolled ? " is-scrolled" : ""}`}>
       <div className="header-utility">
         <div>
           <span><ShieldCheck size={13} />{t("home.kicker")}</span>
