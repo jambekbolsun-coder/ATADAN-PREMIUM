@@ -1,13 +1,74 @@
-import { useEffect, useState } from 'react'
-import { ArrowDown, BadgeCheck, MapPin, ShieldCheck } from 'lucide-react'
-import { useLocation } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { ArrowDown, ArrowUpRight, MapPin, ShieldCheck } from 'lucide-react'
+import { Link, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { copy, localize } from '../lib/i18n'
+import { useCinematicMotion } from '../lib/useCinematicMotion'
 import type { Locale, SiteContentRow, Tractor } from '../lib/types'
 import { Header } from '../components/Header'
 import { Footer } from '../components/Footer'
 import { TractorCard } from '../components/TractorCard'
 import { EmptyState } from '../components/EmptyState'
 import { WhatsAppButton } from '../components/WhatsAppButton'
-function asMap(rows:SiteContentRow[]){return Object.fromEntries(rows.map(r=>[r.key,r.value])) as Record<string,any>}
-export function HomePage({locale}:{locale:Locale}){const t=copy(locale);const location=useLocation();const[tractors,setTractors]=useState<Tractor[]>([]);const[content,setContent]=useState<Record<string,any>>({});const[loading,setLoading]=useState(true);useEffect(()=>{Promise.all([supabase.from('atadan_site_content').select('key,value'),supabase.from('atadan_tractors').select('*, translations:atadan_tractor_translations(*), media:atadan_tractor_media(*)').eq('published',true).eq('featured',true).order('featured_order',{ascending:true}).limit(2)]).then(([c,p])=>{if(c.data)setContent(asMap(c.data as SiteContentRow[]));if(p.data)setTractors(p.data as unknown as Tractor[]);setLoading(false)})},[]);useEffect(()=>{if(location.hash)setTimeout(()=>document.querySelector(location.hash)?.scrollIntoView({behavior:'smooth'}),100)},[location.hash]);const hero=content.hero||{},company=content.company||{},founder=content.founder||{},contacts=content.contacts||{},phone=contacts.whatsapp||'996706131404';const heroTitle=localize(hero.title,locale,locale==='kg'?'CHANGFA Кыргызстанда':locale==='en'?'CHANGFA in Kyrgyzstan':'CHANGFA в Кыргызстане');const heroSub=localize(hero.subtitle,locale,t.companySub),eyebrow=localize(hero.eyebrow,locale,t.official),heroUrl=hero.background_url||'https://en.changfanz.com/uploads/20250328/4c699dfa67aeba33cec4c30d37aced61.jpg';const waMessage=locale==='kg'?'Саламатсызбы! CHANGFA тракторлору боюнча консультация алгым келет.':locale==='en'?'Hello! I would like a consultation about CHANGFA tractors.':'Здравствуйте! Хочу получить консультацию по тракторам CHANGFA.';return <div className="min-h-screen bg-white text-[#101510]"><Header phone={phone}/><main><section className="relative min-h-[88vh] overflow-hidden bg-[#14200e] lg:min-h-screen"><img src={heroUrl} alt="CHANGFA tractor" className="absolute inset-0 h-full w-full object-cover object-[62%_center]" fetchPriority="high"/><div className="absolute inset-0 bg-gradient-to-r from-black/72 via-black/32 to-black/5"/><div className="absolute inset-0 bg-gradient-to-t from-black/42 via-transparent to-black/15"/><div className="relative mx-auto flex min-h-[88vh] max-w-[1440px] items-end px-5 pb-14 pt-32 sm:px-8 lg:min-h-screen lg:items-center lg:px-12 lg:pb-0"><div className="max-w-3xl text-white"><div className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-2 text-xs font-bold uppercase tracking-[.18em] backdrop-blur"><BadgeCheck size={15} className="text-atadan-400"/>{eyebrow}</div><h1 className="mt-6 text-[clamp(3.2rem,7vw,7.6rem)] font-extrabold leading-[.88] tracking-[-.065em]">{heroTitle}</h1><p className="mt-6 max-w-xl text-lg leading-7 text-white/76 sm:text-xl">{heroSub}</p><div className="mt-8 flex flex-wrap gap-3"><a href={`/${locale}/tractors`} className="inline-flex min-h-12 items-center rounded-full bg-atadan-500 px-6 text-sm font-bold text-[#102006] transition hover:bg-atadan-400">{t.catalog}</a><WhatsAppButton phone={phone} message={waMessage} locale={locale} location="hero" className="border border-white/20 bg-white/12 text-white backdrop-blur hover:bg-white/18"/></div></div></div><div className="absolute bottom-7 right-7 hidden h-11 w-11 place-items-center rounded-full border border-white/20 text-white/70 lg:grid"><ArrowDown size={18}/></div></section><section className="border-b border-neutral-100"><div className="mx-auto grid max-w-[1440px] grid-cols-1 gap-px bg-neutral-100 sm:grid-cols-3"><div className="bg-white px-6 py-8 sm:px-8"><div className="flex items-center gap-3"><ShieldCheck className="text-atadan-600"/><span className="text-sm font-semibold text-neutral-500">{t.official}</span></div><div className="mt-3 text-2xl font-extrabold">CHANGFA</div></div><div className="bg-white px-6 py-8 sm:px-8"><div className="text-sm font-semibold text-neutral-500">{t.yearsMarket}</div><div className="mt-3 text-4xl font-extrabold tracking-[-.05em] text-atadan-600">{company.years||'6+'}</div></div><div className="bg-white px-6 py-8 sm:px-8"><div className="flex items-center gap-3"><MapPin className="text-atadan-600"/><span className="text-sm font-semibold text-neutral-500">{t.kyrgyzstan}</span></div><div className="mt-3 text-2xl font-extrabold">ATADAN</div></div></div></section><section className="mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:px-12 lg:py-28"><div className="mb-10 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[.22em] text-atadan-700">CHANGFA</p><h2 className="mt-3 text-4xl font-extrabold tracking-[-.045em] sm:text-6xl">{t.featuredTitle}</h2><p className="mt-4 max-w-xl text-neutral-500">{t.featuredText}</p></div><a href={`/${locale}/tractors`} className="text-sm font-bold text-atadan-700">{t.allTractors} →</a></div>{loading?<div className="h-[520px] animate-pulse rounded-[32px] bg-neutral-100"/>:tractors.length?<div className="grid gap-5 lg:grid-cols-2">{tractors.map(x=><TractorCard key={x.id} tractor={x} locale={locale} large/>)}</div>:<EmptyState title={t.empty} text={t.emptyHint}/>}</section><section className="bg-[#f3ffe8] py-20 lg:py-28"><div className="mx-auto grid max-w-[1440px] items-center gap-10 px-5 sm:px-8 lg:grid-cols-[.8fr_1.2fr] lg:px-12"><div><p className="text-xs font-bold uppercase tracking-[.22em] text-atadan-700">CHANGFA EXPERIENCE</p><h2 className="mt-4 text-4xl font-extrabold tracking-[-.045em] sm:text-6xl">{t.comfortTitle}</h2><p className="mt-5 max-w-xl text-base leading-7 text-neutral-600">{t.comfortText}</p></div><div className="overflow-hidden rounded-[36px] bg-[#dfffc3] shadow-soft"><img src="https://en.changfanz.com/uploads/20250328/4c699dfa67aeba33cec4c30d37aced61.jpg" alt="CHANGFA tractor in field" className="aspect-[16/10] w-full object-cover object-[72%_center]" loading="lazy"/></div></div></section><section id="about" className="mx-auto grid max-w-[1440px] gap-10 px-5 py-20 sm:px-8 lg:grid-cols-2 lg:px-12 lg:py-28"><div><p className="text-xs font-bold uppercase tracking-[.22em] text-atadan-700">ATADAN</p><h2 className="mt-4 text-5xl font-extrabold tracking-[-.05em] sm:text-7xl">{localize(company.title,locale,'ATADAN')}</h2></div><div className="lg:pt-8"><p className="text-xl leading-8 text-neutral-600">{localize(company.text,locale,t.companySub)}</p><div className="mt-8 border-l-4 border-atadan-500 pl-5"><div className="text-4xl font-extrabold text-atadan-700">{company.years||'6+'}</div><div className="mt-1 text-sm text-neutral-500">{t.yearsMarket}</div></div></div></section>{founder.enabled&&<section className="border-y border-neutral-100 bg-neutral-50"><div className="mx-auto grid max-w-[1440px] items-center gap-10 px-5 py-20 sm:px-8 lg:grid-cols-2 lg:px-12">{founder.photo_url?<img src={founder.photo_url} alt={founder.name||t.founder} className="aspect-[4/3] w-full rounded-[32px] object-cover"/>:<div className="aspect-[4/3] rounded-[32px] bg-neutral-200"/>}<div><p className="text-xs font-bold uppercase tracking-[.22em] text-atadan-700">{t.founder}</p><h2 className="mt-4 text-4xl font-extrabold">{founder.name}</h2><p className="mt-2 text-neutral-500">{localize(founder.role,locale)}</p><p className="mt-7 text-xl leading-8 text-neutral-700">{localize(founder.quote,locale)}</p></div></div></section>}<section id="contacts" className="mx-auto max-w-[1440px] px-5 py-20 sm:px-8 lg:px-12 lg:py-28"><div className="rounded-[40px] bg-[#101510] p-7 text-white sm:p-12 lg:p-16"><div className="grid gap-10 lg:grid-cols-[1fr_auto] lg:items-end"><div><p className="text-xs font-bold uppercase tracking-[.22em] text-atadan-300">ATADAN × CHANGFA</p><h2 className="mt-4 max-w-3xl text-4xl font-extrabold tracking-[-.05em] sm:text-6xl">{t.consult}</h2><div className="mt-7 space-y-2 text-sm text-white/55">{localize(contacts.address,locale)&&<div>{t.address}: {localize(contacts.address,locale)}</div>}{localize(contacts.schedule,locale)&&<div>{t.schedule}: {localize(contacts.schedule,locale)}</div>}</div></div><WhatsAppButton phone={phone} message={waMessage} locale={locale} location="contacts" className="w-full sm:w-auto"/></div></div></section></main><Footer locale={locale} phone={phone} instagram={contacts.instagram}/></div>}
+import { TractorScrollExperience } from '../components/TractorScrollExperience'
+import { FieldWorkScene } from '../components/FieldWorkScene'
+
+function asMap(rows: SiteContentRow[]) { return Object.fromEntries(rows.map((row) => [row.key, row.value])) as Record<string, any> }
+
+export function HomePage({ locale }: { locale: Locale }) {
+  const rootRef = useRef<HTMLDivElement>(null)
+  const t = copy(locale)
+  const location = useLocation()
+  const [tractors, setTractors] = useState<Tractor[]>([])
+  const [content, setContent] = useState<Record<string, any>>({})
+  const [loading, setLoading] = useState(true)
+  useCinematicMotion(rootRef)
+
+  useEffect(() => { Promise.all([supabase.from('atadan_site_content').select('key,value'), supabase.from('atadan_tractors').select('*, translations:atadan_tractor_translations(*), media:atadan_tractor_media(*)').eq('published', true).eq('featured', true).order('featured_order', { ascending: true }).limit(2)]).then(([contentResult, productsResult]) => { if (contentResult.data) setContent(asMap(contentResult.data as SiteContentRow[])); if (productsResult.data) setTractors(productsResult.data as unknown as Tractor[]); setLoading(false) }) }, [])
+  useEffect(() => { if (location.hash) setTimeout(() => document.querySelector(location.hash)?.scrollIntoView({ behavior: 'smooth' }), 100) }, [location.hash])
+
+  const hero = content.hero || {}; const company = content.company || {}; const founder = content.founder || {}; const contacts = content.contacts || {}
+  const phone = contacts.whatsapp || '996706131404'
+  const heroTitle = localize(hero.title, locale, locale === 'kg' ? 'CHANGFA Кыргызстанда' : locale === 'en' ? 'CHANGFA in Kyrgyzstan' : 'CHANGFA в Кыргызстане')
+  const heroSub = localize(hero.subtitle, locale, t.companySub); const eyebrow = localize(hero.eyebrow, locale, t.official)
+  const heroUrl = hero.background_url || '/media/tractor-sequence/tractor-04.webp'
+  const waMessage = locale === 'kg' ? 'Саламатсызбы! CHANGFA тракторлору боюнча консультация алгым келет.' : locale === 'en' ? 'Hello! I would like a consultation about CHANGFA tractors.' : 'Здравствуйте! Хочу получить консультацию по тракторам CHANGFA.'
+
+  return <div ref={rootRef} className="home-page">
+    <Header phone={phone}/>
+    <main>
+      <section className="home-hero">
+        <img src={heroUrl} alt="CHANGFA tractor" className="home-hero__image" fetchPriority="high"/>
+        <div className="home-hero__shade"/><div className="home-hero__grid"/>
+        <div className="home-hero__inner"><div className="home-hero__copy"><p className="home-hero__eyebrow" data-intro>{eyebrow}</p><h1 data-intro>{heroTitle}</h1><p data-intro>{heroSub}</p><div className="home-hero__actions" data-intro><Link to={`/${locale}/tractors`} className="action-button action-button--primary">{t.catalog}<span className="action-button__icon"><ArrowUpRight size={14}/></span></Link><WhatsAppButton phone={phone} message={waMessage} locale={locale} location="hero" className="action-button--ghost"/></div></div><div className="home-hero__spec"><strong>50—240</strong><span>{t.hp}</span></div></div>
+        <div className="home-hero__bottom"><span><ArrowDown size={13}/> Scroll</span><span>ATADAN × CHANGFA</span></div>
+      </section>
+
+      <section className="trust-strip" data-reveal>
+        <div><span>01</span><strong><ShieldCheck size={17}/>{t.official}</strong></div>
+        <div><span>02</span><strong>CHANGFA</strong></div>
+        <div><span>03</span><strong>{company.years || '6+'} {t.yearsMarket}</strong></div>
+        <div><span>04</span><strong><MapPin size={17}/>{t.kyrgyzstan}</strong></div>
+      </section>
+
+      <section className="featured-section">
+        <div className="section-heading" data-reveal><div><p className="section-eyebrow">CHANGFA</p><h2>{t.featuredTitle}</h2><p>{t.featuredText}</p></div><Link to={`/${locale}/tractors`} className="section-heading__link">{t.allTractors} <ArrowUpRight size={15}/></Link></div>
+        {loading
+          ? <div className="featured-grid"><div className="catalog-skeleton"/><div className="catalog-skeleton"/></div>
+          : tractors.length
+            ? <div className="featured-grid">{tractors.map((tractor, index) => <TractorCard key={tractor.id} tractor={tractor} locale={locale} index={index}/>)}</div>
+            : <EmptyState title={t.empty} text={t.emptyHint}/>}
+      </section>
+
+      <TractorScrollExperience title={t.comfortTitle} text={t.comfortText}/>
+      <FieldWorkScene title={heroTitle} text={heroSub}/>
+
+      <section id="about" className="about-section"><div className="about-section__intro" data-reveal><p className="section-eyebrow">ATADAN</p><h2>{localize(company.title, locale, 'ATADAN')}</h2></div><div className="about-section__body" data-reveal><p>{localize(company.text, locale, t.companySub)}</p><div className="about-section__facts"><div><strong>{company.years || '6+'}</strong><span>{t.yearsMarket}</span></div><div><strong>CHANGFA</strong><span>{t.official}</span></div></div></div></section>
+
+      {founder.enabled && <section className="founder-section"><div className="founder-section__media">{founder.photo_url ? <img src={founder.photo_url} alt={founder.name || t.founder} loading="lazy"/> : <img src="/media/tractor-sequence/tractor-07.webp" alt=""/>}</div><div className="founder-section__content" data-reveal><p className="section-eyebrow">{t.founder}</p><h2>{founder.name}</h2><blockquote>{localize(founder.quote, locale)}</blockquote><div className="founder-section__meta"><strong>{founder.name}</strong><span>{localize(founder.role, locale)}</span></div></div></section>}
+
+      <section id="contacts" className="contact-section"><div className="contact-section__copy" data-reveal><p className="section-eyebrow">ATADAN × CHANGFA</p><h2>{t.consult}</h2><p>{t.companySub}</p></div><div className="contact-section__actions" data-reveal><WhatsAppButton phone={phone} message={waMessage} locale={locale} location="contacts"/>{localize(contacts.address, locale) && <span>{t.address}: {localize(contacts.address, locale)}</span>}{localize(contacts.schedule, locale) && <span>{t.schedule}: {localize(contacts.schedule, locale)}</span>}</div></section>
+    </main>
+    <Footer locale={locale} phone={phone} instagram={contacts.instagram}/>
+  </div>
+}

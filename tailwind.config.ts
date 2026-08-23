@@ -6,11 +6,11 @@ export default {
     extend: {
       colors: {
         atadan: {
-          50: '#f3ffe8', 100: '#e2ffc7', 200: '#c6ff95', 300: '#9bff57', 400: '#72ef1f',
-          500: '#58d000', 600: '#43a600', 700: '#347e05', 800: '#2c630a', 900: '#26530d'
+          50: '#eef6ef', 100: '#dcebdd', 200: '#bdd9bf', 300: '#9bc89e', 400: '#a8e37a',
+          500: '#8ed957', 600: '#3f8d59', 700: '#276440', 800: '#17472f', 900: '#0b2b1d'
         }
       },
-      boxShadow: { soft: '0 18px 60px rgba(21,48,8,.10)' },
+      boxShadow: { soft: '0 24px 70px rgba(5,29,18,.14)' },
       fontFamily: { sans: ['Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'] }
     }
   },
