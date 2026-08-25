@@ -10,7 +10,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Неверный логин или пароль" }, { status: 401 });
   }
   const secure = new URL(request.url).protocol === "https:";
-  return Response.json({ authenticated: true }, { headers: { "Set-Cookie": await adminCookie(username, password, secure) } });
+  return Response.json({ authenticated: true }, { headers: { "Set-Cookie": await adminCookie(username, request, secure) } });
 }
 
 export async function DELETE() {
