@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 
 const COOKIE_NAME = "atadan_admin";
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
-const DEFAULT_PBKDF2_ITERATIONS = 210_000;
+const DEFAULT_PBKDF2_ITERATIONS = 100_000;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
