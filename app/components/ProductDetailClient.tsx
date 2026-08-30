@@ -69,6 +69,11 @@ export function ProductDetailClient({ tractor, related }: { tractor: Tractor; re
       </div>
     </section>
 
+    {tractor.equipment?.length ? <section className="product-equipment section-shell">
+      <div className="product-equipment-heading"><span className="section-label">{t("product.equipmentLabel")}</span><h2>{t("product.equipmentTitle")}</h2><p>{t("product.equipmentNote")}</p></div>
+      <ul>{tractor.equipment.map((item) => <li key={item}><BadgeCheck size={19} aria-hidden="true" /><span>{item}</span></li>)}</ul>
+    </section> : null}
+
     <section className="product-specs-v3 section-shell">
       <div className="specs-feed-card">
         <div className="specs-heading"><div><span className="section-label">{t("product.specLabel")}</span><h2>{t("product.specTitle")}</h2></div><p>{t("product.specNote")}</p></div>

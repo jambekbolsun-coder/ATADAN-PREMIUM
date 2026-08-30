@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { Link } from "../components/SiteLink";
-import { Armchair, ArrowUpRight, BadgeCheck, Eye, Handshake, HeartHandshake, Quote, SlidersHorizontal, Sprout, Wind } from "lucide-react";
+import { Armchair, ArrowUpRight, BadgeCheck, Eye, Handshake, HeartHandshake, SlidersHorizontal, Sprout, Wind } from "lucide-react";
 import { Trans } from "../components/I18n";
 import { PageHero } from "../components/PageHero";
+import { FounderLetter } from "../components/FounderLetter";
 
 export const metadata: Metadata = { title: "О компании ATADAN Changfa", description: "ATADAN — официальный дистрибьютор тракторов Changfa в Кыргызстане, 6 лет на рынке." };
 
@@ -35,21 +36,7 @@ export default function AboutPage() {
           <div className="founder-portrait"><Image src="/images/about/founder-portrait-4k.webp" alt="Islam Mirbek uulu — ATADAN" fill sizes="(max-width: 820px) 100vw, 38vw" /></div>
           <div className="founder-identity"><span><Trans id="about.founderRole" /></span><h3><Trans id="about.founderName" /></h3><p>ATADAN · CHANGFA · Кыргызстан</p></div>
         </aside>
-        <article className="founder-letter">
-          <header><span className="section-label"><Trans id="about.founderLabel" /></span><h2><Trans id="about.founderTitle" /></h2></header>
-          <div className="founder-opening"><Quote size={30} aria-hidden="true" /><p><Trans id="about.founderP1" /></p></div>
-          <div className="founder-letter-copy">
-            <p><Trans id="about.founderP2" /></p>
-            <p><Trans id="about.founderP3" /></p>
-            <p><Trans id="about.founderP4" /></p>
-            <p><Trans id="about.founderP5" /></p>
-            <p><Trans id="about.founderP6" /></p>
-            <p><Trans id="about.founderP7" /></p>
-            <p><Trans id="about.founderP8" /></p>
-            <p className="founder-conclusion"><Trans id="about.founderP9" /></p>
-          </div>
-          <footer><span><Trans id="about.founderSignoff" /></span><strong><Trans id="about.founderName" /></strong><small><Trans id="about.founderRole" /></small></footer>
-        </article>
+        <FounderLetter />
       </div>
       <div className="section-shell founder-impact">
         <span><strong>15+</strong><Trans id="about.founderExperience" /></span>

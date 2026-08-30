@@ -2,8 +2,8 @@
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { BarChart3, Bell, Calculator, Check, ChevronRight, CircleUserRound, Gauge, ImagePlus, LayoutDashboard, LoaderCircle, LogOut, Menu, MessageSquareText, PackagePlus, PanelsTopLeft, Pencil, Percent, Plus, Search, Settings, Trash2, Tractor, Upload, UsersRound, Warehouse, X } from "lucide-react";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { BarChart3, Bell, Calculator, Check, ChevronRight, CircleUserRound, Clipboard, Gauge, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Menu, MessageSquareText, PackagePlus, Pencil, Percent, Plus, Search, Settings, Trash2, Tractor, Upload, UsersRound, Warehouse, X } from "lucide-react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, Tractor as TractorType } from "../types";
 
 type DashboardData = {
@@ -22,7 +22,6 @@ const sections = [
   ["analytics", "Аналитика", BarChart3],
   ["inventory", "Склад", Warehouse],
   ["calculations", "Расчёты", Calculator],
-  ["content", "Контент сайта", PanelsTopLeft],
   ["profile", "Профиль", Settings],
 ] as const;
 
@@ -117,7 +116,6 @@ export function AdminDashboard() {
         {section === "analytics" ? <Analytics data={data} /> : null}
         {section === "inventory" ? <Inventory data={data} edit={setProductEditor} /> : null}
         {section === "calculations" ? <Calculations data={data} /> : null}
-        {section === "content" ? <ContentCenter /> : null}
         {section === "profile" ? <Profile data={data} avatar={avatar} saveAvatar={saveAvatar} save={(profile) => action({ action: "save_profile", profile })} /> : null}
       </section>
       {section === "products" ? <button type="button" className="admin-fab" onClick={() => setProductEditor(emptyProduct())}><Plus /> Добавить трактор</button> : null}
@@ -142,7 +140,15 @@ function Metric({ label, value, icon: Icon, note }: { label: string; value: stri
 function Products({ data, edit, remove }: { data: DashboardData | null; edit: (product: TractorType) => void; remove: (slug: string) => void }) {
   const [query, setQuery] = useState("");
   const products = useMemo(() => data?.catalog.filter((p) => p.model.toLowerCase().includes(query.toLowerCase())) ?? [], [data, query]);
-  return <div className="admin-content"><div className="admin-panel"><div className="admin-table-tools"><label><Search size={18} /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Найти модель" /></label><span>{products.length} моделей</span></div><div className="admin-product-grid">{products.map((product) => <article key={product.slug}>{product.discountPercent ? <span className="admin-promo-tag"><Percent size={13} />−{product.discountPercent}%</span> : null}<div className="admin-product-image"><Image src={product.image} alt={product.model} width={260} height={190} /></div><div><span>{product.hp} л.с.</span><h3>{product.model}</h3><small>{product.inStock ? "В наличии" : "Под заказ"}</small></div><div className="admin-card-actions"><button type="button" onClick={() => edit(product)}><Pencil size={16} />Изменить</button><button type="button" onClick={() => confirm(`Удалить ${product.model}?`) && remove(product.slug)} aria-label={`Удалить ${product.model}`}><Trash2 size={16} /></button></div></article>)}</div></div></div>;
+  return <div className="admin-content"><div className="admin-panel admin-products-panel"><div className="admin-table-tools"><label><Search size={18} aria-hidden="true" /><input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Найти модель" aria-label="Найти модель" /></label><span>{products.length} моделей</span></div><div className="admin-product-grid">{products.map((product) => <article className="admin-product-card" key={product.slug}>
+    <div className="admin-product-media">
+      {product.discountPercent ? <span className="admin-promo-tag"><Percent size={13} aria-hidden="true" />−{product.discountPercent}%</span> : null}
+      <span className={`admin-product-stock ${product.inStock ? "available" : "order"}`}>{product.inStock ? "В наличии" : "Под заказ"}</span>
+      <div className="admin-product-image"><Image src={product.image} alt={`Changfa ${product.model}`} width={360} height={248} /></div>
+    </div>
+    <div className="admin-product-summary"><span>{product.category} · {product.hp} л.с.</span><h3>Changfa {product.model}</h3><p>{product.description || "Добавьте короткое описание, чтобы карточка была полезнее покупателю."}</p><div className="admin-product-facts"><span><ListChecks size={15} aria-hidden="true" />{product.equipment?.length ? `${product.equipment.length} позиций комплектации` : "Комплектация не заполнена"}</span><span>{product.price ? `${new Intl.NumberFormat("ru-RU").format(product.price)} сом` : "Цена по запросу"}</span></div></div>
+    <div className="admin-card-actions"><button type="button" onClick={() => edit(product)}><Pencil size={16} aria-hidden="true" />Изменить</button><button className="admin-delete-button" type="button" onClick={() => confirm(`Удалить ${product.model}?`) && remove(product.slug)} aria-label={`Удалить ${product.model}`}><Trash2 size={16} aria-hidden="true" /><span>Удалить</span></button></div>
+  </article>)}</div></div></div>;
 }
 
 function Leads({ data, update }: { data: DashboardData | null; update: (id: string, status: string) => void }) {
@@ -169,48 +175,67 @@ function Inventory({ data, edit }: { data: DashboardData | null; edit: (product:
 }
 
 function Calculations({ data }: { data: DashboardData | null }) {
-  const priced = data?.catalog.filter((product) => product.price) ?? [];
-  const first = priced[0];
-  const [price, setPrice] = useState(first?.price ?? 4_500_000);
+  const products = data?.catalog ?? [];
+  const [selectedSlug, setSelectedSlug] = useState("");
+  const [price, setPrice] = useState(4_500_000);
   const [discount, setDiscount] = useState(0);
   const [downPayment, setDownPayment] = useState(900_000);
   const [term, setTerm] = useState(36);
-  const safeDiscount = Math.min(90, Math.max(0, discount));
-  const salePrice = Math.max(0, Math.round(price * (1 - safeDiscount / 100)));
-  const financed = Math.max(0, salePrice - downPayment);
-  const monthly = term ? Math.ceil(financed / term) : financed;
+  const [copyStatus, setCopyStatus] = useState("");
+  const selectedProduct = products.find((product) => product.slug === selectedSlug);
+  const safePrice = Number.isFinite(price) ? Math.max(0, price) : 0;
+  const safeDiscount = Number.isFinite(discount) ? Math.min(90, Math.max(0, discount)) : 0;
+  const salePrice = Math.max(0, Math.round(safePrice * (1 - safeDiscount / 100)));
+  const safeDownPayment = Number.isFinite(downPayment) ? Math.min(salePrice, Math.max(0, downPayment)) : 0;
+  const financed = Math.max(0, salePrice - safeDownPayment);
+  const safeTerm = Math.max(1, term || 1);
+  const monthly = Math.ceil(financed / safeTerm);
   const money = (value: number) => `${new Intl.NumberFormat("ru-RU").format(value)} сом`;
   function chooseProduct(slug: string) {
-    const selected = priced.find((product) => product.slug === slug);
+    setSelectedSlug(slug);
+    const selected = products.find((product) => product.slug === slug);
     if (!selected?.price) return;
+    const nextDiscount = selected.discountPercent ?? 0;
+    const nextSalePrice = Math.round(selected.price * (1 - nextDiscount / 100));
     setPrice(selected.price);
-    setDiscount(selected.discountPercent ?? 0);
-    setDownPayment(Math.round(selected.price * .2));
+    setDiscount(nextDiscount);
+    setDownPayment(Math.round(nextSalePrice * .2));
+  }
+  function setDownPaymentPercent(percent: number) {
+    setDownPayment(Math.round(salePrice * percent / 100));
+  }
+  async function copyCalculation() {
+    const model = selectedProduct ? `Changfa ${selectedProduct.model}` : "Трактор Changfa";
+    const summary = `${model}\nСтоимость: ${money(safePrice)}\nСкидка: ${safeDiscount}%\nПервый взнос: ${money(safeDownPayment)}\nСрок: ${safeTerm} мес.\nОриентировочный платёж: ${money(monthly)} / мес.`;
+    try {
+      await navigator.clipboard.writeText(summary);
+      setCopyStatus("Расчёт скопирован");
+    } catch {
+      setCopyStatus("Не удалось скопировать — выделите данные вручную");
+    }
   }
   return <div className="admin-content calculation-workspace">
     <div className="admin-panel calculation-panel">
       <div className="calculation-heading"><i><Calculator /></i><div><span className="panel-kicker">Продажи и рассрочка</span><h2>Калькулятор предложения</h2><p>Подготовьте понятный предварительный расчёт для клиента прямо во время звонка.</p></div></div>
       <div className="calculation-fields">
-        <label className="full"><span>Модель из каталога</span><select defaultValue="" onChange={(event) => chooseProduct(event.target.value)}><option value="">Выберите модель</option>{priced.map((product) => <option value={product.slug} key={product.slug}>{product.model} · {money(product.price ?? 0)}</option>)}</select></label>
+        <label className="full"><span>Модель из каталога</span><select value={selectedSlug} onChange={(event) => chooseProduct(event.target.value)}><option value="">Выберите модель</option>{products.map((product) => <option value={product.slug} key={product.slug}>{product.model} · {product.price ? money(product.price) : "цена не задана"}</option>)}</select></label>
+        {selectedProduct && !selectedProduct.price ? <p className="calculation-price-hint full"><strong>Цена этой модели пока не указана.</strong> Введите актуальную стоимость вручную — остальные значения пересчитаются автоматически.</p> : null}
         <label><span>Стоимость, сом</span><input type="number" min="0" step="1000" value={price} onChange={(event) => setPrice(Number(event.target.value))} /></label>
         <label><span>Скидка, %</span><input type="number" min="0" max="90" value={discount} onChange={(event) => setDiscount(Number(event.target.value))} /></label>
-        <label><span>Первый взнос, сом</span><input type="number" min="0" step="1000" value={downPayment} onChange={(event) => setDownPayment(Number(event.target.value))} /></label>
+        <label><span>Первый взнос, сом</span><input type="number" min="0" max={salePrice} step="1000" value={downPayment} onChange={(event) => setDownPayment(Number(event.target.value))} /><span className="calculation-presets">{[10, 20, 30].map((percent) => <button type="button" onClick={() => setDownPaymentPercent(percent)} key={percent}>{percent}%</button>)}</span></label>
         <label><span>Срок, месяцев</span><select value={term} onChange={(event) => setTerm(Number(event.target.value))}><option value="12">12 месяцев</option><option value="24">24 месяца</option><option value="36">36 месяцев</option><option value="48">48 месяцев</option></select></label>
       </div>
       <p className="calculation-note">Расчёт ориентировочный: финальные условия зависят от комплектации и решения финансового партнёра.</p>
     </div>
     <div className="calculation-results" aria-live="polite">
-      <article><span>Цена после скидки</span><strong>{money(salePrice)}</strong><small>экономия {money(price - salePrice)}</small></article>
+      <header><div><span>Готовый расчёт</span><h2>{selectedProduct ? `Changfa ${selectedProduct.model}` : "Индивидуальное предложение"}</h2></div><button type="button" onClick={copyCalculation}><Clipboard size={17} aria-hidden="true" />Скопировать</button></header>
+      <article><span>Цена после скидки</span><strong>{money(salePrice)}</strong><small>экономия {money(safePrice - salePrice)}</small></article>
       <article><span>Сумма финансирования</span><strong>{money(financed)}</strong><small>после первого взноса</small></article>
-      <article className="primary"><span>Платёж в месяц</span><strong>{money(monthly)}</strong><small>{term} равных платежей</small></article>
-      <article><span>Первый взнос</span><strong>{money(downPayment)}</strong><small>{salePrice ? Math.round(downPayment / salePrice * 100) : 0}% от цены</small></article>
+      <article className="primary"><span>Платёж в месяц</span><strong>{money(monthly)}</strong><small>{safeTerm} равных платежей</small></article>
+      <article><span>Первый взнос</span><strong>{money(safeDownPayment)}</strong><small>{salePrice ? Math.round(safeDownPayment / salePrice * 100) : 0}% от цены</small></article>
+      {copyStatus ? <p className="calculation-copy-status" role="status">{copyStatus}</p> : null}
     </div>
   </div>;
-}
-
-function ContentCenter() {
-  const pages = [["Главная", "/"], ["Каталог", "/catalog"], ["Рассрочка", "/finance"], ["Сервис", "/service"], ["О компании", "/about"], ["Контакты", "/contacts"]] as const;
-  return <div className="admin-content"><div className="admin-panel content-center"><div className="content-intro"><i><PanelsTopLeft /></i><div><span className="panel-kicker">Структура сайта</span><h2>Публичные разделы ATADAN</h2><p>Быстрый контроль ключевых страниц и переход к просмотру в новой вкладке.</p></div></div><div className="content-page-grid">{pages.map(([label, href], index) => <Link href={href} target="_blank" key={href}><span>0{index + 1}</span><strong>{label}</strong><small>Опубликовано</small><ChevronRight /></Link>)}</div><div className="content-note"><ImagePlus size={20} /><div><strong>Изображения товаров</strong><p>Фотографии и видео редактируются в разделе «Товары». Для каждой модели доступна галерея из нескольких кадров.</p></div></div></div></div>;
 }
 
 function Profile({ data, save, avatar, saveAvatar }: { data: DashboardData | null; save: (profile: { displayName: string; phone: string; email: string }) => void; avatar: string | null; saveAvatar: (value: string) => void }) {
@@ -227,15 +252,43 @@ function Profile({ data, save, avatar, saveAvatar }: { data: DashboardData | nul
   return <div className="admin-content"><form className="admin-panel profile-form" onSubmit={submit}><div className="profile-heading"><AvatarVisual avatar={avatar} size={92} /><div><span className="panel-kicker">Настройки аккаунта</span><h2>Профиль администратора</h2><label className="avatar-upload"><Upload size={16} /><span>Загрузить фото</span><input type="file" accept="image/*" onChange={chooseAvatar} /></label>{avatarError ? <small className="avatar-error">{avatarError}</small> : null}</div></div><div className="profile-fields"><label><span>Имя</span><input name="displayName" defaultValue={data?.profile?.display_name} required /></label><label><span>Рабочий телефон</span><input name="phone" defaultValue={data?.profile?.phone} required /></label><label><span>Email</span><input name="email" type="email" defaultValue={data?.profile?.email} required /></label></div><button type="submit" className="admin-primary">Сохранить профиль</button></form></div>;
 }
 
-function emptyProduct(): TractorType { return { id: crypto.randomUUID(), slug: "", model: "", hp: 50, category: "Универсальные", farmArea: "до 30 га", price: null, discountPercent: null, promotionLabel: null, inStock: true, image: "/images/tractors-4k/cfb504-x.webp", images: ["/images/tractors-4k/cfb504-x.webp"], videoUrl: null, description: "", comfort: "", specs: {} }; }
+function emptyProduct(): TractorType { return { id: crypto.randomUUID(), slug: "", model: "", hp: 50, category: "Универсальные", farmArea: "до 30 га", price: null, discountPercent: null, promotionLabel: null, inStock: true, image: "/images/tractors-4k/cfb504-x.webp", images: ["/images/tractors-4k/cfb504-x.webp"], videoUrl: null, description: "", comfort: "", equipment: [], specs: {} }; }
 
 function ProductEditor({ product, close, save }: { product: TractorType; close: () => void; save: (product: TractorType) => void }) {
+  const dialogRef = useRef<HTMLFormElement>(null);
+  const closeRef = useRef(close);
+  useEffect(() => { closeRef.current = close; }, [close]);
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    dialog?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); return; }
+      if (event.key !== "Tab" || !dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href]'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousFocus?.focus();
+    };
+  }, []);
+
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const f = new FormData(event.currentTarget);
     const model = String(f.get("model"));
     const image = String(f.get("image")).trim();
     const images = String(f.get("images") ?? "").split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    const equipment = String(f.get("equipment") ?? "").split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
     const specs = Object.fromEntries(String(f.get("specs") ?? "").split(/\r?\n/).map((line) => {
       const separator = line.indexOf(":");
       return separator > 0 ? [line.slice(0, separator).trim(), line.slice(separator + 1).trim()] : null;
@@ -256,10 +309,22 @@ function ProductEditor({ product, close, save }: { product: TractorType; close: 
       videoUrl: String(f.get("videoUrl") ?? "").trim() || null,
       description: String(f.get("description")),
       comfort: String(f.get("comfort")),
+      equipment,
       specs,
     });
   }
   const gallery = (product.images?.length ? product.images : [product.image]).join("\n");
+  const equipment = (product.equipment ?? []).join("\n");
   const specs = Object.entries(product.specs).map(([label, value]) => `${label}: ${value}`).join("\n");
-  return <div className="editor-overlay"><button className="editor-backdrop" type="button" onClick={close} aria-label="Закрыть редактор" /><form className="product-editor" onSubmit={submit}><header><div><span>Карточка товара</span><h2>{product.model || "Новый трактор"}</h2></div><button type="button" onClick={close} aria-label="Закрыть"><X /></button></header><div className="editor-fields"><label><span>Модель</span><input name="model" defaultValue={product.model} required /></label><label><span>Slug</span><input name="slug" defaultValue={product.slug} placeholder="создастся автоматически" /></label><label><span>Мощность, л.с.</span><input name="hp" type="number" min="20" max="500" defaultValue={product.hp} required /></label><label><span>Категория</span><select name="category" defaultValue={product.category}><option>Универсальные</option><option>Средний класс</option><option>Тяжёлый класс</option></select></label><label><span>Площадь</span><input name="farmArea" defaultValue={product.farmArea} /></label><label><span>Цена, сом</span><input name="price" type="number" min="0" defaultValue={product.price ?? ""} placeholder="Цена по запросу" /></label><label><span>Скидка, %</span><input name="discountPercent" type="number" min="0" max="90" defaultValue={product.discountPercent ?? ""} placeholder="Например, 10" /></label><label><span>Название акции</span><input name="promotionLabel" defaultValue={product.promotionLabel ?? ""} placeholder="Сезонная акция" /></label><label className="full"><span>Основное изображение</span><input name="image" defaultValue={product.image} required /><small>Путь /images/... или публичная ссылка из Supabase Storage.</small></label><label className="full"><span>Галерея — одно фото на строку</span><textarea name="images" rows={7} defaultValue={gallery} /><small>Первым будет основное изображение. Добавьте фото с разных сторон, кабины и двигателя.</small></label><label className="full"><span>Видео товара</span><input name="videoUrl" type="url" defaultValue={product.videoUrl ?? ""} placeholder="https://.../video.mp4" /><small>Видео сохраняется в карточке и будет готово для будущего показа на сайте.</small></label><label className="full"><span>Описание</span><textarea name="description" rows={4} defaultValue={product.description} /></label><label className="full"><span>Комфорт</span><textarea name="comfort" rows={3} defaultValue={product.comfort} /></label><label className="full"><span>Характеристики — название: значение</span><textarea name="specs" rows={10} defaultValue={specs} placeholder="Модель двигателя: CF...&#10;Колёсная база: 2200 мм" /></label><label className="editor-check full"><input type="checkbox" name="inStock" defaultChecked={product.inStock} /><span>Есть в наличии</span></label></div><footer><button type="button" onClick={close}>Отмена</button><button className="admin-primary" type="submit">Сохранить</button></footer></form></div>;
+  return <div className="editor-overlay"><button className="editor-backdrop" type="button" onClick={close} aria-label="Закрыть редактор" /><form ref={dialogRef} className="product-editor" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="product-editor-title">
+    <header><div><span>Карточка товара</span><h2 id="product-editor-title">{product.model || "Новый трактор"}</h2></div><button type="button" onClick={close} aria-label="Закрыть"><X /></button></header>
+    <div className="editor-sections">
+      <fieldset><legend>Основные данные</legend><div className="editor-fields"><label><span>Модель</span><input name="model" defaultValue={product.model} required /></label><label><span>Slug</span><input name="slug" defaultValue={product.slug} placeholder="создастся автоматически" /></label><label><span>Мощность, л.с.</span><input name="hp" type="number" min="20" max="500" defaultValue={product.hp} required /></label><label><span>Категория</span><select name="category" defaultValue={product.category}><option>Универсальные</option><option>Средний класс</option><option>Тяжёлый класс</option></select></label><label><span>Площадь</span><input name="farmArea" defaultValue={product.farmArea} /></label><label className="editor-check"><input type="checkbox" name="inStock" defaultChecked={product.inStock} /><span>Есть в наличии</span></label></div></fieldset>
+      <fieldset><legend>Цена и акция</legend><div className="editor-fields"><label><span>Цена, сом</span><input name="price" type="number" min="0" defaultValue={product.price ?? ""} placeholder="Цена по запросу" /></label><label><span>Скидка, %</span><input name="discountPercent" type="number" min="0" max="90" defaultValue={product.discountPercent ?? ""} placeholder="Например, 10" /></label><label className="full"><span>Название акции</span><input name="promotionLabel" defaultValue={product.promotionLabel ?? ""} placeholder="Например: Сезонная выгода" /></label></div></fieldset>
+      <fieldset><legend>Описание и комплектация</legend><div className="editor-fields"><label className="full"><span>Описание товара</span><textarea name="description" rows={6} defaultValue={product.description} placeholder="Что умеет трактор и для каких работ подходит" required /><small>Коротко и конкретно: назначение, сильные стороны и выгода для хозяйства.</small></label><label className="full"><span>Комфорт оператора</span><textarea name="comfort" rows={4} defaultValue={product.comfort} placeholder="Кабина, посадка, обзор, органы управления" /></label><label className="full"><span>Комплектация — одна позиция на строку</span><textarea name="equipment" rows={7} defaultValue={equipment} placeholder="Кабина с отопителем&#10;Передние противовесы&#10;Гидравлические выходы" /><small>Эти пункты появятся на странице трактора отдельным понятным списком.</small></label></div></fieldset>
+      <fieldset><legend>Фото и видео</legend><div className="editor-fields"><label className="full"><span>Основное изображение</span><input name="image" defaultValue={product.image} required /><small>Путь /images/... или публичная ссылка из хранилища.</small></label><label className="full"><span>Галерея — одно фото на строку</span><textarea name="images" rows={7} defaultValue={gallery} /><small>Первым будет основное изображение. Добавьте фото с разных сторон, кабины и двигателя.</small></label><label className="full"><span>Видео товара</span><input name="videoUrl" type="url" defaultValue={product.videoUrl ?? ""} placeholder="https://.../video.mp4" /><small>Видео сохранится в карточке и будет готово для будущего показа.</small></label></div></fieldset>
+      <fieldset><legend>Технические характеристики</legend><div className="editor-fields"><label className="full"><span>Название: значение — одна характеристика на строку</span><textarea name="specs" rows={10} defaultValue={specs} placeholder="Модель двигателя: CF...&#10;Колёсная база: 2200 мм" /></label></div></fieldset>
+    </div>
+    <footer><button type="button" onClick={close}>Отмена</button><button className="admin-primary" type="submit"><Check size={17} aria-hidden="true" />Сохранить товар</button></footer>
+  </form></div>;
 }

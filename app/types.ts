@@ -16,6 +16,7 @@ export type Tractor = {
   sourceUrl?: string;
   description: string;
   comfort: string;
+  equipment?: string[];
   specs: Record<string, string>;
 };
 

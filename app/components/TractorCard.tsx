@@ -22,9 +22,10 @@ export function TractorCard({ tractor, featured = false }: { tractor: Tractor; f
       <div className="tractor-card-body">
         <div className="tractor-kicker"><span>{tractor.category}</span><span className={discount ? "sale-card-price" : ""}>{discount && tractor.price ? <del>{formatPrice(tractor.price)}</del> : null}{salePrice ? formatPrice(salePrice) : t("product.priceOnRequest")}</span></div>
         <h3><Link href={`/catalog/${tractor.slug}`}>Changfa {tractor.model}</Link></h3>
-        <div className="tractor-meta"><span><Gauge size={17} />{tractor.hp} {t("common.hp")}</span><span><Sprout size={17} />{tractor.farmArea}</span></div>
+        <div className="tractor-meta"><span><Gauge size={17} aria-hidden="true" />{tractor.hp} {t("common.hp")}</span><span><Sprout size={17} aria-hidden="true" />{tractor.farmArea}</span></div>
+        <p className="tractor-card-description">{tractor.description}</p>
         <div className="tractor-finance"><small>{t("product.installment")}</small><strong>{monthly ? `${new Intl.NumberFormat("ru-RU").format(monthly)} сом / ${t("common.month")}` : t("product.fromMonthly")}</strong></div>
-        <Link className="details-link" href={`/catalog/${tractor.slug}`}>{t("product.details")} <ArrowUpRight size={17} /></Link>
+        <Link className="details-link" href={`/catalog/${tractor.slug}`}>{t("product.details")} <ArrowUpRight size={17} aria-hidden="true" /></Link>
       </div>
     </article>
   );
