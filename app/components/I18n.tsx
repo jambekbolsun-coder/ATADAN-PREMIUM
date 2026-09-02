@@ -8,6 +8,7 @@ export type Locale = "ru" | "ky" | "en";
 const copy: Record<Locale, Record<string, string>> = {
   ru: {
     "nav.catalog": "Каталог",
+    "nav.news": "Новости",
     "nav.finance": "Рассрочка",
     "nav.service": "Сервис",
     "nav.about": "О компании",
@@ -233,6 +234,7 @@ const copy: Record<Locale, Record<string, string>> = {
   },
   ky: {
     "nav.catalog": "Каталог",
+    "nav.news": "Жаңылыктар",
     "nav.finance": "Бөлүп төлөө",
     "nav.service": "Сервис",
     "nav.about": "Компания жөнүндө",
@@ -458,6 +460,7 @@ const copy: Record<Locale, Record<string, string>> = {
   },
   en: {
     "nav.catalog": "Catalog",
+    "nav.news": "News",
     "nav.finance": "Financing",
     "nav.service": "Service",
     "nav.about": "About",

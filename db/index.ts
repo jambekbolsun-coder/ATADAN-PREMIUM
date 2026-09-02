@@ -56,10 +56,17 @@ export async function ensureDb() {
         email TEXT NOT NULL DEFAULT 'admin@atadan.kg',
         updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`),
+      d1.prepare(`CREATE TABLE IF NOT EXISTS news_posts (
+        slug TEXT PRIMARY KEY,
+        data_json TEXT NOT NULL DEFAULT '{}',
+        is_deleted INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`),
       d1.prepare("CREATE INDEX IF NOT EXISTS idx_leads_created_at ON leads(created_at)"),
       d1.prepare("CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status)"),
       d1.prepare("CREATE INDEX IF NOT EXISTS idx_events_tractor_created ON interest_events(tractor_slug, created_at)"),
       d1.prepare("CREATE INDEX IF NOT EXISTS idx_events_path_created ON interest_events(path, created_at)"),
+      d1.prepare("CREATE INDEX IF NOT EXISTS idx_news_posts_updated ON news_posts(updated_at)"),
     ]);
     await d1.prepare("INSERT OR IGNORE INTO admin_profile (id) VALUES (1)").run();
     await d1.prepare("PRAGMA optimize").run();

@@ -9,6 +9,7 @@ import { LanguageSwitcher, useI18n } from "./I18n";
 
 const nav = [
   ["nav.catalog", "/catalog"],
+  ["nav.news", "/news"],
   ["nav.finance", "/finance"],
   ["nav.service", "/service"],
   ["nav.about", "/about"],

@@ -31,3 +31,26 @@ export type Lead = {
   source: string;
   createdAt: string;
 };
+
+export type Locale = "ru" | "ky" | "en";
+export type LocalizedText = Record<Locale, string>;
+export type NewsCategory = "selection" | "technology" | "field" | "service" | "company";
+export type NewsStatus = "draft" | "published" | "archived";
+
+export type NewsPost = {
+  slug: string;
+  category: NewsCategory;
+  status: NewsStatus;
+  featured: boolean;
+  coverImage: string;
+  gallery?: string[];
+  publishedAt: string;
+  readingMinutes: number;
+  author: string;
+  relatedTractorSlug?: string | null;
+  sourceUrl?: string | null;
+  tags: string[];
+  title: LocalizedText;
+  excerpt: LocalizedText;
+  content: LocalizedText;
+};

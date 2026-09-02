@@ -22,3 +22,25 @@ test("production metadata and contact channel are configured", async () => {
   assert.match(home, /getCatalog/);
   assert.match(leads, /INSERT INTO leads/);
 });
+
+test("agrojournal ships with 12 multilingual published stories", async () => {
+  const source = await readFile(new URL("../app/data/news.ts", import.meta.url), "utf8");
+  assert.equal((source.match(/status: "published"/g) ?? []).length, 12);
+  assert.equal((source.match(/slug:/g) ?? []).length, 12);
+  assert.match(source, /title: text\(/);
+  assert.match(source, /content: text\(/);
+  assert.match(source, /journal-hero-4k\.webp/);
+});
+
+test("news publishing is connected to the admin dashboard", async () => {
+  const [dashboard, editor, api] = await Promise.all([
+    readFile(new URL("../app/components/AdminDashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/AdminNewsManager.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/dashboard/route.ts", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /Публикации/);
+  assert.match(editor, /Опубликовать/);
+  assert.match(editor, /Кыргызча/);
+  assert.match(api, /save_news/);
+  assert.match(api, /delete_news/);
+});

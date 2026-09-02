@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { BarChart3, Bell, Calculator, Check, ChevronRight, CircleUserRound, Clipboard, Gauge, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Menu, MessageSquareText, PackagePlus, Pencil, Percent, Plus, Search, Settings, Trash2, Tractor, Upload, UsersRound, Warehouse, X } from "lucide-react";
+import { BarChart3, Bell, Calculator, Check, ChevronRight, CircleUserRound, Clipboard, Gauge, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Menu, MessageSquareText, Newspaper, PackagePlus, Pencil, Percent, Plus, Search, Settings, Trash2, Tractor, Upload, UsersRound, Warehouse, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { Lead, Tractor as TractorType } from "../types";
+import type { Lead, NewsPost, Tractor as TractorType } from "../types";
+import { AdminNewsManager } from "./AdminNewsManager";
 
 type DashboardData = {
   catalog: TractorType[];
@@ -13,11 +14,14 @@ type DashboardData = {
   totals: { views: number; visitors: number } | null;
   daily: Array<{ day: string; views: number }>;
   profile: { display_name: string; phone: string; email: string } | null;
+  posts: NewsPost[];
+  popularPosts: Array<{ path: string; views: number }>;
 };
 
 const sections = [
   ["overview", "Обзор", LayoutDashboard],
   ["products", "Товары", Tractor],
+  ["news", "Публикации", Newspaper],
   ["leads", "Заявки", MessageSquareText],
   ["analytics", "Аналитика", BarChart3],
   ["inventory", "Склад", Warehouse],
@@ -112,6 +116,7 @@ export function AdminDashboard() {
         <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / Панель управления</span><h1>{sections.find(([id]) => id === section)?.[1]}</h1></div><div className="admin-header-tools"><button type="button" aria-label="Уведомления"><Bell size={18} />{newLeads ? <b>{newLeads}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
         {section === "overview" ? <Overview data={data} newLeads={newLeads} setSection={setSection} /> : null}
         {section === "products" ? <Products data={data} edit={setProductEditor} remove={(slug) => action({ action: "delete_product", slug })} /> : null}
+        {section === "news" ? <AdminNewsManager posts={data?.posts ?? []} catalog={data?.catalog ?? []} popularPosts={data?.popularPosts ?? []} save={async (post, originalSlug) => { await action({ action: "save_news", post, originalSlug }); }} remove={async (slug) => { await action({ action: "delete_news", slug }); }} /> : null}
         {section === "leads" ? <Leads data={data} update={(id, status) => action({ action: "lead_status", id, status })} /> : null}
         {section === "analytics" ? <Analytics data={data} /> : null}
         {section === "inventory" ? <Inventory data={data} edit={setProductEditor} /> : null}

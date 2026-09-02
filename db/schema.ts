@@ -36,3 +36,10 @@ export const adminProfile = sqliteTable("admin_profile", {
   email: text("email").notNull().default("admin@atadan.kg"),
   updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
+
+export const newsPosts = sqliteTable("news_posts", {
+  slug: text("slug").primaryKey(),
+  dataJson: text("data_json").notNull().default("{}"),
+  isDeleted: integer("is_deleted", { mode: "boolean" }).notNull().default(false),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+});
