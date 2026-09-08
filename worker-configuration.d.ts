@@ -1,5 +1,6 @@
 interface CloudflareEnv {
   DB: D1Database;
+  MEDIA: R2Bucket;
   ASSETS: Fetcher;
   IMAGES: {
     input(stream: ReadableStream): {

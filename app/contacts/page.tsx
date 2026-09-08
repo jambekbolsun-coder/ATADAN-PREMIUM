@@ -12,7 +12,7 @@ export default async function ContactsPage() {
   const phoneHref = "tel:" + settings.phone.replace(/[^+\d]/g, "");
   const whatsappHref = "https://wa.me/" + settings.phone.replace(/\D/g, "");
   return <main>
-    <PageHero image="/images/banners/contacts-trio-4k.webp" kickerId="contacts.kicker" titleId="contacts.title" subtitleId="contacts.subtitle" />
+    <PageHero image="/images/banners/contacts-duo-v2.png" kickerId="contacts.kicker" titleId="contacts.title" subtitleId="contacts.subtitle" />
     <section className="section-shell contacts-grid">
       <div className="contact-cards">
         <a href={phoneHref}><i><Phone /></i><span><small><Trans id="contacts.phone" /></small><strong>{settings.phone}</strong></span></a>

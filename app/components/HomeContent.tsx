@@ -11,6 +11,7 @@ import { MotionReveal } from "./MotionReveal";
 import { TractorCard } from "./TractorCard";
 import { useI18n } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
+import { ResponsiveHeroMedia } from "./ResponsiveHeroMedia";
 
 const heroSlides = [
   { image: "/images/hero/atadan-field-wide.png", mobile: "/images/hero/atadan-field-mobile.png", key: "slide1", position: "center" },
@@ -39,8 +40,7 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
       <section className="hero-stage hero-carousel" aria-roledescription="carousel" aria-label="Changfa ATADAN" onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)} onFocusCapture={() => setInteracting(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setInteracting(false); }}>
         <div className="hero-media hero-slides" aria-hidden="true">
           {heroSlides.map((item, index) => <div className={`hero-slide ${activeSlide === index ? "active" : ""}`} key={item.key}>
-            <Image className={"mobile" in item ? "hero-wide-image" : ""} src={settings.media[item.image] ?? item.image} alt="" fill priority={index === 0} sizes="100vw" style={{ objectPosition: item.position }} />
-            {"mobile" in item ? <Image className="hero-mobile-image" src={settings.media[item.mobile] ?? item.mobile} alt="" fill priority sizes="100vw" /> : null}
+            <ResponsiveHeroMedia image={item.image} mobileFallback={"mobile" in item ? item.mobile : undefined} priority={index === 0} />
           </div>)}
         </div>
         <div className="hero-shade" />

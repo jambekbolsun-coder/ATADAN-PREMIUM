@@ -7,6 +7,7 @@ import { newsCategoryLabels } from "../data/news";
 import type { NewsCategory, NewsPost } from "../types";
 import { Link } from "./SiteLink";
 import { useI18n } from "./I18n";
+import { ResponsiveHeroMedia } from "./ResponsiveHeroMedia";
 
 const ui = {
   ru: { brand: "ATADAN АгроЖурнал", title: "Знания, которые работают в поле", subtitle: "Понятно рассказываем о выборе техники, работе, комфорте и обслуживании Changfa.", cta: "Читать свежие материалы", library: "Библиотека ATADAN", latest: "Новые материалы", search: "Найти тему", all: "Все материалы", read: "минут чтения", open: "Открыть материал", empty: "Материалы не найдены", emptyText: "Попробуйте изменить запрос или выбрать другую категорию." },
@@ -36,7 +37,7 @@ export function NewsHub({ posts }: { posts: NewsPost[] }) {
 
   return <main className="news-hub">
     <section className="news-hero">
-      <Image src="/images/news/journal-hero-4k.webp" alt="Трактор Changfa в поле Кыргызстана" fill priority sizes="100vw" />
+      <ResponsiveHeroMedia image="/images/news/journal-hero-4k.webp" alt="Трактор Changfa в поле Кыргызстана" priority />
       <div className="news-hero-shade" />
       <div className="section-shell news-hero-content">
         <span><Sparkles size={15} /> {labels.brand}</span>

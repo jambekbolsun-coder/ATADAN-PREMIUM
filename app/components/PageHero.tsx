@@ -1,10 +1,9 @@
 "use client";
 
-import Image from "next/image";
-import { useSiteSettings } from "./SiteSettings";
 import { Link } from "./SiteLink";
 import { ChevronRight } from "lucide-react";
 import { useI18n } from "./I18n";
+import { ResponsiveHeroMedia } from "./ResponsiveHeroMedia";
 
 type PageHeroProps = {
   image: string;
@@ -17,10 +16,9 @@ type PageHeroProps = {
 
 export function PageHero({ image, kickerId, titleId, subtitleId, values, pageLabelId }: PageHeroProps) {
   const { t } = useI18n();
-  const settings=useSiteSettings();
   return (
     <section className="page-hero page-hero-image">
-      <Image src={settings.media[image] || image} alt="" fill priority sizes="100vw" />
+      <ResponsiveHeroMedia image={image} priority />
       <div className="page-hero-overlay" />
       <div className="page-hero-content">
         <nav className="page-breadcrumb" aria-label="Хлебные крошки">

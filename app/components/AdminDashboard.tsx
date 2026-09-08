@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { BarChart3, Bell, Calculator, Check, ChevronRight, CircleUserRound, Clipboard, Gauge, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Menu, MessageSquareText, Newspaper, PackagePlus, Pencil, Percent, Plus, Search, Settings, Trash2, Tractor, UsersRound, Warehouse, X } from "lucide-react";
+import { BarChart3, Bell, Calculator, Check, ChevronRight, CircleUserRound, Clipboard, Eye, EyeOff, Gauge, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Menu, MessageSquareText, Newspaper, PackagePlus, Pencil, Percent, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Tractor, UsersRound, Warehouse, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, NewsPost, Tractor as TractorType } from "../types";
 import { AdminNewsManager } from "./AdminNewsManager";
@@ -48,6 +48,7 @@ export function AdminDashboard() {
   const [sidebar, setSidebar] = useState(false);
   const [productEditor, setProductEditor] = useState<TractorType | null>(null);
   const [toast, setToast] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const load = useCallback(async () => {
     const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
@@ -98,14 +99,19 @@ export function AdminDashboard() {
   if (authenticated === null) return <div className="admin-loader"><LoaderCircle className="spin" /><span>Загружаем кабинет</span></div>;
   if (!authenticated) return (
     <main className="admin-login-page">
-      <div className="admin-login-brand"><Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={360} height={125} /><span>Панель управления</span></div>
-      <form className="admin-login-card" onSubmit={login}>
-        <span className="admin-lock"><CircleUserRound size={25} /></span><h1>Вход в админку</h1><p>Управление каталогом, заявками и аналитикой.</p>
-        <label><span>Логин</span><input name="username" required autoComplete="username" placeholder="Введите логин" /></label>
-        <label><span>Пароль</span><input name="password" type="password" required autoComplete="current-password" placeholder="Введите пароль" /></label>
-        {toast ? <div className="admin-error">{toast}</div> : null}
-        <button type="submit" className="admin-primary" disabled={loading}>{loading ? <LoaderCircle className="spin" /> : null} Войти</button>
-        <Link href="/">← Вернуться на сайт</Link>
+      <div className="admin-login-glow glow-one" aria-hidden="true"/><div className="admin-login-glow glow-two" aria-hidden="true"/>
+      <section className="admin-login-brand" aria-label="ATADAN CRM">
+        <Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={360} height={125} priority />
+        <div className="admin-login-story"><span><Sparkles/> ATADAN CRM</span><h2>Вся работа с техникой — в одном пространстве</h2><p>Каталог, клиенты, сделки, заявки и аналитика доступны вашей команде в защищённом кабинете.</p></div>
+        <div className="admin-login-trust"><ShieldCheck/><span><strong>Защищённый вход</strong><small>Данные передаются по шифрованному соединению</small></span></div>
+      </section>
+      <form className="admin-login-card" onSubmit={login} aria-busy={loading}>
+        <span className="admin-login-eyebrow"><i/> Панель управления</span><span className="admin-lock"><CircleUserRound size={25} /></span><h1>Добро пожаловать</h1><p>Войдите в рабочее пространство ATADAN.</p>
+        <label htmlFor="admin-email"><span>Электронная почта</span><input id="admin-email" name="username" inputMode="email" required autoComplete="username" placeholder="name@company.com" aria-invalid={toast ? true : undefined} aria-describedby={toast ? "admin-login-error" : undefined}/></label>
+        <label htmlFor="admin-password"><span>Пароль</span><div className="admin-password-field"><input id="admin-password" name="password" type={showPassword?"text":"password"} required autoComplete="current-password" placeholder="Введите пароль" aria-invalid={toast ? true : undefined} aria-describedby={toast ? "admin-login-error" : undefined}/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Скрыть пароль":"Показать пароль"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label>
+        {toast ? <div className="admin-error" id="admin-login-error" role="alert">{toast}</div> : null}
+        <button type="submit" className="admin-primary" disabled={loading}>{loading ? <LoaderCircle className="spin" /> : <ShieldCheck/>} {loading?"Проверяем…":"Войти в кабинет"}</button>
+        <Link href="/">← Вернуться на сайт</Link><small className="admin-login-note">Доступ только для сотрудников ATADAN</small>
       </form>
     </main>
   );

@@ -194,6 +194,7 @@ export async function getActor(request: Request): Promise<Actor | null> {
 async function ensureOwner(email: string): Promise<Actor | null> {
   const db = getRawDb();
   await db.prepare(`INSERT INTO staff (id,email,display_name,role) VALUES (?,?,?,'owner') ON CONFLICT(email) DO NOTHING`).bind(crypto.randomUUID(), email, email.split("@")[0]).run();
+  await db.prepare("UPDATE staff SET role='owner',active=1 WHERE email=?").bind(email).run();
   return db.prepare(`SELECT ${ACTOR_FIELDS} FROM staff WHERE email=? AND active=1`).bind(email).first<Actor>();
 }
 export async function requireActor(request: Request, ownerOnly = false) {
@@ -211,16 +212,15 @@ export async function authenticateStaff(email: string, password: string, request
   await ensureDb();
   const normalized = normalizeIdentifier(email);
   const stored = await getRawDb().prepare(`SELECT ${ACTOR_FIELDS},password_hash,salt FROM staff WHERE email=?`).bind(normalized).first<Actor & {password_hash:string|null;salt:string|null}>();
-  if (stored && !stored.active) return null;
-  if (stored?.password_hash && stored.salt) {
+  if (stored?.active && stored.password_hash && stored.salt) {
     const hash = await derivePasswordHash(password, stored.salt, DEFAULT_PBKDF2_ITERATIONS);
-    return constantTimeEqual(hash, stored.password_hash) ? stored : null;
+    if (constantTimeEqual(hash, stored.password_hash)) return stored;
   }
   if (!(await verifyCredentials(normalized, password, request))) return null;
   const owner = await ensureOwner(normalized);
   if (!owner) return null;
   const derived = await hashPassword(password);
-  await getRawDb().prepare("UPDATE staff SET password_hash=?,salt=? WHERE id=? AND password_hash IS NULL").bind(derived.hash, derived.salt, owner.id).run();
+  await getRawDb().prepare("UPDATE staff SET password_hash=?,salt=?,role='owner',active=1 WHERE id=?").bind(derived.hash, derived.salt, owner.id).run();
   return owner;
 }
 export async function createStaffSession(actor: Actor, request: Request) {
