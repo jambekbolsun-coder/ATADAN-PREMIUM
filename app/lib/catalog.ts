@@ -59,7 +59,8 @@ export async function getCatalog(): Promise<Tractor[]> {
     const result = await getRawDb()
       .prepare("SELECT slug, data_json, is_deleted FROM product_overrides")
       .all<{ slug: string; data_json: string; is_deleted: number }>();
-    const changes = new Map(result.results.map((row) => [row.slug, row]));
+    const rows = result.results as Array<{ slug: string; data_json: string; is_deleted: number }>;
+    const changes = new Map<string, { slug: string; data_json: string; is_deleted: number }>(rows.map((row) => [row.slug, row]));
     const catalog: Tractor[] = [];
     for (const tractor of baseTractors) {
       const change = changes.get(tractor.slug);

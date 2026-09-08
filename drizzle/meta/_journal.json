@@ -15,6 +15,13 @@
       "when": 1788337584116,
       "tag": "0001_famous_firebird",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1788809497364,
+      "tag": "0002_white_jocasta",
+      "breakpoints": true
     }
   ]
 }

@@ -9,6 +9,8 @@ export type Tractor = {
   discountPercent?: number | null;
   promotionLabel?: string | null;
   inStock: boolean;
+  recommended?: boolean;
+  popular?: boolean;
   image: string;
   images?: string[];
   videoUrl?: string | null;

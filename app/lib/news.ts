@@ -8,7 +8,8 @@ export async function getNewsPosts(includeUnpublished = false): Promise<NewsPost
     await ensureDb();
     const result = await getRawDb().prepare("SELECT slug, data_json, is_deleted FROM news_posts")
       .all<{ slug: string; data_json: string; is_deleted: number }>();
-    const changes = new Map(result.results.map((row) => [row.slug, row]));
+    const rows = result.results as Array<{ slug: string; data_json: string; is_deleted: number }>;
+    const changes = new Map<string, { slug: string; data_json: string; is_deleted: number }>(rows.map((row) => [row.slug, row]));
     posts = [];
     for (const post of seedNews) {
       const change = changes.get(post.slug);

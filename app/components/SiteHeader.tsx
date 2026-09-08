@@ -1,17 +1,19 @@
 "use client";
+import { Instagram } from "./BrandIcons";
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { ArrowUpRight, Camera as Instagram, Menu, Phone, Search, ShieldCheck, X } from "lucide-react";
+import { ArrowUpRight, Menu, Phone, Search, ShieldCheck, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { LanguageSwitcher, useI18n } from "./I18n";
+import { useSiteSettings } from "./SiteSettings";
 
 const nav = [
   ["nav.catalog", "/catalog"],
-  ["nav.news", "/news"],
-  ["nav.finance", "/finance"],
   ["nav.service", "/service"],
+  ["nav.finance", "/finance"],
+  ["nav.news", "/news"],
   ["nav.about", "/about"],
   ["nav.contacts", "/contacts"],
 ];
@@ -34,6 +36,9 @@ export function SiteHeader() {
   const [scrolled, setScrolled] = useState(false);
   const pathname = usePathname();
   const { t } = useI18n();
+  const settings = useSiteSettings();
+  const phoneHref = "tel:" + settings.phone.replace(/[^+\d]/g, "");
+  const whatsappHref = "https://wa.me/" + settings.phone.replace(/\D/g, "");
   const isHome = pathname === "/";
 
   useEffect(() => {
@@ -51,8 +56,8 @@ export function SiteHeader() {
         <div>
           <span><ShieldCheck size={13} />{t("home.kicker")}</span>
           <nav aria-label="Социальные сети и контакты">
-            <a href="https://www.instagram.com/atadan_kg" target="_blank" rel="noreferrer"><Instagram size={13} />@atadan_kg</a>
-            <a href="tel:+996706131404"><Phone size={13} />+996 706 131 404</a>
+            <a href={settings.instagram} target="_blank" rel="noreferrer"><Instagram size={13} />@atadan_kg</a>
+            <a href={phoneHref}><Phone size={13} />{settings.phone}</a>
           </nav>
         </div>
       </div>
@@ -66,7 +71,7 @@ export function SiteHeader() {
         <div className="header-actions">
           <HeaderSearch />
           <LanguageSwitcher />
-          <a className="header-cta" href="https://wa.me/996706131404" target="_blank" rel="noreferrer"><span>{t("nav.contact")}</span><ArrowUpRight size={16} /></a>
+          <a className="header-cta" href={whatsappHref} target="_blank" rel="noreferrer"><span>{t("nav.contact")}</span><ArrowUpRight size={16} /></a>
           <button className="menu-toggle" type="button" aria-label={open ? t("nav.close") : t("nav.open")} aria-expanded={open} aria-controls="mobile-navigation" onClick={() => setOpen((value) => !value)}>
             {open ? <X size={23} /> : <Menu size={23} />}
           </button>
@@ -78,7 +83,7 @@ export function SiteHeader() {
           {nav.map(([label, href], index) => <Link href={href} className={isActive(href) ? "active" : ""} aria-current={isActive(href) ? "page" : undefined} key={href} onClick={() => setOpen(false)}><span>0{index + 1}</span>{t(label)}</Link>)}
         </nav>
         <div className="mobile-language"><LanguageSwitcher compact /></div>
-        <a className="mobile-call" href="tel:+996706131404"><Phone size={18} /> {t("nav.call")}</a>
+        <a className="mobile-call" href={phoneHref}><Phone size={18} /> {t("nav.call")}</a>
       </div>
     </header>
   );

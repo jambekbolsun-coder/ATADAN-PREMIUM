@@ -1,4 +1,6 @@
 import { env } from "cloudflare:workers";
+import { ensureDb, getRawDb } from "../../db";
+import { digest, HttpError } from "./security";
 
 const COOKIE_NAME = "atadan_admin";
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -172,4 +174,66 @@ export async function adminCookie(username: string, request: Request, secure = t
 
 export function clearAdminCookie() {
   return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
+}
+
+export type Actor = { id: string; email: string; display_name: string; role: "owner" | "manager"; active: number; theme: string; avatar: string | null; phone: string };
+const ACTOR_FIELDS = "id,email,display_name,role,active,theme,avatar,phone";
+const STAFF_COOKIE = "atadan_staff";
+function staffToken(request: Request) { return request.headers.get("cookie")?.split(";").map(v => v.trim()).find(v => v.startsWith(`${STAFF_COOKIE}=`))?.slice(STAFF_COOKIE.length + 1); }
+export async function getActor(request: Request): Promise<Actor | null> {
+  await ensureDb();
+  const token = staffToken(request);
+  if (token) return getRawDb().prepare(`SELECT s.id,s.email,s.display_name,s.role,s.active,s.theme,s.avatar,s.phone FROM staff s JOIN staff_sessions se ON se.staff_id=s.id WHERE se.token_hash=? AND se.expires_at>? AND s.active=1`).bind(await digest(token), Math.floor(Date.now()/1000)).first<Actor>();
+  if (!(await isAdmin(request))) return null;
+  const legacy = request.headers.get("cookie")?.split(";").map(v=>v.trim()).find(v=>v.startsWith(`${COOKIE_NAME}=`))?.slice(COOKIE_NAME.length+1).split(".")[0];
+  if (!legacy) return null;
+  const bytes = hexToBytes(legacy);
+  if (!bytes) return null;
+  return ensureOwner(normalizeIdentifier(decoder.decode(bytes)));
+}
+async function ensureOwner(email: string): Promise<Actor | null> {
+  const db = getRawDb();
+  await db.prepare(`INSERT INTO staff (id,email,display_name,role) VALUES (?,?,?,'owner') ON CONFLICT(email) DO NOTHING`).bind(crypto.randomUUID(), email, email.split("@")[0]).run();
+  return db.prepare(`SELECT ${ACTOR_FIELDS} FROM staff WHERE email=? AND active=1`).bind(email).first<Actor>();
+}
+export async function requireActor(request: Request, ownerOnly = false) {
+  const actor = await getActor(request);
+  if (!actor) throw new HttpError(401, "Войдите в рабочий кабинет");
+  if (ownerOnly && actor.role !== "owner") throw new HttpError(403, "Это действие доступно только управляющему");
+  return actor;
+}
+export async function hashPassword(password: string) {
+  if (password.length < 10 || password.length > 128) throw new HttpError(400, "Пароль должен содержать от 10 до 128 символов");
+  const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(24)));
+  return { salt, hash: await derivePasswordHash(password, salt, DEFAULT_PBKDF2_ITERATIONS) };
+}
+export async function authenticateStaff(email: string, password: string, request: Request) {
+  await ensureDb();
+  const normalized = normalizeIdentifier(email);
+  const stored = await getRawDb().prepare(`SELECT ${ACTOR_FIELDS},password_hash,salt FROM staff WHERE email=?`).bind(normalized).first<Actor & {password_hash:string|null;salt:string|null}>();
+  if (stored && !stored.active) return null;
+  if (stored?.password_hash && stored.salt) {
+    const hash = await derivePasswordHash(password, stored.salt, DEFAULT_PBKDF2_ITERATIONS);
+    return constantTimeEqual(hash, stored.password_hash) ? stored : null;
+  }
+  if (!(await verifyCredentials(normalized, password, request))) return null;
+  const owner = await ensureOwner(normalized);
+  if (!owner) return null;
+  const derived = await hashPassword(password);
+  await getRawDb().prepare("UPDATE staff SET password_hash=?,salt=? WHERE id=? AND password_hash IS NULL").bind(derived.hash, derived.salt, owner.id).run();
+  return owner;
+}
+export async function createStaffSession(actor: Actor, request: Request) {
+  const token = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
+  const now=Math.floor(Date.now()/1000);
+  await getRawDb().batch([
+    getRawDb().prepare("DELETE FROM staff_sessions WHERE expires_at<=?").bind(now),
+    getRawDb().prepare("INSERT INTO staff_sessions(token_hash,staff_id,expires_at) VALUES(?,?,?)").bind(await digest(token),actor.id,now+SESSION_TTL_SECONDS),
+  ]);
+  return `${STAFF_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_TTL_SECONDS}${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`;
+}
+export async function revokeStaffSession(request: Request) {
+  const token = staffToken(request);
+  if (token) await getRawDb().prepare("DELETE FROM staff_sessions WHERE token_hash=?").bind(await digest(token)).run();
+  return `${STAFF_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
 }

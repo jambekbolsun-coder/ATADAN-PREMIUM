@@ -5,9 +5,10 @@ import { AnalyticsTracker } from "./AnalyticsTracker";
 import { I18nProvider } from "./I18n";
 import { SiteFooter } from "./SiteFooter";
 import { SiteHeader } from "./SiteHeader";
+import { SiteAssist } from "./SiteAssist";
 
 export function AppChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  if (pathname.startsWith("/admin")) return children;
-  return <I18nProvider><SiteHeader /><AnalyticsTracker />{children}<SiteFooter /></I18nProvider>;
+  if (pathname.startsWith("/admin")) return <I18nProvider>{children}</I18nProvider>;
+  return <I18nProvider><SiteHeader /><AnalyticsTracker />{children}<SiteFooter /><SiteAssist /></I18nProvider>;
 }

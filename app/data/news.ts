@@ -373,8 +373,8 @@ Keep filters and electrical parts dry and fluids sealed. Confirm availability an
   {
     slug: "rassrochka-na-traktor", category: "company", status: "published", featured: false,
     coverImage: "/images/banners/finance.webp", gallery: ["/images/banners/finance.webp", "/images/hero/changfa-lineup-4k.webp"],
-    publishedAt: "2026-08-08", readingMinutes: 6, author: "Команда ATADAN", relatedTractorSlug: "cfg904-b", tags: ["рассрочка", "бюджет", "экономика"],
-    title: text("Как рассчитать покупку трактора в рассрочку", "Тракторду бөлүп төлөө менен алууну кантип эсептөө керек", "How to plan a tractor purchase by instalments"),
+    publishedAt: "2026-08-08", readingMinutes: 6, author: "Команда ATADAN", relatedTractorSlug: "cfg904-b", tags: ["лизинг", "бюджет", "экономика"],
+    title: text("Как рассчитать покупку трактора в лизинг", "Тракторду лизингге алууну кантип эсептөө керек", "How to plan a tractor lease"),
     excerpt: text("Важны не только ежемесячный платёж, но и первый взнос, сезонность дохода и комплектация.", "Айлык төлөмдөн тышкары биринчи төлөм, сезондук киреше жана комплектация маанилүү.", "Deposit, seasonal income and configuration matter as much as the monthly payment."),
     content: text(
       `## Считайте полную стоимость проекта

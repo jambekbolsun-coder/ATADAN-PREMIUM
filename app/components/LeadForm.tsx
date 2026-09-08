@@ -3,11 +3,14 @@
 import { CheckCircle2, LoaderCircle, MessageCircle } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useI18n } from "./I18n";
+import { useSiteSettings } from "./SiteSettings";
 
 export function LeadForm({ tractorSlug, tractorModel, compact = false }: { tractorSlug?: string; tractorModel?: string; compact?: boolean }) {
   const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState("");
-  const { t } = useI18n();
+  const [requestKey] = useState(() => crypto.randomUUID());
+  const { t, locale } = useI18n();
+  const settings = useSiteSettings();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -20,14 +23,16 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false }: { tract
       message: String(form.get("message") ?? ""),
       tractorSlug,
       tractorModel,
+      locale,
+      website: String(form.get("website") ?? ""),
     };
     try {
-      const response = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+      const response = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey }, body: JSON.stringify(payload) });
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Не удалось отправить заявку");
       setState("success");
       const text = [`Здравствуйте! Меня зовут ${payload.name}.`, tractorModel ? `Интересует трактор Changfa ${tractorModel}.` : "Хочу подобрать трактор Changfa.", payload.message].filter(Boolean).join(" ");
-      window.open(`https://wa.me/996706131404?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
+      window.open(`https://wa.me/${settings.phone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
       formElement.reset();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось отправить заявку");
@@ -41,6 +46,7 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false }: { tract
 
   return (
     <form className={`lead-form ${compact ? "compact" : ""} ${state === "loading" ? "is-sending" : ""}`} onSubmit={submit} aria-busy={state === "loading"}>
+      <label className="honeypot" aria-hidden="true"><span>Website</span><input name="website" tabIndex={-1} autoComplete="off" /></label>
       <label><span>{t("lead.name")}</span><input name="name" minLength={2} maxLength={120} required placeholder={t("lead.namePlaceholder")} autoComplete="name" /></label>
       <label><span>{t("lead.phone")}</span><input name="phone" required placeholder="+996 ___ ___ ___" autoComplete="tel" inputMode="tel" /></label>
       {!compact ? <label className="wide"><span>{t("lead.message")}</span><textarea name="message" maxLength={1000} rows={3} placeholder={t("lead.messagePlaceholder")} /></label> : null}

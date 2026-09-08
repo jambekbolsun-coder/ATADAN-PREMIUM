@@ -44,3 +44,14 @@ test("news publishing is connected to the admin dashboard", async () => {
   assert.match(api, /save_news/);
   assert.match(api, /delete_news/);
 });
+
+test("admin tools retain the shared locale context", async () => {
+  const [chrome, dashboard, calculator] = await Promise.all([
+    readFile(new URL("../app/components/AppChrome.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/AdminDashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/components/FinanceCalculator.tsx", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /<FinanceCalculator/);
+  assert.match(calculator, /useI18n\(\)/);
+  assert.match(chrome, /pathname\.startsWith\("\/admin"\).*<I18nProvider>/s);
+});

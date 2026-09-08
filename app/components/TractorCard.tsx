@@ -11,7 +11,7 @@ export function TractorCard({ tractor, featured = false }: { tractor: Tractor; f
   const { t } = useI18n();
   const discount = Math.min(90, Math.max(0, tractor.discountPercent ?? 0));
   const salePrice = tractor.price && discount ? Math.round(tractor.price * (1 - discount / 100)) : tractor.price;
-  const monthly = salePrice ? Math.ceil(salePrice / 36) : null;
+
   return (
     <article className={`tractor-card ${featured ? "featured" : ""}`}>
       <Link href={`/catalog/${tractor.slug}`} className="tractor-card-image" aria-label={`Подробнее о ${tractor.model}`}>
@@ -24,7 +24,7 @@ export function TractorCard({ tractor, featured = false }: { tractor: Tractor; f
         <h3><Link href={`/catalog/${tractor.slug}`}>Changfa {tractor.model}</Link></h3>
         <div className="tractor-meta"><span><Gauge size={17} aria-hidden="true" />{tractor.hp} {t("common.hp")}</span><span><Sprout size={17} aria-hidden="true" />{tractor.farmArea}</span></div>
         <p className="tractor-card-description">{tractor.description}</p>
-        <div className="tractor-finance"><small>{t("product.installment")}</small><strong>{monthly ? `${new Intl.NumberFormat("ru-RU").format(monthly)} сом / ${t("common.month")}` : t("product.fromMonthly")}</strong></div>
+        <div className="tractor-finance"><small>{t("product.installment")}</small><strong><Link href={`/catalog/${tractor.slug}#leasing`}>{t("finance.calcCta")}</Link></strong></div>
         <Link className="details-link" href={`/catalog/${tractor.slug}`}>{t("product.details")} <ArrowUpRight size={17} aria-hidden="true" /></Link>
       </div>
     </article>

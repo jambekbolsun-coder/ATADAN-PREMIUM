@@ -2,30 +2,41 @@
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { BarChart3, Bell, Calculator, Check, ChevronRight, CircleUserRound, Clipboard, Gauge, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Menu, MessageSquareText, Newspaper, PackagePlus, Pencil, Percent, Plus, Search, Settings, Trash2, Tractor, Upload, UsersRound, Warehouse, X } from "lucide-react";
+import { BarChart3, Bell, Calculator, Check, ChevronRight, CircleUserRound, Clipboard, Gauge, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Menu, MessageSquareText, Newspaper, PackagePlus, Pencil, Percent, Plus, Search, Settings, Trash2, Tractor, UsersRound, Warehouse, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, NewsPost, Tractor as TractorType } from "../types";
 import { AdminNewsManager } from "./AdminNewsManager";
+import { AdminCRM, type CrmMode } from "./AdminCRM";
+import { FinanceCalculator } from "./FinanceCalculator";
+import { AdminSiteSettings } from "./AdminSiteSettings";
 
 type DashboardData = {
+  actor: { id:string; email:string; display_name:string; role:"owner"|"manager"; theme:string; phone:string; avatar:string|null };
   catalog: TractorType[];
   leads: Array<Lead & Record<string, string>>;
   popular: Array<{ tractor_slug: string; views: number }>;
   totals: { views: number; visitors: number } | null;
   daily: Array<{ day: string; views: number }>;
-  profile: { display_name: string; phone: string; email: string } | null;
+  profile: { display_name: string; phone: string; email: string; avatar:string|null; theme:string } | null;
   posts: NewsPost[];
   popularPosts: Array<{ path: string; views: number }>;
 };
 
 const sections = [
   ["overview", "Обзор", LayoutDashboard],
+  ["deals", "Сделки", Gauge],
+  ["customers", "Клиенты", UsersRound],
+  ["tasks", "Задачи", ListChecks],
   ["products", "Товары", Tractor],
   ["news", "Публикации", Newspaper],
   ["leads", "Заявки", MessageSquareText],
   ["analytics", "Аналитика", BarChart3],
   ["inventory", "Склад", Warehouse],
   ["calculations", "Расчёты", Calculator],
+  ["costs", "Себестоимость", Percent],
+  ["team", "Команда", CircleUserRound],
+  ["audit", "Журнал", Clipboard],
+  ["site", "Настройки сайта", Settings],
   ["profile", "Профиль", Settings],
 ] as const;
 
@@ -37,7 +48,6 @@ export function AdminDashboard() {
   const [sidebar, setSidebar] = useState(false);
   const [productEditor, setProductEditor] = useState<TractorType | null>(null);
   const [toast, setToast] = useState("");
-  const [avatar, setAvatar] = useState<string | null>(() => typeof window === "undefined" ? null : window.localStorage.getItem("atadan-admin-avatar"));
 
   const load = useCallback(async () => {
     const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
@@ -73,20 +83,16 @@ export function AdminDashboard() {
     setLoading(true);
     const response = await fetch("/api/admin/dashboard", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
     setLoading(false);
-    if (response.ok) { setToast("Изменения сохранены"); await load(); }
-    else setToast("Не удалось сохранить изменения");
+    if (response.ok) { setToast("Изменения сохранены"); await load(); return true; }
+    const result = await response.json().catch(() => ({})) as { error?: string };
+    setToast(result.error ?? "Не удалось сохранить изменения");
+    return false;
   }
 
   async function logout() {
     await fetch("/api/admin/session", { method: "DELETE" });
     setAuthenticated(false);
     setData(null);
-  }
-
-  function saveAvatar(value: string) {
-    window.localStorage.setItem("atadan-admin-avatar", value);
-    setAvatar(value);
-    setToast("Фото профиля обновлено");
   }
 
   if (authenticated === null) return <div className="admin-loader"><LoaderCircle className="spin" /><span>Загружаем кабинет</span></div>;
@@ -106,25 +112,27 @@ export function AdminDashboard() {
 
   const newLeads = data?.leads.filter((lead) => lead.status === "new").length ?? 0;
   return (
-    <main className="admin-shell">
+    <main className="admin-shell" data-admin-theme={data?.profile?.theme ?? "field"}>
       <aside className={`admin-sidebar ${sidebar ? "is-open" : ""}`}>
         <div className="admin-logo"><Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={240} height={83} /><button type="button" onClick={() => setSidebar(false)} aria-label="Закрыть меню"><X /></button></div>
-        <nav>{sections.map(([id, label, Icon]) => <button type="button" className={section === id ? "active" : ""} onClick={() => { setSection(id); setSidebar(false); }} key={id}><Icon size={19} />{label}{id === "leads" && newLeads ? <b>{newLeads}</b> : null}</button>)}</nav>
-        <div className="admin-sidebar-footer"><AvatarVisual avatar={avatar} size={38} /><div><strong>{data?.profile?.display_name ?? "Администратор"}</strong><span>{data?.profile?.email}</span></div><button type="button" onClick={logout} aria-label="Выйти"><LogOut size={18} /></button></div>
+        <nav>{sections.filter(([id]) => data?.actor.role === "owner" || !["products","news","leads","costs","team","audit","site"].includes(id)).map(([id, label, Icon]) => <button type="button" className={section === id ? "active" : ""} onClick={() => { setSection(id); setSidebar(false); }} key={id}><Icon size={19} />{label}{id === "leads" && newLeads ? <b>{newLeads}</b> : null}</button>)}</nav>
+        <div className="admin-sidebar-footer"><AvatarVisual avatar={data?.profile?.avatar ?? null} size={38} /><div><strong>{data?.profile?.display_name ?? "Администратор"}</strong><span>{data?.profile?.email}</span></div><button type="button" onClick={logout} aria-label="Выйти"><LogOut size={18} /></button></div>
       </aside>
       <section className="admin-main">
         <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / Панель управления</span><h1>{sections.find(([id]) => id === section)?.[1]}</h1></div><div className="admin-header-tools"><button type="button" aria-label="Уведомления"><Bell size={18} />{newLeads ? <b>{newLeads}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
         {section === "overview" ? <Overview data={data} newLeads={newLeads} setSection={setSection} /> : null}
+        {(["deals","customers","tasks","team","costs","audit"] as CrmMode[]).includes(section as CrmMode) ? <AdminCRM mode={section as CrmMode} catalog={data?.catalog ?? []} /> : null}
         {section === "products" ? <Products data={data} edit={setProductEditor} remove={(slug) => action({ action: "delete_product", slug })} /> : null}
         {section === "news" ? <AdminNewsManager posts={data?.posts ?? []} catalog={data?.catalog ?? []} popularPosts={data?.popularPosts ?? []} save={async (post, originalSlug) => { await action({ action: "save_news", post, originalSlug }); }} remove={async (slug) => { await action({ action: "delete_news", slug }); }} /> : null}
         {section === "leads" ? <Leads data={data} update={(id, status) => action({ action: "lead_status", id, status })} /> : null}
         {section === "analytics" ? <Analytics data={data} /> : null}
         {section === "inventory" ? <Inventory data={data} edit={setProductEditor} /> : null}
-        {section === "calculations" ? <Calculations data={data} /> : null}
-        {section === "profile" ? <Profile data={data} avatar={avatar} saveAvatar={saveAvatar} save={(profile) => action({ action: "save_profile", profile })} /> : null}
+        {section === "calculations" ? <div className="admin-content"><FinanceCalculator tractors={data?.catalog ?? []} /></div> : null}
+        {section === "profile" ? <Profile data={data} save={(profile) => action({ action: "save_profile", profile })} /> : null}
+        {section === "site" ? <AdminSiteSettings /> : null}
       </section>
       {section === "products" ? <button type="button" className="admin-fab" onClick={() => setProductEditor(emptyProduct())}><Plus /> Добавить трактор</button> : null}
-      {productEditor ? <ProductEditor product={productEditor} close={() => setProductEditor(null)} save={async (product) => { await action({ action: "save_product", product }); setProductEditor(null); }} /> : null}
+      {productEditor ? <ProductEditor product={productEditor} close={() => setProductEditor(null)} save={async (product) => { if (await action({ action: "save_product", product })) setProductEditor(null); }} /> : null}
       {toast ? <div className="admin-toast"><Check size={16} />{toast}<button type="button" onClick={() => setToast("")}><X size={14} /></button></div> : null}
     </main>
   );
@@ -179,82 +187,10 @@ function Inventory({ data, edit }: { data: DashboardData | null; edit: (product:
   return <div className="admin-content"><div className="inventory-summary"><article><span>Всего позиций</span><strong>{catalog.length}</strong><small>в каталоге Changfa</small></article><article className="positive"><span>В наличии</span><strong>{inStock.length}</strong><small>готовы к продаже</small></article><article className="warning"><span>Под заказ</span><strong>{onOrder.length}</strong><small>ожидают поставки</small></article></div><div className="admin-panel"><div className="panel-head"><div><span>Оперативный контроль</span><h2>Статус техники</h2></div></div><div className="inventory-list">{catalog.map((product) => <button type="button" onClick={() => edit(product)} key={product.slug}><Image src={product.image} alt="" width={72} height={55} /><span><strong>{product.model}</strong><small>{product.hp} л.с. · {product.category}</small></span><i className={product.inStock ? "available" : "order"}>{product.inStock ? "В наличии" : "Под заказ"}</i><ChevronRight size={17} /></button>)}</div></div></div>;
 }
 
-function Calculations({ data }: { data: DashboardData | null }) {
-  const products = data?.catalog ?? [];
-  const [selectedSlug, setSelectedSlug] = useState("");
-  const [price, setPrice] = useState(4_500_000);
-  const [discount, setDiscount] = useState(0);
-  const [downPayment, setDownPayment] = useState(900_000);
-  const [term, setTerm] = useState(36);
-  const [copyStatus, setCopyStatus] = useState("");
-  const selectedProduct = products.find((product) => product.slug === selectedSlug);
-  const safePrice = Number.isFinite(price) ? Math.max(0, price) : 0;
-  const safeDiscount = Number.isFinite(discount) ? Math.min(90, Math.max(0, discount)) : 0;
-  const salePrice = Math.max(0, Math.round(safePrice * (1 - safeDiscount / 100)));
-  const safeDownPayment = Number.isFinite(downPayment) ? Math.min(salePrice, Math.max(0, downPayment)) : 0;
-  const financed = Math.max(0, salePrice - safeDownPayment);
-  const safeTerm = Math.max(1, term || 1);
-  const monthly = Math.ceil(financed / safeTerm);
-  const money = (value: number) => `${new Intl.NumberFormat("ru-RU").format(value)} сом`;
-  function chooseProduct(slug: string) {
-    setSelectedSlug(slug);
-    const selected = products.find((product) => product.slug === slug);
-    if (!selected?.price) return;
-    const nextDiscount = selected.discountPercent ?? 0;
-    const nextSalePrice = Math.round(selected.price * (1 - nextDiscount / 100));
-    setPrice(selected.price);
-    setDiscount(nextDiscount);
-    setDownPayment(Math.round(nextSalePrice * .2));
-  }
-  function setDownPaymentPercent(percent: number) {
-    setDownPayment(Math.round(salePrice * percent / 100));
-  }
-  async function copyCalculation() {
-    const model = selectedProduct ? `Changfa ${selectedProduct.model}` : "Трактор Changfa";
-    const summary = `${model}\nСтоимость: ${money(safePrice)}\nСкидка: ${safeDiscount}%\nПервый взнос: ${money(safeDownPayment)}\nСрок: ${safeTerm} мес.\nОриентировочный платёж: ${money(monthly)} / мес.`;
-    try {
-      await navigator.clipboard.writeText(summary);
-      setCopyStatus("Расчёт скопирован");
-    } catch {
-      setCopyStatus("Не удалось скопировать — выделите данные вручную");
-    }
-  }
-  return <div className="admin-content calculation-workspace">
-    <div className="admin-panel calculation-panel">
-      <div className="calculation-heading"><i><Calculator /></i><div><span className="panel-kicker">Продажи и рассрочка</span><h2>Калькулятор предложения</h2><p>Подготовьте понятный предварительный расчёт для клиента прямо во время звонка.</p></div></div>
-      <div className="calculation-fields">
-        <label className="full"><span>Модель из каталога</span><select value={selectedSlug} onChange={(event) => chooseProduct(event.target.value)}><option value="">Выберите модель</option>{products.map((product) => <option value={product.slug} key={product.slug}>{product.model} · {product.price ? money(product.price) : "цена не задана"}</option>)}</select></label>
-        {selectedProduct && !selectedProduct.price ? <p className="calculation-price-hint full"><strong>Цена этой модели пока не указана.</strong> Введите актуальную стоимость вручную — остальные значения пересчитаются автоматически.</p> : null}
-        <label><span>Стоимость, сом</span><input type="number" min="0" step="1000" value={price} onChange={(event) => setPrice(Number(event.target.value))} /></label>
-        <label><span>Скидка, %</span><input type="number" min="0" max="90" value={discount} onChange={(event) => setDiscount(Number(event.target.value))} /></label>
-        <label><span>Первый взнос, сом</span><input type="number" min="0" max={salePrice} step="1000" value={downPayment} onChange={(event) => setDownPayment(Number(event.target.value))} /><span className="calculation-presets">{[10, 20, 30].map((percent) => <button type="button" onClick={() => setDownPaymentPercent(percent)} key={percent}>{percent}%</button>)}</span></label>
-        <label><span>Срок, месяцев</span><select value={term} onChange={(event) => setTerm(Number(event.target.value))}><option value="12">12 месяцев</option><option value="24">24 месяца</option><option value="36">36 месяцев</option><option value="48">48 месяцев</option></select></label>
-      </div>
-      <p className="calculation-note">Расчёт ориентировочный: финальные условия зависят от комплектации и решения финансового партнёра.</p>
-    </div>
-    <div className="calculation-results" aria-live="polite">
-      <header><div><span>Готовый расчёт</span><h2>{selectedProduct ? `Changfa ${selectedProduct.model}` : "Индивидуальное предложение"}</h2></div><button type="button" onClick={copyCalculation}><Clipboard size={17} aria-hidden="true" />Скопировать</button></header>
-      <article><span>Цена после скидки</span><strong>{money(salePrice)}</strong><small>экономия {money(safePrice - salePrice)}</small></article>
-      <article><span>Сумма финансирования</span><strong>{money(financed)}</strong><small>после первого взноса</small></article>
-      <article className="primary"><span>Платёж в месяц</span><strong>{money(monthly)}</strong><small>{safeTerm} равных платежей</small></article>
-      <article><span>Первый взнос</span><strong>{money(safeDownPayment)}</strong><small>{salePrice ? Math.round(safeDownPayment / salePrice * 100) : 0}% от цены</small></article>
-      {copyStatus ? <p className="calculation-copy-status" role="status">{copyStatus}</p> : null}
-    </div>
-  </div>;
-}
 
-function Profile({ data, save, avatar, saveAvatar }: { data: DashboardData | null; save: (profile: { displayName: string; phone: string; email: string }) => void; avatar: string | null; saveAvatar: (value: string) => void }) {
-  const [avatarError, setAvatarError] = useState("");
-  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const f = new FormData(event.currentTarget); save({ displayName: String(f.get("displayName")), phone: String(f.get("phone")), email: String(f.get("email")) }); }
-  function chooseAvatar(event: React.ChangeEvent<HTMLInputElement>) {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/") || file.size > 2_000_000) { setAvatarError("Выберите изображение до 2 МБ"); return; }
-    const reader = new FileReader();
-    reader.onload = () => { if (typeof reader.result === "string") { saveAvatar(reader.result); setAvatarError(""); } };
-    reader.readAsDataURL(file);
-  }
-  return <div className="admin-content"><form className="admin-panel profile-form" onSubmit={submit}><div className="profile-heading"><AvatarVisual avatar={avatar} size={92} /><div><span className="panel-kicker">Настройки аккаунта</span><h2>Профиль администратора</h2><label className="avatar-upload"><Upload size={16} /><span>Загрузить фото</span><input type="file" accept="image/*" onChange={chooseAvatar} /></label>{avatarError ? <small className="avatar-error">{avatarError}</small> : null}</div></div><div className="profile-fields"><label><span>Имя</span><input name="displayName" defaultValue={data?.profile?.display_name} required /></label><label><span>Рабочий телефон</span><input name="phone" defaultValue={data?.profile?.phone} required /></label><label><span>Email</span><input name="email" type="email" defaultValue={data?.profile?.email} required /></label></div><button type="submit" className="admin-primary">Сохранить профиль</button></form></div>;
+function Profile({ data, save }: { data: DashboardData | null; save: (profile: { displayName: string; phone: string; avatar:string; theme:string }) => void }) {
+  function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const f = new FormData(event.currentTarget); save({ displayName: String(f.get("displayName")), phone: String(f.get("phone")), avatar:String(f.get("avatar")), theme:String(f.get("theme")) }); }
+  return <div className="admin-content"><form className="admin-panel profile-form" onSubmit={submit}><div className="profile-heading"><AvatarVisual avatar={data?.profile?.avatar ?? null} size={92} /><div><span className="panel-kicker">Настройки аккаунта</span><h2>Профиль сотрудника</h2><p>Данные хранятся в SQL и доступны на любом устройстве.</p></div></div><div className="profile-fields"><label><span>Имя</span><input name="displayName" defaultValue={data?.profile?.display_name} required /></label><label><span>Рабочий телефон</span><input name="phone" defaultValue={data?.profile?.phone} /></label><label><span>Email для входа</span><input value={data?.profile?.email ?? ""} readOnly /></label><label><span>Ссылка на аватар</span><input name="avatar" type="url" defaultValue={data?.profile?.avatar ?? ""} placeholder="https://…"/></label><label><span>Фон кабинета</span><select name="theme" defaultValue={data?.profile?.theme ?? "field"}><option value="field">Поле</option><option value="light">Светлый</option><option value="dark">Тёмный</option></select></label></div><button type="submit" className="admin-primary">Сохранить профиль</button></form></div>;
 }
 
 function emptyProduct(): TractorType { return { id: crypto.randomUUID(), slug: "", model: "", hp: 50, category: "Универсальные", farmArea: "до 30 га", price: null, discountPercent: null, promotionLabel: null, inStock: true, image: "/images/tractors-4k/cfb504-x.webp", images: ["/images/tractors-4k/cfb504-x.webp"], videoUrl: null, description: "", comfort: "", equipment: [], specs: {} }; }
@@ -309,6 +245,8 @@ function ProductEditor({ product, close, save }: { product: TractorType; close: 
       discountPercent: f.get("discountPercent") ? Math.min(90, Math.max(0, Number(f.get("discountPercent")))) : null,
       promotionLabel: String(f.get("promotionLabel") ?? "").trim() || null,
       inStock: f.get("inStock") === "on",
+      popular: f.get("popular") === "on",
+      recommended: f.get("recommended") === "on",
       image,
       images: Array.from(new Set([image, ...images])),
       videoUrl: String(f.get("videoUrl") ?? "").trim() || null,
@@ -325,7 +263,7 @@ function ProductEditor({ product, close, save }: { product: TractorType; close: 
     <header><div><span>Карточка товара</span><h2 id="product-editor-title">{product.model || "Новый трактор"}</h2></div><button type="button" onClick={close} aria-label="Закрыть"><X /></button></header>
     <div className="editor-sections">
       <fieldset><legend>Основные данные</legend><div className="editor-fields"><label><span>Модель</span><input name="model" defaultValue={product.model} required /></label><label><span>Slug</span><input name="slug" defaultValue={product.slug} placeholder="создастся автоматически" /></label><label><span>Мощность, л.с.</span><input name="hp" type="number" min="20" max="500" defaultValue={product.hp} required /></label><label><span>Категория</span><select name="category" defaultValue={product.category}><option>Универсальные</option><option>Средний класс</option><option>Тяжёлый класс</option></select></label><label><span>Площадь</span><input name="farmArea" defaultValue={product.farmArea} /></label><label className="editor-check"><input type="checkbox" name="inStock" defaultChecked={product.inStock} /><span>Есть в наличии</span></label></div></fieldset>
-      <fieldset><legend>Цена и акция</legend><div className="editor-fields"><label><span>Цена, сом</span><input name="price" type="number" min="0" defaultValue={product.price ?? ""} placeholder="Цена по запросу" /></label><label><span>Скидка, %</span><input name="discountPercent" type="number" min="0" max="90" defaultValue={product.discountPercent ?? ""} placeholder="Например, 10" /></label><label className="full"><span>Название акции</span><input name="promotionLabel" defaultValue={product.promotionLabel ?? ""} placeholder="Например: Сезонная выгода" /></label></div></fieldset>
+      <fieldset><legend>Цена и витрина</legend><div className="editor-fields"><label><span>Цена, сом</span><input name="price" type="number" min="0" defaultValue={product.price ?? ""} placeholder="Цена по запросу" /></label><label><span>Скидка, %</span><input name="discountPercent" type="number" min="0" max="90" defaultValue={product.discountPercent ?? ""} placeholder="Например, 10" /></label><label className="full"><span>Название акции</span><input name="promotionLabel" defaultValue={product.promotionLabel ?? ""} placeholder="Например: Сезонная выгода" /></label><label className="editor-check"><input type="checkbox" name="popular" defaultChecked={product.popular}/><span>Популярная модель</span></label><label className="editor-check"><input type="checkbox" name="recommended" defaultChecked={product.recommended}/><span>Рекомендуем</span></label></div></fieldset>
       <fieldset><legend>Описание и комплектация</legend><div className="editor-fields"><label className="full"><span>Описание товара</span><textarea name="description" rows={6} defaultValue={product.description} placeholder="Что умеет трактор и для каких работ подходит" required /><small>Коротко и конкретно: назначение, сильные стороны и выгода для хозяйства.</small></label><label className="full"><span>Комфорт оператора</span><textarea name="comfort" rows={4} defaultValue={product.comfort} placeholder="Кабина, посадка, обзор, органы управления" /></label><label className="full"><span>Комплектация — одна позиция на строку</span><textarea name="equipment" rows={7} defaultValue={equipment} placeholder="Кабина с отопителем&#10;Передние противовесы&#10;Гидравлические выходы" /><small>Эти пункты появятся на странице трактора отдельным понятным списком.</small></label></div></fieldset>
       <fieldset><legend>Фото и видео</legend><div className="editor-fields"><label className="full"><span>Основное изображение</span><input name="image" defaultValue={product.image} required /><small>Путь /images/... или публичная ссылка из хранилища.</small></label><label className="full"><span>Галерея — одно фото на строку</span><textarea name="images" rows={7} defaultValue={gallery} /><small>Первым будет основное изображение. Добавьте фото с разных сторон, кабины и двигателя.</small></label><label className="full"><span>Видео товара</span><input name="videoUrl" type="url" defaultValue={product.videoUrl ?? ""} placeholder="https://.../video.mp4" /><small>Видео сохранится в карточке и будет готово для будущего показа.</small></label></div></fieldset>
       <fieldset><legend>Технические характеристики</legend><div className="editor-fields"><label className="full"><span>Название: значение — одна характеристика на строку</span><textarea name="specs" rows={10} defaultValue={specs} placeholder="Модель двигателя: CF...&#10;Колёсная база: 2200 мм" /></label></div></fieldset>

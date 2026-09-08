@@ -1,7 +1,8 @@
 "use client";
+import { Instagram } from "./BrandIcons";
 
 import Image from "next/image";
-import { ArrowDown, ArrowUpRight, BadgeCheck, Banknote, Camera as Instagram, Headphones, Pause, Play, ShieldCheck, Wrench } from "lucide-react";
+import { ArrowDown, ArrowUpRight, BadgeCheck, Banknote, Headphones, Pause, Play, ShieldCheck, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Tractor } from "../types";
 import { Link } from "./SiteLink";
@@ -9,6 +10,7 @@ import { LeadForm } from "./LeadForm";
 import { MotionReveal } from "./MotionReveal";
 import { TractorCard } from "./TractorCard";
 import { useI18n } from "./I18n";
+import { useSiteSettings } from "./SiteSettings";
 
 const heroSlides = [
   { image: "/images/hero/atadan-field-wide.png", mobile: "/images/hero/atadan-field-mobile.png", key: "slide1", position: "center" },
@@ -18,10 +20,13 @@ const heroSlides = [
 
 export function HomeContent({ tractors }: { tractors: Tractor[] }) {
   const { t } = useI18n();
+  const settings = useSiteSettings();
+  const whatsappHref = "https://wa.me/" + settings.phone.replace(/\D/g, "");
   const [activeSlide, setActiveSlide] = useState(0);
   const [paused, setPaused] = useState(false);
   const [interacting, setInteracting] = useState(false);
-  const featured = [50, 90, 140, 240].map((hp) => tractors.find((tractor) => tractor.hp === hp)).filter((tractor): tractor is Tractor => Boolean(tractor));
+  const featured = tractors.filter(p => p.popular).slice(0, 6);
+  const recommended = tractors.filter(p => p.recommended).slice(0, 6);
   useEffect(() => {
     if (paused || interacting || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setInterval(() => setActiveSlide((current) => (current + 1) % heroSlides.length), 3000);
@@ -34,8 +39,8 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
       <section className="hero-stage hero-carousel" aria-roledescription="carousel" aria-label="Changfa ATADAN" onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)} onFocusCapture={() => setInteracting(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setInteracting(false); }}>
         <div className="hero-media hero-slides" aria-hidden="true">
           {heroSlides.map((item, index) => <div className={`hero-slide ${activeSlide === index ? "active" : ""}`} key={item.key}>
-            <Image className={item.mobile ? "hero-wide-image" : ""} src={item.image} alt="" fill priority={index === 0} sizes="100vw" style={{ objectPosition: item.position }} />
-            {item.mobile ? <Image className="hero-mobile-image" src={item.mobile} alt="" fill priority sizes="100vw" /> : null}
+            <Image className={"mobile" in item ? "hero-wide-image" : ""} src={settings.media[item.image] ?? item.image} alt="" fill priority={index === 0} sizes="100vw" style={{ objectPosition: item.position }} />
+            {"mobile" in item ? <Image className="hero-mobile-image" src={settings.media[item.mobile] ?? item.mobile} alt="" fill priority sizes="100vw" /> : null}
           </div>)}
         </div>
         <div className="hero-shade" />
@@ -46,7 +51,7 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
             <p className="hero-copy-enter" data-reveal>{t(`home.${slide.key}.text`)}</p>
             <div className="hero-actions-v3" data-reveal>
               <Link className="hero-primary" href="/catalog">{t("home.catalogCta")}<ArrowUpRight size={19} /></Link>
-              <a className="hero-secondary" href="https://wa.me/996706131404" target="_blank" rel="noreferrer">{t("home.consultCta")}</a>
+              <a className="hero-secondary" href={whatsappHref} target="_blank" rel="noreferrer">{t("home.consultCta")}</a>
             </div>
             <div className="hero-proof" data-reveal>
               <span><strong>6</strong>{t("home.marketYears")}</span>
@@ -68,8 +73,9 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
         <div><span className="section-label">{t("home.catalogLabel")}</span><h2>{t("home.catalogTitle")}</h2></div>
         <div><p>{t("home.catalogText")}</p><Link className="text-link" href="/catalog">{t("home.allModels")}<ArrowUpRight size={18} /></Link></div>
       </div>
-      <div className="featured-grid-v3">{featured.map((tractor, index) => <TractorCard tractor={tractor} featured={index === 0} key={tractor.slug} />)}</div>
+      <div className="featured-grid-v3">{(featured.length ? featured : tractors.slice(0, 3)).map((tractor, index) => <TractorCard tractor={tractor} featured={index === 0} key={tractor.slug} />)}</div>
     </section>
+    {recommended.length ? <section className="catalog-preview section-shell"><div className="editorial-heading"><h2>{t("home.recommended")}</h2></div><div className="featured-grid-v3">{recommended.map(p=><TractorCard tractor={p} key={p.slug}/>)}</div></section> : null}
 
     <section className="support-story section-shell">
       <div className="support-photo">
@@ -86,7 +92,7 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
           <article><Banknote /><div><strong>{t("home.finance")}</strong><span>{t("home.financeText")}</span></div></article>
           <article><Headphones /><div><strong>{t("home.consult")}</strong><span>{t("home.consultText")}</span></div></article>
         </div>
-        <div className="support-actions"><Link className="dark-btn" href="/about">{t("home.aboutCta")}<ArrowUpRight size={18} /></Link><a className="instagram-link" href="https://www.instagram.com/atadan_kg" target="_blank" rel="noreferrer"><Instagram size={18} />@atadan_kg</a></div>
+        <div className="support-actions"><Link className="dark-btn" href="/about">{t("home.aboutCta")}<ArrowUpRight size={18} /></Link><a className="instagram-link" href={settings.instagram} target="_blank" rel="noreferrer"><Instagram size={18} />@atadan_kg</a></div>
       </div>
     </section>
 
@@ -99,7 +105,7 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
     </section>
 
     <section className="home-request-v3 section-shell">
-      <div><span className="section-label">{t("home.requestLabel")}</span><h2>{t("home.requestTitle")}</h2><p>{t("home.requestText")}</p><div className="privacy-note"><ShieldCheck size={19} /><span>ATADAN · +996 706 131 404</span></div></div>
+      <div><span className="section-label">{t("home.requestLabel")}</span><h2>{t("home.requestTitle")}</h2><p>{t("home.requestText")}</p><div className="privacy-note"><ShieldCheck size={19} /><span>ATADAN · {settings.phone}</span></div></div>
       <LeadForm />
     </section>
   </main>;

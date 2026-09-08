@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppChrome } from "./components/AppChrome";
+import { getSiteSettings } from "./lib/site-settings";
+import { SiteSettingsProvider } from "./components/SiteSettings";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -16,14 +18,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   metadataBase: new URL("https://atadan.bekbolsunjamshutov.chatgpt.site"),
   title: "ATADAN Changfa — тракторы в Кыргызстане",
-  description: "Официальный дистрибьютор тракторов Changfa. Подбор техники, рассрочка, гарантия и сервис в Кыргызстане.",
+  description: "Официальный дистрибьютор тракторов Changfa. Подбор техники, лизинг, гарантия и сервис в Кыргызстане.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
   },
   openGraph: {
     title: "ATADAN Changfa — тракторы в Кыргызстане",
-    description: "Каталог тракторов Changfa от 50 до 240 л.с., рассрочка, гарантия и сервис.",
+    description: "Каталог тракторов Changfa от 50 до 240 л.с., лизинг, гарантия и сервис.",
     type: "website",
     locale: "ru_KG",
     images: [{ url: "/images/hero/atadan-field-wide.png", width: 1916, height: 817, alt: "Трактор Changfa в поле — ATADAN" }],
@@ -31,19 +33,20 @@ export const metadata: Metadata = {
   twitter: {
     card: "summary_large_image",
     title: "ATADAN Changfa — тракторы в Кыргызстане",
-    description: "Каталог тракторов Changfa от 50 до 240 л.с., рассрочка, гарантия и сервис.",
+    description: "Каталог тракторов Changfa от 50 до 240 л.с., лизинг, гарантия и сервис.",
     images: ["/images/hero/atadan-field-wide.png"],
   },
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const { settings } = await getSiteSettings();
   return (
     <html lang="ru" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className="antialiased"><AppChrome>{children}</AppChrome></body>
+      <body className="antialiased"><SiteSettingsProvider value={settings}><AppChrome>{children}</AppChrome></SiteSettingsProvider></body>
     </html>
   );
 }

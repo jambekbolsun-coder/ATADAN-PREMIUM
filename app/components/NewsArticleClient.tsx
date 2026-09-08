@@ -7,6 +7,7 @@ import { newsCategoryLabels } from "../data/news";
 import type { NewsPost, Tractor } from "../types";
 import { Link } from "./SiteLink";
 import { useI18n } from "./I18n";
+import { useSiteSettings } from "./SiteSettings";
 
 const articleUi = {
   ru: { back: "Все материалы", read: "минут чтения", updated: "Опубликовано", contents: "В этой статье", expert: "Нужен совет по вашему хозяйству?", expertText: "Расскажите о площади, работах и навесном оборудовании. Менеджер ATADAN сравнит подходящие модели без давления.", ask: "Задать вопрос", relatedModel: "Модель по теме", catalog: "Смотреть трактор", source: "Источник производителя", share: "Поделиться", copied: "Ссылка скопирована", more: "Читайте дальше" },
@@ -32,6 +33,7 @@ function parseArticle(value: string) {
 
 export function NewsArticleClient({ post, related, tractor }: { post: NewsPost; related: NewsPost[]; tractor: Tractor | null }) {
   const { locale } = useI18n();
+  const settings = useSiteSettings();
   const labels = articleUi[locale];
   const [progress, setProgress] = useState(0);
   const [copied, setCopied] = useState(false);
@@ -87,7 +89,7 @@ export function NewsArticleClient({ post, related, tractor }: { post: NewsPost; 
         {sections.map((section, index) => <section id={`section-${index}`} key={`${section.heading}-${index}`}>{section.heading ? <h2>{section.heading}</h2> : null}{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</section>)}
         {post.gallery && post.gallery.length > 1 ? <div className="article-gallery">{post.gallery.slice(1, 3).map((image, index) => <div key={image}><Image src={image} alt={`${title}, фото ${index + 2}`} fill sizes="(max-width: 720px) 100vw, 34vw" /></div>)}</div> : null}
         {post.sourceUrl ? <a className="article-source" href={post.sourceUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} />{labels.source}</a> : null}
-        <section className="article-expert-cta"><div><span>ATADAN · Changfa</span><h2>{labels.expert}</h2><p>{labels.expertText}</p></div><a href={`https://wa.me/996706131404?text=${whatsappText}`} target="_blank" rel="noreferrer"><MessageCircle size={19} />{labels.ask}</a></section>
+        <section className="article-expert-cta"><div><span>ATADAN · Changfa</span><h2>{labels.expert}</h2><p>{labels.expertText}</p></div><a href={`https://wa.me/${settings.phone.replace(/\D/g,"")}?text=${whatsappText}`} target="_blank" rel="noreferrer"><MessageCircle size={19} />{labels.ask}</a></section>
       </article>
       {tractor ? <aside className="article-tractor-card"><span>{labels.relatedModel}</span><div><Image src={tractor.image} alt={`Changfa ${tractor.model}`} fill sizes="280px" /></div><h3>Changfa {tractor.model}</h3><p>{tractor.hp} л.с. · {tractor.farmArea}</p><Link href={`/catalog/${tractor.slug}`}>{labels.catalog}<ArrowUpRight size={17} /></Link></aside> : null}
     </div>
