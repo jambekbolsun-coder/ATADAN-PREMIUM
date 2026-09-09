@@ -49,7 +49,7 @@ export const newsPosts = sqliteTable("news_posts", {
 
 export const staff = sqliteTable("staff", {
   id: text("id").primaryKey(), email: text("email").notNull().unique(), displayName: text("display_name").notNull(),
-  role: text("role", { enum: ["owner", "manager"] }).notNull().default("manager"),
+  role: text("role", { enum: ["owner", "director", "manager", "accountant", "marketer"] }).notNull().default("manager"),
   passwordHash: text("password_hash"), salt: text("salt"), active: integer("active").notNull().default(1),
   theme: text("theme").notNull().default("field"), avatar: text("avatar"), phone: text("phone").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
@@ -60,11 +60,16 @@ export const staffSessions = sqliteTable("staff_sessions", {
 }, t => [index("idx_sessions_staff").on(t.staffId)]);
 export const staffInvites = sqliteTable("staff_invites", {
   tokenHash: text("token_hash").primaryKey(), email: text("email").notNull(), createdBy: text("created_by").notNull().references(() => staff.id),
+  role: text("role", { enum: ["manager", "accountant", "marketer"] }).notNull().default("manager"),
   expiresAt: integer("expires_at").notNull(), usedAt: text("used_at"), revoked: integer("revoked").notNull().default(0),
 });
 export const crmCustomers = sqliteTable("crm_customers", {
   id: text("id").primaryKey(), name: text("name").notNull(), phone: text("phone").notNull(), email: text("email").notNull().default(""),
   notes: text("notes").notNull().default(""), assignedTo: text("assigned_to").references(() => staff.id),
+  region: text("region").notNull().default(""), source: text("source").notNull().default(""), tractorSlug: text("tractor_slug"),
+  power: integer("power"), purpose: text("purpose").notNull().default(""), farmArea: text("farm_area").notNull().default(""),
+  budgetMinor: integer("budget_minor").notNull().default(0), purchaseMethod: text("purchase_method").notNull().default(""),
+  purchaseTiming: text("purchase_timing").notNull().default(""), updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`), version: integer("version").notNull().default(1),
 });
 export const crmDeals = sqliteTable("crm_deals", {
@@ -97,3 +102,29 @@ export const auditLogs = sqliteTable("audit_logs", {
 });
 export const requestLimits = sqliteTable("request_limits", { id: text("id").primaryKey(), hits: integer("hits").notNull(), expiresAt: integer("expires_at").notNull() });
 export const leadRequests = sqliteTable("lead_requests", { id: text("id").primaryKey(), payloadHash: text("payload_hash").notNull(), leadId: text("lead_id").notNull().references(() => leads.id), createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`) });
+
+/**
+ * Typed business modules share one durable record envelope. `kind` defines the
+ * module, while `data_json` holds its validated module-specific fields. This
+ * keeps public content and internal operations in one SQL source of truth
+ * without duplicating screens or inventing reporting data.
+ */
+export const adminRecords = sqliteTable("admin_records", {
+  id: text("id").primaryKey(),
+  kind: text("kind").notNull(),
+  title: text("title").notNull(),
+  subtitle: text("subtitle").notNull().default(""),
+  status: text("status").notNull().default("draft"),
+  category: text("category").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  dataJson: text("data_json").notNull().default("{}"),
+  archived: integer("archived").notNull().default(0),
+  version: integer("version").notNull().default(1),
+  createdBy: text("created_by").references(() => staff.id),
+  updatedBy: text("updated_by").references(() => staff.id),
+  createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+  updatedAt: text("updated_at").notNull().default(sql`CURRENT_TIMESTAMP`),
+}, table => [
+  index("idx_admin_records_kind_status").on(table.kind, table.status, table.archived),
+  index("idx_admin_records_kind_sort").on(table.kind, table.sortOrder, table.updatedAt),
+]);

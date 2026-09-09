@@ -7,7 +7,7 @@ export async function POST(request:Request){
     await rateLimit(`join:${request.headers.get("cf-connecting-ip")||"local"}`,10,900);
     const token=cleanText(b.token,64,true);if(!/^[a-f0-9]{64}$/.test(token))throw new HttpError(400,"Недействительное приглашение");
     const hash=await digest(token),now=Math.floor(Date.now()/1000);
-    const invite=await db.prepare("SELECT email FROM staff_invites WHERE token_hash=? AND used_at IS NULL AND revoked=0 AND expires_at>?").bind(hash,now).first<{email:string}>();
+    const invite=await db.prepare("SELECT email,role FROM staff_invites WHERE token_hash=? AND used_at IS NULL AND revoked=0 AND expires_at>?").bind(hash,now).first<{email:string;role:"manager"|"accountant"|"marketer"}>();
     if(!invite)throw new HttpError(410,"Приглашение истекло или уже использовано. Попросите новое у управляющего.");
     if(b.action==="inspect")return Response.json({email:invite.email},{headers:{"Cache-Control":"no-store"}});
     const name=cleanText(b.name,120,true);
@@ -15,9 +15,9 @@ export async function POST(request:Request){
     const password=b.password,derived=await hashPassword(password),id=crypto.randomUUID();
     if(await db.prepare("SELECT id FROM staff WHERE email=?").bind(invite.email).first())throw new HttpError(409,"Аккаунт уже существует");
     const result=await db.batch([
-      db.prepare("INSERT INTO staff(id,email,display_name,password_hash,salt,role) SELECT ?,email,?,?,?,'manager' FROM staff_invites WHERE token_hash=? AND used_at IS NULL AND revoked=0 AND expires_at>?").bind(id,name,derived.hash,derived.salt,hash,now),
+      db.prepare("INSERT INTO staff(id,email,display_name,password_hash,salt,role) SELECT ?,email,?,?,?,role FROM staff_invites WHERE token_hash=? AND used_at IS NULL AND revoked=0 AND expires_at>?").bind(id,name,derived.hash,derived.salt,hash,now),
       db.prepare("UPDATE staff_invites SET used_at=CURRENT_TIMESTAMP WHERE token_hash=? AND EXISTS(SELECT 1 FROM staff WHERE id=?)").bind(hash,id),
-      db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id) SELECT ?,?,'manager_joined',? WHERE EXISTS(SELECT 1 FROM staff WHERE id=?)").bind(crypto.randomUUID(),id,id,id),
+      db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) SELECT ?,?,'Сотрудник присоединился',?,? WHERE EXISTS(SELECT 1 FROM staff WHERE id=?)").bind(crypto.randomUUID(),id,id,`Роль: ${invite.role}`,id),
     ]);
     if(!result[0].meta.changes)throw new HttpError(410,"Приглашение уже использовано");
     return Response.json({ok:true,email:invite.email},{status:201});

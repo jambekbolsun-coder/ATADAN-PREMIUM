@@ -176,7 +176,8 @@ export function clearAdminCookie() {
   return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
 }
 
-export type Actor = { id: string; email: string; display_name: string; role: "owner" | "manager"; active: number; theme: string; avatar: string | null; phone: string };
+export type StaffRole = "owner" | "director" | "manager" | "accountant" | "marketer";
+export type Actor = { id: string; email: string; display_name: string; role: StaffRole; active: number; theme: string; avatar: string | null; phone: string };
 const ACTOR_FIELDS = "id,email,display_name,role,active,theme,avatar,phone";
 const STAFF_COOKIE = "atadan_staff";
 function staffToken(request: Request) { return request.headers.get("cookie")?.split(";").map(v => v.trim()).find(v => v.startsWith(`${STAFF_COOKIE}=`))?.slice(STAFF_COOKIE.length + 1); }
@@ -200,7 +201,7 @@ async function ensureOwner(email: string): Promise<Actor | null> {
 export async function requireActor(request: Request, ownerOnly = false) {
   const actor = await getActor(request);
   if (!actor) throw new HttpError(401, "Войдите в рабочий кабинет");
-  if (ownerOnly && actor.role !== "owner") throw new HttpError(403, "Это действие доступно только управляющему");
+  if (ownerOnly && actor.role !== "owner" && actor.role !== "director") throw new HttpError(403, "Это действие доступно только директору");
   return actor;
 }
 export async function hashPassword(password: string) {

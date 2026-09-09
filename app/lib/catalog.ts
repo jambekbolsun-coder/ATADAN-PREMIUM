@@ -52,7 +52,7 @@ function withGallery(tractor: Tractor): Tractor {
   return { ...tractor, image: primaryImage, images: Array.from(new Set(detailedViews)).slice(0, 7) };
 }
 
-export async function getCatalog(): Promise<Tractor[]> {
+export async function getCatalog(includeUnpublished = false): Promise<Tractor[]> {
   try {
     const { ensureDb, getRawDb } = await import("../../db");
     await ensureDb();
@@ -65,13 +65,17 @@ export async function getCatalog(): Promise<Tractor[]> {
     for (const tractor of baseTractors) {
       const change = changes.get(tractor.slug);
       if (change?.is_deleted) continue;
-      catalog.push(withGallery(change ? { ...tractor, ...JSON.parse(change.data_json) } : tractor));
+      const merged = change ? { ...tractor, ...JSON.parse(change.data_json) } : tractor;
+      if (includeUnpublished || !merged.status || merged.status === "published") catalog.push(withGallery(merged));
       changes.delete(tractor.slug);
     }
     for (const change of changes.values()) {
-      if (!change.is_deleted) catalog.push(withGallery(JSON.parse(change.data_json)));
+      if (!change.is_deleted) {
+        const item = JSON.parse(change.data_json) as Tractor;
+        if (includeUnpublished || !item.status || item.status === "published") catalog.push(withGallery(item));
+      }
     }
-    return catalog.sort((a, b) => a.hp - b.hp || a.model.localeCompare(b.model));
+    return catalog.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.hp - b.hp || a.model.localeCompare(b.model));
   } catch {
     return baseTractors.map(withGallery);
   }

@@ -29,6 +29,27 @@
       "when": 1788969590480,
       "tag": "0003_violet_joshua_kane",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1788984450051,
+      "tag": "0004_regular_gauntlet",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1788985441581,
+      "tag": "0005_greedy_joshua_kane",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1789010200000,
+      "tag": "0006_seed_atadan_admins",
+      "breakpoints": true
     }
   ]
 }

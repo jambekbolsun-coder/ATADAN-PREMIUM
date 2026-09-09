@@ -5,7 +5,7 @@ import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/s
 
 export async function GET(request: Request) {
   try {
-    const actor=await requireActor(request); const db=getRawDb(); const owner=actor.role==="owner";
+    const actor=await requireActor(request); const db=getRawDb(); const owner=actor.role==="owner"||actor.role==="director";
     const [deals,customers,tasks,staff,costs,audit,notes] = await Promise.all([
       db.prepare(`SELECT d.id,d.lead_id,d.customer_id,d.title,d.tractor_slug,d.stage,d.amount_minor,${owner?"d.cost_minor,":""}d.assigned_to,d.loss_reason,d.created_at,d.updated_at,d.version,c.name,c.phone FROM crm_deals d JOIN crm_customers c ON c.id=d.customer_id WHERE d.archived=0 ${owner?"":"AND d.assigned_to=?"} ORDER BY d.updated_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id])).all(),
       db.prepare(`SELECT c.* FROM crm_customers c ${owner?"":"WHERE EXISTS(SELECT 1 FROM crm_deals d WHERE d.customer_id=c.id AND d.assigned_to=? AND d.archived=0)"} ORDER BY c.created_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id])).all(),
@@ -21,11 +21,24 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     sameOrigin(request);const actor=await requireActor(request);const body=await jsonBody(request);const db=getRawDb();const action=String(body.action);
-    const owner=actor.role==="owner"; const needOwner=()=>{if(!owner)throw new HttpError(403,"Доступно управляющему");};
+    const owner=actor.role==="owner"||actor.role==="director"; const needOwner=()=>{if(!owner)throw new HttpError(403,"Доступно директору");};
     async function assignee(value:unknown) {
       const id = owner ? String(value||actor.id) : actor.id;
       if(!await db.prepare("SELECT id FROM staff WHERE id=? AND active=1").bind(id).first())throw new HttpError(400,"Сотрудник недоступен");
       return id;
+    }
+    if(action==="update_customer"){
+      const id=cleanText(body.id,100,true);
+      const customer=await db.prepare(`SELECT c.* FROM crm_customers c ${owner?"WHERE c.id=?":"WHERE c.id=? AND EXISTS(SELECT 1 FROM crm_deals d WHERE d.customer_id=c.id AND d.assigned_to=? AND d.archived=0)"}`).bind(...(owner?[id]:[id,actor.id])).first<{version:number}>();
+      if(!customer)throw new HttpError(404,"Клиент не найден");
+      if(Number(body.version)!==customer.version)throw new HttpError(409,"Карточка клиента уже изменена. Обновите данные.");
+      const power=body.power===""||body.power==null?null:Math.max(0,Math.min(1000,Math.round(Number(body.power))));
+      const budget=minor(Number(body.budget)||0);
+      const result=await db.prepare(`UPDATE crm_customers SET name=?,phone=?,email=?,notes=?,region=?,source=?,tractor_slug=?,power=?,purpose=?,farm_area=?,budget_minor=?,purchase_method=?,purchase_timing=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?`).bind(
+        cleanText(body.name,120,true),cleanText(body.phone,40,true),cleanText(body.email??"",200),cleanText(body.notes??"",3000),cleanText(body.region??"",100),cleanText(body.source??"",100),cleanText(body.tractorSlug??"",120)||null,power,cleanText(body.purpose??"",300),cleanText(body.farmArea??"",100),budget,cleanText(body.purchaseMethod??"",100),cleanText(body.purchaseTiming??"",100),id,customer.version).run();
+      if(!result.meta.changes)throw new HttpError(409,"Карточка клиента уже изменена. Обновите данные.");
+      await auditStatement(actor,"Обновлена карточка клиента",id).run();
+      return Response.json({ok:true});
     }
     if(action==="create_deal"){
       const assigned=await assignee(body.assignedTo), id=crypto.randomUUID(), customer=crypto.randomUUID();
@@ -75,12 +88,12 @@ export async function POST(request: Request) {
     }else if(action==="staff_active"){
       needOwner();const id=cleanText(body.id,100,true);
       const target=await db.prepare("SELECT role FROM staff WHERE id=?").bind(id).first<{role:string}>();
-      if(!target||target.role==="owner"||id===actor.id)throw new HttpError(400,"Управляющего нельзя заблокировать этим действием");
+      if(!target||target.role==="owner"||target.role==="director"||id===actor.id)throw new HttpError(400,"Директора нельзя заблокировать этим действием");
       await db.batch([db.prepare("UPDATE staff SET active=? WHERE id=?").bind(body.active?1:0,id),db.prepare("DELETE FROM staff_sessions WHERE staff_id=?").bind(id),auditStatement(actor,action,id,body.active?"active":"blocked")]);
     }else if(action==="staff_delete"){
       needOwner();const id=cleanText(body.id,100,true);
       const target=await db.prepare("SELECT role FROM staff WHERE id=? AND active>=0").bind(id).first<{role:string}>();
-      if(!target||target.role==="owner"||id===actor.id)throw new HttpError(400,"Управляющего нельзя удалить");
+      if(!target||target.role==="owner"||target.role==="director"||id===actor.id)throw new HttpError(400,"Директора нельзя удалить");
       await db.batch([
         db.prepare("UPDATE crm_deals SET assigned_to=? WHERE assigned_to=?").bind(actor.id,id),
         db.prepare("UPDATE crm_customers SET assigned_to=? WHERE assigned_to=?").bind(actor.id,id),

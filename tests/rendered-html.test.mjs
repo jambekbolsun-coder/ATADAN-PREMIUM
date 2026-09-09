@@ -51,7 +51,25 @@ test("admin tools retain the shared locale context", async () => {
     readFile(new URL("../app/components/AdminDashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/components/FinanceCalculator.tsx", import.meta.url), "utf8"),
   ]);
-  assert.match(dashboard, /<FinanceCalculator/);
+  assert.match(dashboard, /Лизинг и рассрочка/);
+  assert.match(dashboard, /initialWorkspace/);
   assert.match(calculator, /useI18n\(\)/);
   assert.match(chrome, /pathname\.startsWith\("\/admin"\).*<I18nProvider>/s);
+});
+
+test("admin workspaces use routed SQL-backed modules", async () => {
+  const [dashboard, recordsApi, schema, routedPage, styles] = await Promise.all([
+    readFile(new URL("../app/components/AdminDashboard.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/admin/records/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/[workspace]/[[...section]]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
+  ]);
+  assert.match(dashboard, /inventory-units/);
+  assert.match(dashboard, /control-attribution/);
+  assert.match(recordsApi, /admin_records/);
+  assert.match(recordsApi, /version/);
+  assert.match(schema, /adminRecords/);
+  assert.match(routedPage, /initialWorkspace/);
+  assert.match(styles, /page-hero\.page-hero-image>\.responsive-hero-media/);
 });

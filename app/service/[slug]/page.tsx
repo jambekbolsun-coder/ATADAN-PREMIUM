@@ -1,0 +1,8 @@
+import { notFound } from "next/navigation";
+import { ArrowLeft, CalendarDays, Clock3, Phone, Wrench } from "lucide-react";
+import { Link } from "../../components/SiteLink";
+import { PageHero } from "../../components/PageHero";
+import { getPublishedRecords } from "../../lib/public-records";
+
+export const dynamic="force-dynamic";
+export default async function ServiceDetail({params}:{params:Promise<{slug:string}>}){const {slug}=await params;const records=await getPublishedRecords("service_pages");const item=records.find(row=>(row.data.slug||row.id)===slug);if(!item)notFound();const works=(item.data.works||"").split(/\r?\n/).filter(Boolean);return <main><PageHero image={item.data.cover||"/images/banners/service.webp"} kickerId="service.kicker" titleId="service.title" subtitleId="service.subtitle"/><article className="section-shell service-detail"><Link href="/service"><ArrowLeft/>Все материалы</Link><header><span>{item.category||"Сервис"}</span><h1>{item.title}</h1><p>{item.subtitle}</p></header><div className="service-detail-meta">{item.data.publishDate?<span><CalendarDays/>{item.data.publishDate}</span>:null}{item.data.timing?<span><Clock3/>{item.data.timing}</span>:null}{item.data.price?<span><Wrench/>{item.data.price}</span>:null}</div><div className="service-detail-copy">{item.data.fullText?.split(/\n{2,}/).map((paragraph,index)=><p key={index}>{paragraph}</p>)}</div>{works.length?<section><h2>Что входит в работу</h2><ul>{works.map(work=><li key={work}>{work}</li>)}</ul></section>:null}{item.data.conditions?<section><h2>Условия</h2><p>{item.data.conditions}</p></section>:null}<a className="primary-btn" href={`tel:${(item.data.contacts||"+996706131404").replace(/[^+\d]/g,"")}`}><Phone/>Связаться с сервисом</a></article></main>}

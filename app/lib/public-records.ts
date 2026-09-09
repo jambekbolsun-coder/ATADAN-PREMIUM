@@ -1,0 +1,4 @@
+export type PublicRecord={id:string;title:string;subtitle:string;category:string;sort_order:number;data:Record<string,string>;updated_at:string};
+export async function getPublishedRecords(kind:string):Promise<PublicRecord[]>{
+  try{const {ensureDb,getRawDb}=await import("../../db");await ensureDb();const result=await getRawDb().prepare("SELECT id,title,subtitle,category,sort_order,data_json,updated_at FROM admin_records WHERE kind=? AND status='published' AND archived=0 ORDER BY sort_order,updated_at DESC").bind(kind).all<{id:string;title:string;subtitle:string;category:string;sort_order:number;data_json:string;updated_at:string}>();return result.results.map(row=>{let data:Record<string,string>={};try{data=JSON.parse(row.data_json)}catch{/* Invalid legacy JSON stays an empty object. */}return {...row,data}})}catch{return []}
+}

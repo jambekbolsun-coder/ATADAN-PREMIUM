@@ -11,6 +11,8 @@ export type Tractor = {
   inStock: boolean;
   recommended?: boolean;
   popular?: boolean;
+  status?: "draft" | "published" | "hidden" | "archived";
+  sortOrder?: number;
   image: string;
   images?: string[];
   videoUrl?: string | null;

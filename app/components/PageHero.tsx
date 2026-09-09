@@ -16,8 +16,9 @@ type PageHeroProps = {
 
 export function PageHero({ image, kickerId, titleId, subtitleId, values, pageLabelId }: PageHeroProps) {
   const { t } = useI18n();
+  const mediaName=image.split("/").pop()?.replace(/\.[a-z0-9]+$/i,"").replace(/[^a-z0-9-]/gi,"-").toLowerCase()||"default";
   return (
-    <section className="page-hero page-hero-image">
+    <section className={`page-hero page-hero-image page-hero-${mediaName}`}>
       <ResponsiveHeroMedia image={image} priority />
       <div className="page-hero-overlay" />
       <div className="page-hero-content">
