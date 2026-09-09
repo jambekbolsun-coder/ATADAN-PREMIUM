@@ -14,7 +14,7 @@ const ranges = [
   { label: "200–240 л.с.", min: 200, max: 240 },
 ];
 
-export function CatalogExplorer({ tractors, initialPower, initialQuery = "" }: { tractors: Tractor[]; initialPower?: number; initialQuery?: string }) {
+export function CatalogExplorer({ tractors, initialPower, initialQuery = "", initialPopular = false }: { tractors: Tractor[]; initialPower?: number; initialQuery?: string; initialPopular?: boolean }) {
   const { t } = useI18n();
   const [query, setQuery] = useState(initialQuery);
   const [range, setRange] = useState(() => {
@@ -23,19 +23,23 @@ export function CatalogExplorer({ tractors, initialPower, initialQuery = "" }: {
     return found > 0 ? found : 0;
   });
   const [stockOnly, setStockOnly] = useState(false);
+  const [popularOnly, setPopularOnly] = useState(initialPopular);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const deferredQuery = useDeferredValue(query);
   const selected = ranges[range];
   const filtered = useMemo(() => tractors.filter((tractor) => {
     const matchesQuery = tractor.model.toLowerCase().includes(deferredQuery.toLowerCase());
-    return matchesQuery && tractor.hp >= selected.min && tractor.hp <= selected.max && (!stockOnly || tractor.inStock);
-  }), [tractors, deferredQuery, selected, stockOnly]);
+    const markedPopular = tractors.some(item=>item.popular);
+    const matchesPopular = !popularOnly || (markedPopular ? tractor.popular : tractor.hp >= 200);
+    return matchesQuery && matchesPopular && tractor.hp >= selected.min && tractor.hp <= selected.max && (!stockOnly || tractor.inStock);
+  }).sort((a,b)=>popularOnly?b.hp-a.hp:0), [tractors, deferredQuery, selected, stockOnly, popularOnly]);
 
   const renderFilters = (scope: "desktop" | "mobile") => <>
     <div className="filter-title"><strong>{t("catalog.filters")}</strong><button type="button" onClick={() => setFiltersOpen(false)} aria-label={t("catalog.closeFilters")}><X size={20} /></button></div>
     <fieldset><legend>{t("catalog.power")}</legend>{ranges.map((item, index) => <label className="radio-row" key={item.label}><input type="radio" name={`power-${scope}`} checked={range === index} onChange={() => setRange(index)} /><span>{index === 0 ? t("catalog.allPower") : item.label}</span></label>)}</fieldset>
     <fieldset><legend>{t("catalog.availability")}</legend><label className="switch-row"><input type="checkbox" checked={stockOnly} onChange={(event) => setStockOnly(event.target.checked)} /><span>{t("catalog.stockOnly")}</span></label></fieldset>
-    <button className="reset-filter" type="button" onClick={() => { setRange(0); setStockOnly(false); setQuery(""); }}>{t("catalog.reset")}</button>
+    <fieldset><legend>Подборка</legend><label className="switch-row"><input type="checkbox" checked={popularOnly} onChange={(event) => setPopularOnly(event.target.checked)} /><span>Популярные модели</span></label></fieldset>
+    <button className="reset-filter" type="button" onClick={() => { setRange(0); setStockOnly(false); setPopularOnly(false); setQuery(""); }}>{t("catalog.reset")}</button>
   </>;
 
   return (

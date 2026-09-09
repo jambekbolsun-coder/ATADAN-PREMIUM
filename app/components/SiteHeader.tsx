@@ -1,5 +1,5 @@
 "use client";
-import { Instagram } from "./BrandIcons";
+import { Instagram, TractorMark } from "./BrandIcons";
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
@@ -71,7 +71,7 @@ export function SiteHeader() {
         <div className="header-actions">
           <HeaderSearch />
           <LanguageSwitcher />
-          <a className="header-cta" href={whatsappHref} target="_blank" rel="noreferrer"><span>{t("nav.contact")}</span><ArrowUpRight size={16} /></a>
+          <a className="header-cta" href={whatsappHref} target="_blank" rel="noreferrer"><TractorMark size={24}/><span>{t("nav.contact")}</span><ArrowUpRight size={16} /></a>
           <button className="menu-toggle" type="button" aria-label={open ? t("nav.close") : t("nav.open")} aria-expanded={open} aria-controls="mobile-navigation" onClick={() => setOpen((value) => !value)}>
             {open ? <X size={23} /> : <Menu size={23} />}
           </button>

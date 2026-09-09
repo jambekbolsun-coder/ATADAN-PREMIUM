@@ -22,6 +22,13 @@
       "when": 1788809497364,
       "tag": "0002_white_jocasta",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1788969590480,
+      "tag": "0003_violet_joshua_kane",
+      "breakpoints": true
     }
   ]
 }

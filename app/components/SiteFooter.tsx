@@ -3,9 +3,10 @@ import { Instagram } from "./BrandIcons";
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { ArrowUpRight, MapPin, MessageCircle, Phone } from "lucide-react";
+import { ArrowUpRight, Cookie, MapPin, MessageCircle, Phone } from "lucide-react";
 import { useI18n } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
+import { OPEN_PRIVACY_SETTINGS_EVENT } from "./CookieConsent";
 
 export function SiteFooter() {
   const { t } = useI18n();
@@ -28,6 +29,7 @@ export function SiteFooter() {
         <div><strong>{t("footer.contacts")}</strong><a href={phoneHref}><Phone size={15} />{settings.phone}</a><a href={settings.instagram} target="_blank" rel="noreferrer"><Instagram size={15} />@atadan_kg</a><span><MapPin size={15} />{settings.address}</span></div>
         <div><strong>ATADAN</strong><Link href="/contacts">{t("nav.contacts")}</Link><a href="https://en.changfanz.com/" target="_blank" rel="noreferrer">Changfa Global <ArrowUpRight size={13} /></a></div>
       </div>
+      <div className="footer-legal"><Link href="/privacy">Политика конфиденциальности</Link><Link href="/terms">Условия использования</Link><Link href="/cookies">Политика cookie</Link><button type="button" onClick={()=>window.dispatchEvent(new Event(OPEN_PRIVACY_SETTINGS_EVENT))}><Cookie size={14}/>Настроить cookie</button></div>
       <div className="footer-bottom"><span>© 2026 ATADAN Changfa</span><span>{t("footer.tagline")}</span></div>
     </footer>
   );

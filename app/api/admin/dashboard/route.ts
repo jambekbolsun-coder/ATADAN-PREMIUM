@@ -8,6 +8,10 @@ import { ensureDb, getRawDb } from "../../../../db";
 const newsStatuses = new Set(["draft", "published", "archived"]);
 const newsCategories = new Set(["selection", "technology", "field", "service", "company"]);
 
+function parseGoals(value?:string){
+  try{const parsed=JSON.parse(value??"") as {sales?:unknown;revenueMinor?:unknown};return {sales:Math.max(0,Number(parsed.sales)||0),revenueMinor:Math.max(0,Number(parsed.revenueMinor)||0)}}catch{return {sales:0,revenueMinor:0}}
+}
+
 function normalizedProduct(value: unknown): Tractor {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("product");
   const raw = value as Record<string, unknown>;
@@ -54,7 +58,7 @@ export async function GET(request: Request) {
     await ensureDb();
     const db = getRawDb();
     const owner = actor.role === "owner";
-    const [catalog, posts, leads, popular, popularPosts, totals, daily] = await Promise.all([
+    const [catalog, posts, leads, popular, popularPosts, totals, daily, dealTotals, taskTotals, pipeline, period, goalRow] = await Promise.all([
       getCatalog(),
       owner ? getNewsPosts(true) : Promise.resolve([]),
       owner ? db.prepare("SELECT * FROM leads ORDER BY created_at DESC LIMIT 200").all() : Promise.resolve({ results: [] }),
@@ -62,6 +66,22 @@ export async function GET(request: Request) {
       owner ? db.prepare(`SELECT path, COUNT(*) AS views FROM interest_events WHERE path LIKE '/news/%' GROUP BY path ORDER BY views DESC LIMIT 20`).all() : Promise.resolve({ results: [] }),
       db.prepare("SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_id) AS visitors FROM interest_events").first(),
       db.prepare(`SELECT substr(created_at,1,10) AS day,COUNT(*) AS views FROM interest_events WHERE created_at>=datetime('now','-6 days') GROUP BY day ORDER BY day`).all(),
+      db.prepare(`SELECT COUNT(*) AS total,
+        SUM(CASE WHEN archived=0 AND stage NOT IN ('won','lost') THEN 1 ELSE 0 END) AS active,
+        SUM(CASE WHEN stage='won' THEN 1 ELSE 0 END) AS won,
+        COALESCE(SUM(CASE WHEN stage='won' THEN amount_minor ELSE 0 END),0) AS revenue_minor,
+        COALESCE(SUM(CASE WHEN stage='won' AND cost_minor IS NOT NULL THEN amount_minor-cost_minor ELSE 0 END),0) AS profit_minor
+        FROM crm_deals`).first(),
+      db.prepare(`SELECT COUNT(*) AS total,
+        SUM(CASE WHEN done=0 THEN 1 ELSE 0 END) AS open,
+        SUM(CASE WHEN done=0 AND due_at < datetime('now') THEN 1 ELSE 0 END) AS overdue
+        FROM crm_tasks`).first(),
+      db.prepare(`SELECT stage,COUNT(*) AS count,COALESCE(SUM(amount_minor),0) AS amount_minor FROM crm_deals WHERE archived=0 GROUP BY stage ORDER BY count DESC`).all(),
+      db.prepare(`SELECT
+        (SELECT COUNT(*) FROM interest_events WHERE created_at>=datetime('now','-30 days')) AS views_30,
+        (SELECT COUNT(DISTINCT visitor_id) FROM interest_events WHERE created_at>=datetime('now','-30 days')) AS visitors_30,
+        (SELECT COUNT(*) FROM leads WHERE created_at>=datetime('now','-30 days')) AS leads_30`).first(),
+      db.prepare("SELECT value FROM site_settings WHERE key='director_goals'").first<{value:string}>(),
     ]);
     return Response.json({
       actor,
@@ -72,6 +92,13 @@ export async function GET(request: Request) {
       popularPosts: popularPosts.results,
       totals,
       daily: daily.results,
+      director: {
+        deals: dealTotals,
+        tasks: taskTotals,
+        pipeline: pipeline.results,
+        period,
+        goals: parseGoals(goalRow?.value),
+      },
       profile: { display_name: actor.display_name, phone: actor.phone, email: actor.email, avatar: actor.avatar, theme: actor.theme },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
@@ -139,6 +166,13 @@ export async function PATCH(request: Request) {
       if (!["field","light","dark"].includes(theme)) return Response.json({ error:"Неизвестная тема" },{status:400});
       await db.prepare("UPDATE staff SET display_name=?,phone=?,avatar=?,theme=? WHERE id=?")
         .bind(cleanText(profile?.displayName, 120, true), cleanText(profile?.phone ?? "", 40), safeMedia(profile?.avatar ?? "", true) || null, theme, actor.id).run();
+    } else if (action === "save_goals") {
+      ownerOnly();
+      const goals=body.goals as Record<string,unknown>;
+      const sales=Math.max(0,Math.min(10000,Math.round(Number(goals?.sales)||0)));
+      const revenueMinor=Math.max(0,Math.min(100_000_000_000_00,Math.round(Number(goals?.revenueMinor)||0)));
+      await db.prepare(`INSERT INTO site_settings(key,value,version) VALUES('director_goals',?,1)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value,version=site_settings.version+1`).bind(JSON.stringify({sales,revenueMinor})).run();
     } else {
       return Response.json({ error: "Неизвестное действие" }, { status: 400 });
     }

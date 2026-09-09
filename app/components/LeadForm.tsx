@@ -4,8 +4,11 @@ import { CheckCircle2, LoaderCircle, MessageCircle } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useI18n } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
+import { Link } from "./SiteLink";
 
-export function LeadForm({ tractorSlug, tractorModel, compact = false }: { tractorSlug?: string; tractorModel?: string; compact?: boolean }) {
+const consentCopy={ru:{start:"Я согласен(на) на обработку данных согласно",link:"политике конфиденциальности",error:"Подтвердите согласие на обработку данных"},ky:{start:"Маалыматтарды иштетүүгө макулмун:",link:"купуялык саясаты",error:"Маалыматтарды иштетүүгө макулдукту ырастаңыз"},en:{start:"I agree to data processing under the",link:"privacy policy",error:"Please confirm your consent to data processing"}} as const;
+
+export function LeadForm({ tractorSlug, tractorModel, compact = false, defaultMessage = "" }: { tractorSlug?: string; tractorModel?: string; compact?: boolean; defaultMessage?: string }) {
   const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [error, setError] = useState("");
   const [requestKey] = useState(() => crypto.randomUUID());
@@ -17,6 +20,7 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false }: { tract
     setState("loading");
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
+    if (form.get("consent") !== "on") { setError(consentCopy[locale].error); setState("error"); return; }
     const payload = {
       name: String(form.get("name") ?? ""),
       phone: String(form.get("phone") ?? ""),
@@ -25,6 +29,10 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false }: { tract
       tractorModel,
       locale,
       website: String(form.get("website") ?? ""),
+      consent: true,
+      consentVersion: "2026-09-09",
+      consentedAt: new Date().toISOString(),
+      sourcePath: window.location.pathname,
     };
     try {
       const response = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey }, body: JSON.stringify(payload) });
@@ -46,11 +54,11 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false }: { tract
 
   return (
     <form className={`lead-form ${compact ? "compact" : ""} ${state === "loading" ? "is-sending" : ""}`} onSubmit={submit} aria-busy={state === "loading"}>
-      <label className="honeypot" aria-hidden="true"><span>Website</span><input name="website" tabIndex={-1} autoComplete="off" /></label>
+      <label className="honeypot" aria-hidden="true"><span>Website</span><input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" /></label>
       <label><span>{t("lead.name")}</span><input name="name" minLength={2} maxLength={120} required placeholder={t("lead.namePlaceholder")} autoComplete="name" /></label>
       <label><span>{t("lead.phone")}</span><input name="phone" required placeholder="+996 ___ ___ ___" autoComplete="tel" inputMode="tel" /></label>
-      {!compact ? <label className="wide"><span>{t("lead.message")}</span><textarea name="message" maxLength={1000} rows={3} placeholder={t("lead.messagePlaceholder")} /></label> : null}
-      <label className="consent wide"><input type="checkbox" required /><span>{t("lead.consent")}</span></label>
+      {!compact ? <label className="wide"><span>{t("lead.message")}</span><textarea name="message" maxLength={1000} rows={3} placeholder={t("lead.messagePlaceholder")} defaultValue={defaultMessage} /></label> : null}
+      <label className="consent wide"><input type="checkbox" name="consent" required /><span>{consentCopy[locale].start} <Link href="/privacy" target="_blank">{consentCopy[locale].link}</Link>.</span></label>
       {state === "error" ? <p className="form-error wide" role="alert">{error}</p> : null}
       <button className="primary-btn wide submit-lead" type="submit" disabled={state === "loading"}>
         {state === "loading" ? <LoaderCircle className="spin" size={19} /> : <MessageCircle size={19} />}

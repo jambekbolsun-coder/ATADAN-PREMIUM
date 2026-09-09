@@ -2,13 +2,15 @@
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { BarChart3, Bell, Calculator, Check, ChevronRight, CircleUserRound, Clipboard, Eye, EyeOff, Gauge, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Menu, MessageSquareText, Newspaper, PackagePlus, Pencil, Percent, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Tractor, UsersRound, Warehouse, X } from "lucide-react";
+import { BarChart3, Bell, Calculator, Check, ChevronRight, CircleUserRound, Clipboard, Eye, EyeOff, Gauge, LayoutDashboard, ListChecks, LoaderCircle, LogOut, Menu, MessageSquareText, Newspaper, Pencil, Percent, Plus, Search, Settings, ShieldCheck, Sparkles, Trash2, Tractor, UsersRound, Warehouse, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, NewsPost, Tractor as TractorType } from "../types";
 import { AdminNewsManager } from "./AdminNewsManager";
 import { AdminCRM, type CrmMode } from "./AdminCRM";
 import { FinanceCalculator } from "./FinanceCalculator";
 import { AdminSiteSettings } from "./AdminSiteSettings";
+import { AdminPortalHome, type AdminWorkspace } from "./AdminPortalHome";
+import { AdminWorkspaceOverview } from "./AdminWorkspaceOverview";
 
 type DashboardData = {
   actor: { id:string; email:string; display_name:string; role:"owner"|"manager"; theme:string; phone:string; avatar:string|null };
@@ -20,6 +22,13 @@ type DashboardData = {
   profile: { display_name: string; phone: string; email: string; avatar:string|null; theme:string } | null;
   posts: NewsPost[];
   popularPosts: Array<{ path: string; views: number }>;
+  director?: {
+    deals?: { total:number; active:number; won:number; revenue_minor:number; profit_minor:number } | null;
+    tasks?: { total:number; open:number; overdue:number } | null;
+    pipeline?: Array<{ stage:string; count:number; amount_minor:number }>;
+    period?: { views_30:number; visitors_30:number; leads_30:number } | null;
+    goals?: { sales:number; revenueMinor:number };
+  };
 };
 
 const sections = [
@@ -40,11 +49,20 @@ const sections = [
   ["profile", "Профиль", Settings],
 ] as const;
 
+type SectionId=(typeof sections)[number][0];
+const workspaceSections:Record<AdminWorkspace,SectionId[]>={
+  marketing:["overview","products","news","leads","analytics","calculations","site","profile"],
+  company:["overview","deals","customers","tasks","inventory","calculations","costs","team","audit","profile"],
+  control:["overview","analytics","leads","deals","inventory","costs","team","audit","profile"],
+};
+const workspaceNames:Record<AdminWorkspace,string>={marketing:"Маркетинг",company:"Управление компанией",control:"Центр управления"};
+
 export function AdminDashboard() {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<DashboardData | null>(null);
-  const [section, setSection] = useState<(typeof sections)[number][0]>("overview");
+  const [section, setSection] = useState<SectionId>("overview");
+  const [workspace, setWorkspace] = useState<AdminWorkspace | null>(null);
   const [sidebar, setSidebar] = useState(false);
   const [productEditor, setProductEditor] = useState<TractorType | null>(null);
   const [toast, setToast] = useState("");
@@ -75,7 +93,7 @@ export function AdminDashboard() {
     const username = String(form.get("username") ?? "");
     const password = String(form.get("password") ?? "");
     const response = await fetch("/api/admin/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
-    if (response.ok) { await load(); setLoading(false); return; }
+    if (response.ok) { setToast(""); await load(); setLoading(false); return; }
     const result=await response.json().catch(()=>({})) as {error?:string};
     setLoading(false);setToast(result.error||"Неверный логин или пароль");
   }
@@ -94,6 +112,7 @@ export function AdminDashboard() {
     await fetch("/api/admin/session", { method: "DELETE" });
     setAuthenticated(false);
     setData(null);
+    setWorkspace(null);
   }
 
   if (authenticated === null) return <div className="admin-loader"><LoaderCircle className="spin" /><span>Загружаем кабинет</span></div>;
@@ -108,7 +127,7 @@ export function AdminDashboard() {
       <form className="admin-login-card" onSubmit={login} aria-busy={loading}>
         <span className="admin-login-eyebrow"><i/> Панель управления</span><span className="admin-lock"><CircleUserRound size={25} /></span><h1>Добро пожаловать</h1><p>Войдите в рабочее пространство ATADAN.</p>
         <label htmlFor="admin-email"><span>Электронная почта</span><input id="admin-email" name="username" inputMode="email" required autoComplete="username" placeholder="name@company.com" aria-invalid={toast ? true : undefined} aria-describedby={toast ? "admin-login-error" : undefined}/></label>
-        <label htmlFor="admin-password"><span>Пароль</span><div className="admin-password-field"><input id="admin-password" name="password" type={showPassword?"text":"password"} required autoComplete="current-password" placeholder="Введите пароль" aria-invalid={toast ? true : undefined} aria-describedby={toast ? "admin-login-error" : undefined}/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Скрыть пароль":"Показать пароль"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label>
+        <label htmlFor="admin-password"><span>Пароль</span><div className="admin-password-field"><input id="admin-password" name="password" aria-label="Пароль" type={showPassword?"text":"password"} required autoComplete="current-password" placeholder="Введите пароль" aria-invalid={toast ? true : undefined} aria-describedby={toast ? "admin-login-error" : undefined}/><button type="button" onClick={()=>setShowPassword(value=>!value)} aria-label={showPassword?"Скрыть пароль":"Показать пароль"}>{showPassword?<EyeOff/>:<Eye/>}</button></div></label>
         {toast ? <div className="admin-error" id="admin-login-error" role="alert">{toast}</div> : null}
         <button type="submit" className="admin-primary" disabled={loading}>{loading ? <LoaderCircle className="spin" /> : <ShieldCheck/>} {loading?"Проверяем…":"Войти в кабинет"}</button>
         <Link href="/">← Вернуться на сайт</Link><small className="admin-login-note">Доступ только для сотрудников ATADAN</small>
@@ -116,17 +135,22 @@ export function AdminDashboard() {
     </main>
   );
 
+  if (!data) return <div className="admin-loader"><LoaderCircle className="spin" /><span>Загружаем данные</span></div>;
+  if (!workspace) return <AdminPortalHome actor={data.actor} onChoose={(choice)=>{setWorkspace(choice);setSection("overview");}} onLogout={logout}/>;
   const newLeads = data?.leads.filter((lead) => lead.status === "new").length ?? 0;
+  const visibleSections=sections.filter(([id])=>workspaceSections[workspace].includes(id) && (data.actor.role === "owner" || !["products","news","leads","costs","team","audit","site"].includes(id)));
   return (
-    <main className="admin-shell" data-admin-theme={data?.profile?.theme ?? "field"}>
+    <main className="admin-shell" data-admin-theme={data.profile?.theme ?? "field"} data-workspace={workspace}>
       <aside className={`admin-sidebar ${sidebar ? "is-open" : ""}`}>
         <div className="admin-logo"><Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={240} height={83} /><button type="button" onClick={() => setSidebar(false)} aria-label="Закрыть меню"><X /></button></div>
-        <nav>{sections.filter(([id]) => data?.actor.role === "owner" || !["products","news","leads","costs","team","audit","site"].includes(id)).map(([id, label, Icon]) => <button type="button" className={section === id ? "active" : ""} onClick={() => { setSection(id); setSidebar(false); }} key={id}><Icon size={19} />{label}{id === "leads" && newLeads ? <b>{newLeads}</b> : null}</button>)}</nav>
+        <button className="workspace-back" type="button" onClick={()=>{setWorkspace(null);setSidebar(false)}}>← Все пространства</button>
+        <span className="workspace-sidebar-label">{workspaceNames[workspace]}</span>
+        <nav>{visibleSections.map(([id, label, Icon]) => <button type="button" className={section === id ? "active" : ""} onClick={() => { setSection(id); setSidebar(false); }} key={id}><Icon size={19} />{label}{id === "leads" && newLeads ? <b>{newLeads}</b> : null}</button>)}</nav>
         <div className="admin-sidebar-footer"><AvatarVisual avatar={data?.profile?.avatar ?? null} size={38} /><div><strong>{data?.profile?.display_name ?? "Администратор"}</strong><span>{data?.profile?.email}</span></div><button type="button" onClick={logout} aria-label="Выйти"><LogOut size={18} /></button></div>
       </aside>
       <section className="admin-main">
-        <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / Панель управления</span><h1>{sections.find(([id]) => id === section)?.[1]}</h1></div><div className="admin-header-tools"><button type="button" aria-label="Уведомления"><Bell size={18} />{newLeads ? <b>{newLeads}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
-        {section === "overview" ? <Overview data={data} newLeads={newLeads} setSection={setSection} /> : null}
+        <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / {workspaceNames[workspace]}</span><h1>{sections.find(([id]) => id === section)?.[1]}</h1></div><div className="admin-header-tools"><button type="button" aria-label="Уведомления"><Bell size={18} />{newLeads ? <b>{newLeads}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
+        {section === "overview" ? <AdminWorkspaceOverview workspace={workspace} data={data} onNavigate={(value)=>setSection(value as SectionId)} onSaveGoals={async goals=>action({action:"save_goals",goals})}/> : null}
         {(["deals","customers","tasks","team","costs","audit"] as CrmMode[]).includes(section as CrmMode) ? <AdminCRM mode={section as CrmMode} catalog={data?.catalog ?? []} /> : null}
         {section === "products" ? <Products data={data} edit={setProductEditor} remove={(slug) => action({ action: "delete_product", slug })} /> : null}
         {section === "news" ? <AdminNewsManager posts={data?.posts ?? []} catalog={data?.catalog ?? []} popularPosts={data?.popularPosts ?? []} save={async (post, originalSlug) => { await action({ action: "save_news", post, originalSlug }); }} remove={async (slug) => { await action({ action: "delete_news", slug }); }} /> : null}
@@ -146,12 +170,6 @@ export function AdminDashboard() {
 
 function AvatarVisual({ avatar, size }: { avatar: string | null; size: number }) {
   return avatar ? <span className="admin-avatar-image" style={{ width: size, height: size }}><Image src={avatar} alt="Фото администратора" width={size} height={size} unoptimized /></span> : <span className="admin-avatar" style={{ width: size, height: size }}>A</span>;
-}
-
-function Overview({ data, newLeads, setSection }: { data: DashboardData | null; newLeads: number; setSection: (value: "leads" | "products") => void }) {
-  const popular = data?.popular[0];
-  const model = data?.catalog.find((tractor) => tractor.slug === popular?.tractor_slug)?.model ?? "—";
-  return <div className="admin-content"><div className="admin-stats"><Metric label="Просмотры" value={data?.totals?.views ?? 0} icon={Gauge} note="за всё время" /><Metric label="Посетители" value={data?.totals?.visitors ?? 0} icon={UsersRound} note="уникальные устройства" /><Metric label="Новые заявки" value={newLeads} icon={MessageSquareText} note="требуют ответа" /><Metric label="Популярная модель" value={model} icon={Tractor} note={popular ? `${popular.views} просмотров` : "нет данных"} /></div><div className="admin-two-col"><div className="admin-panel"><div className="panel-head"><div><span>Последние заявки</span><h2>Новые обращения</h2></div><button type="button" onClick={() => setSection("leads")}>Все заявки</button></div><LeadList leads={data?.leads.slice(0, 5) ?? []} /></div><div className="admin-panel quick-actions"><div className="panel-head"><div><span>Быстрые действия</span><h2>Управление</h2></div></div><button type="button" onClick={() => setSection("products")}><PackagePlus /><span><strong>Добавить технику</strong><small>Новая карточка в каталоге</small></span><ChevronRight /></button><button type="button" onClick={() => setSection("leads")}><MessageSquareText /><span><strong>Обработать заявки</strong><small>{newLeads} новых обращений</small></span><ChevronRight /></button></div></div></div>;
 }
 
 function Metric({ label, value, icon: Icon, note }: { label: string; value: string | number; icon: typeof Gauge; note: string }) { return <article className="metric-card"><div><span>{label}</span><strong>{value}</strong><small>{note}</small></div><i><Icon size={21} /></i></article>; }

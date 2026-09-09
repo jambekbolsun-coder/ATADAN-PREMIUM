@@ -10,6 +10,11 @@ export async function POST(request: Request) {
     const name = cleanText(body.name, 120, true);
     const phone = cleanText(body.phone, 40, true);
     const message = cleanText(body.message ?? "", 1000);
+    if (body.consent !== true) throw new HttpError(400, "Необходимо согласие на обработку персональных данных");
+    const consentVersion = cleanText(body.consentVersion ?? "", 40, true);
+    const consentAt = cleanText(body.consentedAt ?? "", 40, true);
+    const sourcePath = cleanText(body.sourcePath ?? "/", 300, true);
+    if (!/^\d{4}-\d{2}-\d{2}T/.test(consentAt)) throw new HttpError(400, "Некорректная отметка согласия");
     if (name.length < 2 || phone.replace(/\D/g, "").length < 8) throw new HttpError(400, "Укажите имя и корректный номер телефона");
     await ensureDb();
     const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "local";
@@ -22,7 +27,7 @@ export async function POST(request: Request) {
 
     const clientKey = cleanText(request.headers.get("idempotency-key") ?? "", 100, true);
     const requestId = await digest(`lead-request:${clientKey}`);
-    const payloadHash = await digest(JSON.stringify({ name, phone, message, slug: tractor?.slug ?? "" }));
+    const payloadHash = await digest(JSON.stringify({ name, phone, message, slug: tractor?.slug ?? "", consentVersion }));
     const db = getRawDb();
     const previous = await db.prepare("SELECT payload_hash,lead_id FROM lead_requests WHERE id=?").bind(requestId).first<{payload_hash:string;lead_id:string}>();
     if (previous) {
@@ -38,7 +43,7 @@ export async function POST(request: Request) {
     const cost = tractor ? await db.prepare("SELECT cost_minor FROM product_costs WHERE slug=?").bind(tractor.slug).first<{cost_minor:number}>() : null;
     try {
       await db.batch([
-        db.prepare("INSERT INTO leads(id,tractor_slug,tractor_model,name,phone,message,source) VALUES(?,?,?,?,?,?,'website')").bind(leadId, tractor?.slug ?? null, tractor?.model ?? null, name, phone, message),
+        db.prepare("INSERT INTO leads(id,tractor_slug,tractor_model,name,phone,message,source,consent_version,consent_at,source_path) VALUES(?,?,?,?,?,?,'website',?,?,?)").bind(leadId, tractor?.slug ?? null, tractor?.model ?? null, name, phone, message, consentVersion, consentAt, sourcePath),
         db.prepare("INSERT INTO crm_customers(id,name,phone,notes,assigned_to) VALUES(?,?,?,?,?)").bind(customerId, name, phone, message, assignee?.id ?? null),
         db.prepare("INSERT INTO crm_deals(id,lead_id,customer_id,title,tractor_slug,amount_minor,cost_minor,assigned_to) VALUES(?,?,?,?,?,?,?,?)").bind(dealId, leadId, customerId, tractor ? `Заявка: Changfa ${tractor.model}` : "Подбор трактора Changfa", tractor?.slug ?? null, priceMinor, cost?.cost_minor ?? null, assignee?.id ?? null),
         db.prepare("INSERT INTO lead_requests(id,payload_hash,lead_id) VALUES(?,?,?)").bind(requestId, payloadHash, leadId),

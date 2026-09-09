@@ -5,6 +5,7 @@ import { Armchair, ArrowUpRight, BadgeCheck, Eye, Handshake, HeartHandshake, Sli
 import { Trans } from "../components/I18n";
 import { PageHero } from "../components/PageHero";
 import { FounderLetter } from "../components/FounderLetter";
+import { OfficeMap } from "../components/OfficeMap";
 
 export const metadata: Metadata = { title: "О компании ATADAN Changfa", description: "ATADAN — официальный дистрибьютор тракторов Changfa в Кыргызстане, 6 лет на рынке." };
 
@@ -46,5 +47,6 @@ export default function AboutPage() {
     </section>
 
     <section className="section-shell values-grid"><article><BadgeCheck /><h3><Trans id="about.original" /></h3><p><Trans id="about.originalText" /></p></article><article><Handshake /><h3><Trans id="about.clear" /></h3><p><Trans id="about.clearText" /></p></article><article><HeartHandshake /><h3><Trans id="about.responsibility" /></h3><p><Trans id="about.responsibilityText" /></p></article><article><Sprout /><h3><Trans id="about.benefit" /></h3><p><Trans id="about.benefitText" /></p></article></section>
+    <OfficeMap />
   </main>;
 }

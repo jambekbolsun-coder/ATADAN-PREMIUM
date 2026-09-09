@@ -6,6 +6,7 @@ import { Link } from "./SiteLink";
 import { useI18n } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
 import { Instagram, WhatsApp } from "./BrandIcons";
+import { PRIVACY_CHOICE_EVENT, PRIVACY_CHOICE_KEY } from "./CookieConsent";
 
 const ui={
   ru:{title:"Подберём трактор за минуту",text:"Три коротких вопроса — и покажем подходящую мощность.",start:"Начать подбор",later:"Не сейчас",area:"Какая площадь хозяйства?",work:"Какие работы главные?",priority:"Что важнее всего?",back:"Назад",result:"Подходящий диапазон",show:"Показать модели",faq:"Помощник ATADAN",faqText:"Короткие ответы перед разговором с менеджером.",q:["Есть гарантия?","Можно оформить лизинг?","Есть сервис и запчасти?"],a:["Да, условия гарантии фиксируются для выбранной модели и комплектации.","Да. Калькулятор показывает предварительный график до 84 месяцев, финальные условия подтверждает финансовый партнёр.","Да. ATADAN помогает с обслуживанием техники и подбором запасных частей."],ask:"Написать менеджеру"},
@@ -29,7 +30,13 @@ export function SiteAssist(){
   const quizRef=useRef<HTMLElement>(null);
   const [answers,setAnswers]=useState([70,0,0]);
   const [faq,setFaq]=useState<number|null>(null);
-  useEffect(()=>{const timer=window.setTimeout(()=>{if(!sessionStorage.getItem("atadan-quiz-seen"))setQuiz(true);},500);return()=>clearTimeout(timer);},[]);
+  useEffect(()=>{
+    let timer:number|undefined;
+    const schedule=()=>{if(!window.localStorage.getItem(PRIVACY_CHOICE_KEY)||window.sessionStorage.getItem("atadan-quiz-seen"))return;window.clearTimeout(timer);timer=window.setTimeout(()=>{if(!document.querySelector('[aria-modal="true"]'))setQuiz(true)},7000)};
+    const dismiss=()=>{window.clearTimeout(timer);window.sessionStorage.setItem("atadan-quiz-seen","1");setQuiz(false)};
+    schedule();window.addEventListener(PRIVACY_CHOICE_EVENT,schedule);window.addEventListener("atadan:dialog-open",dismiss);
+    return()=>{window.clearTimeout(timer);window.removeEventListener(PRIVACY_CHOICE_EVENT,schedule);window.removeEventListener("atadan:dialog-open",dismiss)};
+  },[]);
   useEffect(()=>{
     if(!quiz)return;
     const dialog=quizRef.current,previous=document.activeElement instanceof HTMLElement?document.activeElement:null,overflow=document.body.style.overflow;

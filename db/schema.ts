@@ -17,6 +17,9 @@ export const leads = sqliteTable("leads", {
   message: text("message").notNull().default(""),
   status: text("status").notNull().default("new"),
   source: text("source").notNull().default("website"),
+  consentVersion: text("consent_version").notNull().default("legacy"),
+  consentAt: text("consent_at"),
+  sourcePath: text("source_path").notNull().default(""),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 

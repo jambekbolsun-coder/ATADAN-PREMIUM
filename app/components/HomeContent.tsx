@@ -26,7 +26,7 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
   const [activeSlide, setActiveSlide] = useState(0);
   const [paused, setPaused] = useState(false);
   const [interacting, setInteracting] = useState(false);
-  const featured = tractors.filter(p => p.popular).slice(0, 6);
+  const featured = [...tractors].sort((a,b)=>b.hp-a.hp).slice(0, 4);
   const recommended = tractors.filter(p => p.recommended).slice(0, 6);
   useEffect(() => {
     if (paused || interacting || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
@@ -71,9 +71,9 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
     <section className="catalog-preview section-shell" id="lineup">
       <div className="editorial-heading">
         <div><span className="section-label">{t("home.catalogLabel")}</span><h2>{t("home.catalogTitle")}</h2></div>
-        <div><p>{t("home.catalogText")}</p><Link className="text-link" href="/catalog">{t("home.allModels")}<ArrowUpRight size={18} /></Link></div>
+        <div><p>{t("home.catalogText")}</p><div className="editorial-links"><Link className="text-link" href="/catalog">{t("home.allModels")}<ArrowUpRight size={18} /></Link><Link className="text-link popular-link" href="/catalog?popular=1">Популярные модели<ArrowUpRight size={18} /></Link></div></div>
       </div>
-      <div className="featured-grid-v3">{(featured.length ? featured : tractors.slice(0, 3)).map((tractor, index) => <TractorCard tractor={tractor} featured={index === 0} key={tractor.slug} />)}</div>
+      <div className="featured-grid-v3">{featured.map((tractor, index) => <TractorCard tractor={tractor} featured={index === 0} key={tractor.slug} />)}</div>
     </section>
     {recommended.length ? <section className="catalog-preview section-shell"><div className="editorial-heading"><h2>{t("home.recommended")}</h2></div><div className="featured-grid-v3">{recommended.map(p=><TractorCard tractor={p} key={p.slug}/>)}</div></section> : null}
 
