@@ -69,7 +69,7 @@ export function CookieConsent() {
 
   if (!open) return null;
   return (
-    <section className="cookie-consent" role="dialog" aria-modal="false" aria-labelledby="cookie-title">
+    <section className="cookie-consent" aria-labelledby="cookie-title" aria-live="polite">
       <div className="cookie-icon" aria-hidden="true"><Cookie /></div>
       <div className="cookie-copy">
         <span>{labels.eyebrow}</span>
