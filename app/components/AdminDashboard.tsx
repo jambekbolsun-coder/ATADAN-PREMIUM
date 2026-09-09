@@ -75,9 +75,9 @@ export function AdminDashboard() {
     const username = String(form.get("username") ?? "");
     const password = String(form.get("password") ?? "");
     const response = await fetch("/api/admin/session", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ username, password }) });
-    setLoading(false);
-    if (response.ok) void load();
-    else setToast("Неверный логин или пароль");
+    if (response.ok) { await load(); setLoading(false); return; }
+    const result=await response.json().catch(()=>({})) as {error?:string};
+    setLoading(false);setToast(result.error||"Неверный логин или пароль");
   }
 
   async function action(payload: Record<string, unknown>) {

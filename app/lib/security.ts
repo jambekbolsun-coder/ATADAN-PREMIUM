@@ -1,9 +1,16 @@
 import { getRawDb } from "../../db";
 export class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
 export function sameOrigin(request: Request) {
-  const origin = request.headers.get("origin");
-  if (origin && origin !== new URL(request.url).origin) throw new HttpError(403, "Запрос с другого сайта запрещён");
   if (request.headers.get("sec-fetch-site") === "cross-site") throw new HttpError(403, "Запрос с другого сайта запрещён");
+  const origin = request.headers.get("origin");
+  if (!origin) return;
+  let originHost="";
+  try { const parsed=new URL(origin); if(!["http:","https:"].includes(parsed.protocol))throw new Error(); originHost=parsed.host.toLowerCase(); }
+  catch { throw new HttpError(403, "Запрос с другого сайта запрещён"); }
+  const requestHost=new URL(request.url).host.toLowerCase();
+  const forwardedHost=request.headers.get("x-forwarded-host")?.split(",")[0]?.trim().toLowerCase();
+  const host=request.headers.get("host")?.trim().toLowerCase();
+  if (![requestHost,forwardedHost,host].filter(Boolean).includes(originHost)) throw new HttpError(403, "Запрос с другого сайта запрещён");
 }
 export async function jsonBody(request: Request, limit = 150_000): Promise<Record<string, unknown>> {
   if (!request.headers.get("content-type")?.includes("application/json")) throw new HttpError(415, "Ожидается JSON");
