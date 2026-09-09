@@ -204,7 +204,7 @@ export async function requireActor(request: Request, ownerOnly = false) {
   return actor;
 }
 export async function hashPassword(password: string) {
-  if (password.length < 10 || password.length > 128) throw new HttpError(400, "Пароль должен содержать от 10 до 128 символов");
+  if (password.length < 8 || password.length > 128) throw new HttpError(400, "Пароль должен содержать от 8 до 128 символов");
   const salt = bytesToHex(crypto.getRandomValues(new Uint8Array(24)));
   return { salt, hash: await derivePasswordHash(password, salt, DEFAULT_PBKDF2_ITERATIONS) };
 }
