@@ -32,6 +32,16 @@ function parseData(value: unknown) {
   return JSON.parse(json) as Record<string, unknown>;
 }
 
+function normalizeData(kind:string,value:unknown){
+  const data=parseData(value);
+  if(kind==="suppliers"){
+    const quantity=Math.max(0,Number(data.quantity)||0),unitPrice=Math.max(0,Number(data.unitPrice)||0);
+    if(!Number(data.total))data.total=String(Math.round(quantity*unitPrice));
+  }
+  if(kind==="finance_entries")data.type="Расход";
+  return data;
+}
+
 function moduleName(kind: string) {
   return ({
     home_sections:"блок сайта",categories:"категорию",promotions:"акцию",parts:"запчасть",attachments:"навесное оборудование",
@@ -87,7 +97,7 @@ export async function POST(request: Request) {
       const status = cleanText(body.status ?? "draft", 20);
       if (!statuses.has(status)) throw new HttpError(400, "Неизвестный статус");
       const sortOrder = Math.max(0, Math.min(100_000, Math.round(Number(body.sortOrder) || 0)));
-      const data = parseData(body.data);
+      const data = normalizeData(kind,body.data);
       await db.batch([
         db.prepare("INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(id,kind,title,subtitle,status,category,sortOrder,JSON.stringify(data),actor.id,actor.id),
         db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),actor.id,"Создано",id,`Создано ${moduleName(kind)} «${title}»`),
@@ -107,7 +117,7 @@ export async function POST(request: Request) {
       const category = cleanText(body.category ?? "", 100);
       const status = cleanText(body.status ?? current.status, 20);
       if (!statuses.has(status)) throw new HttpError(400, "Неизвестный статус");
-      const result = await db.prepare("UPDATE admin_records SET title=?,subtitle=?,status=?,category=?,sort_order=?,data_json=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?").bind(title,subtitle,status,category,Math.max(0,Math.round(Number(body.sortOrder)||0)),JSON.stringify(parseData(body.data)),actor.id,id,expected).run();
+      const result = await db.prepare("UPDATE admin_records SET title=?,subtitle=?,status=?,category=?,sort_order=?,data_json=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?").bind(title,subtitle,status,category,Math.max(0,Math.round(Number(body.sortOrder)||0)),JSON.stringify(normalizeData(kind,body.data)),actor.id,id,expected).run();
       if (!result.meta.changes) throw new HttpError(409, "Запись уже изменена. Обновите список.");
       await db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),actor.id,"Изменено",id,`Обновлено ${moduleName(kind)} «${title}»`).run();
     } else if (action === "status") {

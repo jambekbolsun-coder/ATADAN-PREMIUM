@@ -1,9 +1,9 @@
 "use client";
 
-import { Check, Clipboard, Clock3, Plus, RefreshCw, ShieldCheck, UserRoundPlus } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clipboard, Clock3, GripVertical, Plus, RefreshCw, ShieldCheck, UserRoundPlus } from "lucide-react";
 import Image from "next/image";
 import QRCode from "qrcode";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type DragEvent, FormEvent, useCallback, useEffect, useState } from "react";
 import type { Tractor } from "../types";
 
 export type CrmMode = "deals" | "customers" | "tasks" | "team" | "costs" | "audit";
@@ -64,12 +64,22 @@ export function AdminCRM({mode,catalog,onSessionChange}:{mode:CrmMode;catalog:Tr
 }
 
 function Deals({data,catalog,action}:{data:CrmData;catalog:Tractor[];action:(p:Record<string,unknown>)=>Promise<unknown>}) {
-  const [stage,setStage]=useState("all");
-  const visible=useMemo(()=>data.deals.filter((deal)=>stage==="all"||deal.stage===stage),[data.deals,stage]);
+  const [dragOver,setDragOver]=useState<string|null>(null);
   async function create(event:FormEvent<HTMLFormElement>){
     event.preventDefault();const f=new FormData(event.currentTarget);
     await action({action:"create_deal",name:f.get("name"),phone:f.get("phone"),title:f.get("title"),tractorSlug:f.get("tractorSlug"),amount:Number(f.get("amount")||0),assignedTo:f.get("assignedTo")});
     event.currentTarget.reset();
+  }
+  async function moveDeal(deal:Deal,target:string){
+    if(deal.stage===target)return;
+    const lossReason=target==="lost"?window.prompt("Укажите причину закрытия сделки")?.trim()||"":"";
+    if(target==="lost"&&!lossReason)return;
+    await action({action:"move_deal",id:deal.id,version:deal.version,stage:target,lossReason});
+  }
+  function drop(event:DragEvent<HTMLElement>,target:string){
+    event.preventDefault();setDragOver(null);
+    const id=event.dataTransfer.getData("text/plain"),deal=data.deals.find(item=>item.id===id);
+    if(deal)void moveDeal(deal,target);
   }
   return <>
     <form className="admin-panel crm-create" onSubmit={create}>
@@ -82,27 +92,31 @@ function Deals({data,catalog,action}:{data:CrmData;catalog:Tractor[];action:(p:R
       {["owner","director"].includes(data.actor.role)?<label><span>Ответственный</span><select name="assignedTo">{data.staff.filter(s=>s.active).map(s=><option key={s.id} value={s.id}>{s.display_name}</option>)}</select></label>:null}
       <button className="admin-primary" type="submit"><Plus size={17}/>Создать</button>
     </form>
-    <div className="crm-stage-tabs"><button className={stage==="all"?"active":""} onClick={()=>setStage("all")} type="button">Все <b>{data.deals.length}</b></button>{stages.map(([id,label])=><button className={stage===id?"active":""} onClick={()=>setStage(id)} type="button" key={id}>{label}<b>{data.deals.filter(d=>d.stage===id).length}</b></button>)}</div>
-    <div className="crm-deal-grid">{visible.map(deal=><DealCard key={deal.id} deal={deal} data={data} action={action}/>)}{!visible.length?<Empty title="Сделок на этом этапе нет" text="Создайте новую сделку или выберите другой этап."/>:null}</div>
+    <section className="crm-pipeline" aria-label="Воронка сделок"><header><div><span>Воронка продаж</span><h2>Перетаскивайте сделки между этапами</h2></div><p><GripVertical/>Можно мышкой или кнопками в карточке</p></header><div className="crm-kanban">{stages.map(([id,label])=>{const deals=data.deals.filter(deal=>deal.stage===id);return <section className={`crm-kanban-column stage-${id}${dragOver===id?" drag-over":""}`} key={id} onDragEnter={()=>setDragOver(id)} onDragOver={event=>event.preventDefault()} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))setDragOver(null)}} onDrop={event=>drop(event,id)}><header><span>{label}</span><b>{deals.length}</b></header><div>{deals.map(deal=><DealCard key={deal.id} deal={deal} data={data} action={action} move={target=>void moveDeal(deal,target)}/>)}</div>{!deals.length?<p className="crm-kanban-empty">Перетащите сделку сюда</p>:null}</section>})}</div></section>
   </>;
 }
 
-function DealCard({deal,data,action}:{deal:Deal;data:CrmData;action:(p:Record<string,unknown>)=>Promise<unknown>}){
+function DealCard({deal,data,action,move}:{deal:Deal;data:CrmData;action:(p:Record<string,unknown>)=>Promise<unknown>;move:(stage:string)=>void}){
   const [loss,setLoss]=useState(deal.loss_reason||"");
   const [note,setNote]=useState("");
   async function update(event:FormEvent<HTMLFormElement>){event.preventDefault();const f=new FormData(event.currentTarget);await action({action:"update_deal",id:deal.id,version:deal.version,stage:f.get("stage"),amount:Number(f.get("amount")||0),assignedTo:f.get("assignedTo"),lossReason:loss});}
-  return <form className={"crm-deal stage-"+deal.stage} onSubmit={update}>
-    <header><span>{stages.find(([id])=>id===deal.stage)?.[1]}</span><time>{new Date(deal.updated_at).toLocaleDateString("ru-RU")}</time></header>
+  const stageIndex=stages.findIndex(([id])=>id===deal.stage);
+  function drag(event:DragEvent<HTMLElement>){event.dataTransfer.effectAllowed="move";event.dataTransfer.setData("text/plain",deal.id);}
+  return <article className={"crm-deal stage-"+deal.stage}>
+    <header><span>{stages.find(([id])=>id===deal.stage)?.[1]}</span><time>{new Date(deal.updated_at).toLocaleDateString("ru-RU")}</time><i className="crm-drag-handle" draggable onDragStart={drag} title="Перетащить сделку мышкой" aria-hidden="true"><GripVertical/></i></header>
     <h3>{deal.title}</h3><a href={"tel:"+deal.phone}>{deal.name} · {deal.phone}</a>
     {deal.tractor_slug?<p>{deal.tractor_slug}</p>:null}
     <div className="crm-money"><span>Продажа <strong>{money(deal.amount_minor)}</strong></span>{typeof deal.cost_minor==="number"?<span>Маржа <strong>{money(deal.amount_minor-deal.cost_minor)}</strong></span>:null}</div>
-    <label><span>Этап</span><select name="stage" defaultValue={deal.stage} onChange={(e)=>{if(e.target.value!=="lost")setLoss("");}}>{stages.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
-    <label><span>Сумма, сом</span><input name="amount" type="number" min="0" defaultValue={Math.round(deal.amount_minor/100)}/></label>
-    {["owner","director"].includes(data.actor.role)?<label><span>Ответственный</span><select name="assignedTo" defaultValue={deal.assigned_to??""}>{data.staff.filter(s=>s.active).map(s=><option key={s.id} value={s.id}>{s.display_name}</option>)}</select></label>:null}
-    <label><span>Причина отказа</span><input value={loss} onChange={e=>setLoss(e.target.value)} placeholder="Нужно при отказе"/></label>
-    <button type="submit">Сохранить сделку</button>
-    <div className="crm-notes">{data.notes.filter(item=>item.deal_id===deal.id).slice(0,2).map(item=><p key={item.id}><strong>{item.display_name}</strong>{item.body}</p>)}<label><span>Заметка</span><input value={note} onChange={e=>setNote(e.target.value)} maxLength={3000} placeholder="Итог разговора"/></label><button type="button" disabled={!note.trim()} onClick={async()=>{await action({action:"add_note",dealId:deal.id,body:note});setNote("");}}>Добавить заметку</button></div>
-  </form>;
+    <div className="crm-card-move"><button type="button" disabled={stageIndex<=0} onClick={()=>move(stages[stageIndex-1][0])} aria-label={`Переместить ${deal.title} на предыдущий этап`}><ChevronLeft/></button><span>Переместить</span><button type="button" disabled={stageIndex>=stages.length-1} onClick={()=>move(stages[stageIndex+1][0])} aria-label={`Переместить ${deal.title} на следующий этап`}><ChevronRight/></button></div>
+    <details className="crm-deal-details"><summary>Открыть карточку</summary><form onSubmit={update}>
+      <label><span>Этап</span><select name="stage" defaultValue={deal.stage} onChange={(e)=>{if(e.target.value!=="lost")setLoss("");}}>{stages.map(([id,label])=><option key={id} value={id}>{label}</option>)}</select></label>
+      <label><span>Сумма, сом</span><input name="amount" type="number" min="0" defaultValue={Math.round(deal.amount_minor/100)}/></label>
+      {["owner","director"].includes(data.actor.role)?<label><span>Ответственный</span><select name="assignedTo" defaultValue={deal.assigned_to??""}>{data.staff.filter(s=>s.active).map(s=><option key={s.id} value={s.id}>{s.display_name}</option>)}</select></label>:null}
+      <label><span>Причина отказа</span><input value={loss} onChange={e=>setLoss(e.target.value)} placeholder="Нужно при отказе"/></label>
+      <button type="submit">Сохранить сделку</button>
+      <div className="crm-notes">{data.notes.filter(item=>item.deal_id===deal.id).slice(0,2).map(item=><p key={item.id}><strong>{item.display_name}</strong>{item.body}</p>)}<label><span>Заметка</span><input value={note} onChange={e=>setNote(e.target.value)} maxLength={3000} placeholder="Итог разговора"/></label><button type="button" disabled={!note.trim()} onClick={async()=>{await action({action:"add_note",dealId:deal.id,body:note});setNote("");}}>Добавить заметку</button></div>
+    </form></details>
+  </article>;
 }
 
 function Customers({customers,action}:{customers:Customer[];action:(p:Record<string,unknown>)=>Promise<unknown>}){const [query,setQuery]=useState("");const visible=customers.filter(c=>`${c.name} ${c.phone} ${c.region} ${c.source}`.toLowerCase().includes(query.toLowerCase()));return <div className="admin-panel crm-table-card"><div className="panel-head"><div><span>Единая база</span><h2>Клиенты</h2></div><b>{visible.length}</b></div><label className="crm-customer-search"><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Найти клиента, телефон или регион" aria-label="Поиск клиентов"/></label><div className="crm-customer-list">{visible.map(c=><details key={c.id} className="crm-customer-card"><summary><i>{c.name.slice(0,1).toUpperCase()}</i><div><strong>{c.name}</strong><a href={"tel:"+c.phone} onClick={event=>event.stopPropagation()}>{c.phone}</a><small>{[c.region,c.source,c.tractor_slug].filter(Boolean).join(" · ")||"Карточка требует заполнения"}</small></div><time>{new Date(c.created_at).toLocaleDateString("ru-RU")}</time></summary><CustomerForm customer={c} action={action}/></details>)}{!visible.length?<Empty title="Клиенты не найдены" text={query?"Измените поисковый запрос.":"Они появятся из заявок сайта или новых сделок."}/>:null}</div></div>}

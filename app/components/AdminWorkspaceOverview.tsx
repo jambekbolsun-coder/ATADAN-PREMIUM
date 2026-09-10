@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, BarChart3, Bot, Boxes, BriefcaseBusiness, Calculator, CircleDollarSign, ClipboardCheck, FileText, Headphones, ImageIcon, Landmark, LayoutDashboard, ListChecks, MapPin, Megaphone, MessageSquareText, Newspaper, Percent, Settings, ShieldCheck, Sparkles, Target, Tractor, TrendingUp, UserRoundCog, UsersRound, Warehouse, Wrench } from "lucide-react";
+import { ArrowRight, BarChart3, Bot, BriefcaseBusiness, Calculator, CircleDollarSign, Landmark, LayoutDashboard, Megaphone, MessageSquareText, Newspaper, ShieldCheck, Sparkles, Target, Tractor, TrendingUp, UserRoundCog, UsersRound, Warehouse, Wrench } from "lucide-react";
 import type { AdminWorkspace } from "./AdminPortalHome";
 import { Link } from "./SiteLink";
 
@@ -33,43 +33,20 @@ type OverviewData={
 };
 
 const marketing=[
-  ["home","Главная и баннеры","Первый экран, кнопки, изображения и порядок",LayoutDashboard],
   ["catalog","Каталог","Модели, характеристики и цены",Tractor],
-  ["categories","Категории","Структура каталога",Boxes],
   ["news","Новости","Публикации и новые модели",Newspaper],
-  ["promotions","Акции","Скидки и специальные предложения",Megaphone],
+  ["public-service","Сервис","Материалы, изображения и ссылки",Wrench],
+  ["faq","Чатбот","Частые вопросы и понятные ответы",MessageSquareText],
   ["leasing","Лизинг","Ставка, взнос, срок и комиссия",Landmark],
-  ["public-service","Публичный сервис","Подробные сервисные страницы",Wrench],
-  ["parts","Запчасти","Публичный ассортимент комплектующих",Boxes],
-  ["attachments","Навесное оборудование","Совместимость и предложения",BriefcaseBusiness],
-  ["gallery","Галерея","Фотографии, подписи и порядок",ImageIcon],
-  ["reviews","Отзывы","Только подтверждённые истории клиентов",Sparkles],
-  ["faq","FAQ","Категории, вопросы и ответы",MessageSquareText],
-  ["branches","Контакты","Адреса, телефоны и филиалы",MapPin],
-  ["site-leads","Заявки с сайта","Новые обращения покупателей",ClipboardCheck],
-  ["site-analytics","Аналитика сайта","Трафик и интерес к моделям",BarChart3],
 ] as const;
 
 const company=[
-  ["deals","CRM и сделки","Воронка от заявки до продажи",BriefcaseBusiness],
-  ["customers","Клиенты","Карточки и история обращений",UsersRound],
-  ["reservations","Бронирования","Сроки, клиенты и техника",ClipboardCheck],
-  ["sales","Проданные тракторы","Фактические продажи и выдача",TrendingUp],
-  ["inventory-units","Склад техники","Учёт по VIN и серийному номеру",Warehouse],
-  ["stock-parts","Склад запчастей","Остатки и резервы",Boxes],
-  ["stock-attachments","Склад оборудования","Остатки навесного оборудования",BriefcaseBusiness],
-  ["suppliers","Поставщики","Контакты и условия",UsersRound],
-  ["purchases","Закупки","Заказы производителю",ClipboardCheck],
-  ["shipments","Логистика","Поставки и ожидаемые даты",Warehouse],
-  ["costs","Себестоимость","Закупка и маржа по моделям",Percent],
-  ["finance","Доходы и расходы","Фактические операции",Calculator],
-  ["debts","Задолженности","Долги и сроки оплаты",CircleDollarSign],
-  ["documents","Документы","Договоры и файлы",FileText],
-  ["service-cases","Сервис и гарантия","Внутренняя история по VIN",Headphones],
+  ["deals","Сделки","Перетаскиваемая воронка от заявки до продажи",BriefcaseBusiness],
+  ["inventory-units","Склад","VIN, себестоимость, цена и остаток",Warehouse],
+  ["sales","Продажи","Автоматические и ручные продажи",TrendingUp],
+  ["suppliers","Поставщики","Поставка, количество и общая сумма",UsersRound],
+  ["finance","Расходы","Аренда, свет, вода и другие затраты",Calculator],
   ["team","Сотрудники","Роли, доступы и команда",UserRoundCog],
-  ["tasks","Задачи","Сроки, ответственные и статусы",ListChecks],
-  ["audit","Журнал действий","Понятная история изменений",FileText],
-  ["profile","Настройки","Профиль и рабочая тема",Settings],
 ] as const;
 
 function money(minor:number|undefined){return new Intl.NumberFormat("ru-RU",{maximumFractionDigits:0}).format(Math.round((Number(minor)||0)/100))+" сом"}
@@ -82,7 +59,7 @@ export function AdminWorkspaceOverview({workspace,data,onNavigate,onSaveGoals}:{
   if(workspace==="marketing")return <div className="admin-workspace-dashboard"><WorkspaceHero icon={Megaphone} eyebrow="Маркетинг" title="Управление публичным сайтом" text="Контент, заявки и статистика собраны в одном рабочем пространстве."/><div className="workspace-kpis"><Kpi label="Моделей" value={data.catalog.length} note="в каталоге"/><Kpi label="Публикаций" value={data.posts.filter(item=>item.status==="published").length} note="опубликовано"/><Kpi label="Новых заявок" value={newLeads} note="ожидают ответа"/><Kpi label="Просмотров" value={data.totals?.views??0} note="с согласия посетителей"/></div><ModuleGrid modules={marketing} onNavigate={onNavigate}/></div>;
   if(workspace==="company"){
     const deals=data.director?.deals;const operations=data.director?.operations;const conversion=newLeads?Math.round((deals?.won??0)/newLeads*1000)/10:0;
-    return <div className="admin-workspace-dashboard"><WorkspaceHero icon={BriefcaseBusiness} eyebrow="Управление компанией" title="CRM, продажи и операционная работа" text="Фактические показатели и самостоятельные рабочие модули собраны в общей SQL-системе."/><div className="workspace-kpis company-kpis"><Kpi label="Выручка" value={money(deals?.revenue_minor)} note="выигранные сделки"/><Kpi label="Расходы" value={moneySom(operations?.expenses_som)} note="проведённые операции"/><Kpi label="Прибыль" value={money(deals?.profit_minor)} note="с заполненной себестоимостью"/><Kpi label="Новые заявки" value={newLeads} note="ожидают обработки"/><Kpi label="Конверсия" value={`${conversion}%`} note="продажи к новым заявкам"/><Kpi label="Активные сделки" value={deals?.active??0} note="в текущей воронке"/><Kpi label="Продажи" value={deals?.won??0} note="закрыто успешно"/><Kpi label="Задолженности" value={moneySom(operations?.debts_som)} note="открытые обязательства"/><Kpi label="Открытые задачи" value={data.director?.tasks?.open??0} note="у команды"/><Kpi label="Техника на складе" value={operations?.stock_units??0} note="физические единицы по VIN"/><Kpi label="Активные поставки" value={operations?.active_shipments??0} note="в логистике"/><Kpi label="Капитал в остатках" value={moneySom(operations?.stock_value_som)} note="закупка и расходы"/></div><ModuleGrid modules={["owner","director"].includes(data.actor.role)?company:company.filter(([section])=>!["costs","team","audit","finance","debts"].includes(section))} onNavigate={onNavigate}/></div>;
+    return <div className="admin-workspace-dashboard"><WorkspaceHero icon={BriefcaseBusiness} eyebrow="Управление компанией" title="Сделки, склад и деньги — в одной системе" text="Шесть понятных разделов связаны между собой: успешная сделка автоматически попадает в продажи, а склад и расходы сохраняют реальную экономику."/><div className="workspace-kpis company-kpis"><Kpi label="Выручка" value={money(deals?.revenue_minor)} note="выигранные сделки"/><Kpi label="Расходы" value={moneySom(operations?.expenses_som)} note="проведённые операции"/><Kpi label="Прибыль" value={money(deals?.profit_minor)} note="с заполненной себестоимостью"/><Kpi label="Новые заявки" value={newLeads} note="уже в воронке"/><Kpi label="Конверсия" value={`${conversion}%`} note="продажи к новым заявкам"/><Kpi label="Активные сделки" value={deals?.active??0} note="в текущей воронке"/><Kpi label="Продажи" value={deals?.won??0} note="закрыто успешно"/><Kpi label="Техника на складе" value={operations?.stock_units??0} note="физические единицы по VIN"/></div><ModuleGrid modules={company} onNavigate={onNavigate}/></div>;
   }
   return <ControlCenter data={data} onNavigate={onNavigate} onSaveGoals={onSaveGoals}/>;
 }

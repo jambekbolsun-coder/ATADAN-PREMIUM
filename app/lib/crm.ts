@@ -18,7 +18,7 @@ export function auditStatement(actor: Actor, action: string, entity: string, det
   return getRawDb().prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),actor.id,action,entity,detail.slice(0,2000));
 }
 export async function visibleDeal(actor: Actor, id: string) {
-  const deal = await getRawDb().prepare("SELECT * FROM crm_deals WHERE id=? AND archived=0").bind(id).first<{id:string; assigned_to:string|null;stage:string;amount_minor:number;version:number;customer_id:string;lead_id:string|null}>();
+  const deal = await getRawDb().prepare("SELECT * FROM crm_deals WHERE id=? AND archived=0").bind(id).first<{id:string; title:string;tractor_slug:string|null;assigned_to:string|null;stage:string;amount_minor:number;cost_minor:number|null;version:number;customer_id:string;lead_id:string|null}>();
   if (!deal || (!["owner","director"].includes(actor.role) && deal.assigned_to !== actor.id)) throw new HttpError(404,"Сделка не найдена");
   return deal;
 }

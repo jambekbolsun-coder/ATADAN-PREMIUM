@@ -1,7 +1,7 @@
 "use client";
 
-import { ChevronDown } from "lucide-react";
-import { createContext, useContext, useEffect, useMemo, useSyncExternalStore } from "react";
+import { Check, ChevronDown } from "lucide-react";
+import { createContext, useContext, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 
 export type Locale = "ru" | "ky" | "en";
 
@@ -78,11 +78,32 @@ export function Trans({ id, values }: { id: string; values?: Record<string, stri
 
 export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   const { locale, setLocale } = useI18n();
+  const detailsRef = useRef<HTMLDetailsElement>(null);
   const names: Record<Locale, string> = { ru: "Русский", ky: "Кыргызча", en: "English" };
-  return <details className={`language-switcher language-select ${compact ? "compact" : ""}`}>
-    <summary aria-label={`Язык: ${names[locale]}`}><FlagIcon locale={locale} /><span>{names[locale]}</span><ChevronDown className="language-chevron" size={15} aria-hidden="true" /></summary>
+  const codes: Record<Locale, string> = { ru: "RU", ky: "KG", en: "EN" };
+
+  useEffect(() => {
+    const closeOutside = (event: PointerEvent) => {
+      if (!detailsRef.current?.contains(event.target as Node)) detailsRef.current?.removeAttribute("open");
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || !detailsRef.current?.open) return;
+      detailsRef.current.removeAttribute("open");
+      detailsRef.current.querySelector("summary")?.focus();
+    };
+    document.addEventListener("pointerdown", closeOutside);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOutside);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, []);
+
+  return <details ref={detailsRef} className={`language-switcher language-select ${compact ? "compact" : ""}`}>
+    <summary aria-label={`Язык: ${names[locale]}`} aria-haspopup="listbox"><FlagIcon locale={locale} /><span>{names[locale]}</span><ChevronDown className="language-chevron" size={15} aria-hidden="true" /></summary>
     <div className="language-options" aria-label="Language / Язык / Тил">
-      {(["ru", "ky", "en"] as Locale[]).map((item) => <button type="button" className={locale === item ? "active" : ""} aria-pressed={locale === item} onClick={(event) => { setLocale(item); event.currentTarget.closest("details")?.removeAttribute("open"); }} key={item}><FlagIcon locale={item} /><span>{names[item]}</span>{locale === item ? <i aria-hidden="true" /> : null}</button>)}
+      <span className="language-options-label">Выберите язык</span>
+      {(["ru", "ky", "en"] as Locale[]).map((item) => <button type="button" className={locale === item ? "active" : ""} aria-pressed={locale === item} onClick={(event) => { setLocale(item); event.currentTarget.closest("details")?.removeAttribute("open"); }} key={item}><FlagIcon locale={item} /><span>{names[item]}<small>{codes[item]}</small></span>{locale === item ? <Check className="language-check" aria-hidden="true" /> : null}</button>)}
     </div>
   </details>;
 }
