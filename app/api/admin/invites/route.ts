@@ -1,5 +1,5 @@
 import { getRawDb } from "../../../../db";
-import { requireActor } from "../../../lib/admin-auth";
+import { permissionSections, requireActor } from "../../../lib/admin-auth";
 import { auditStatement } from "../../../lib/crm";
 import { cleanText, digest, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
 export async function POST(request:Request){
@@ -7,12 +7,13 @@ export async function POST(request:Request){
     sameOrigin(request);const actor=await requireActor(request,true),body=await jsonBody(request,5000),db=getRawDb();
     const email=cleanText(body.email,200,true).toLowerCase();
     const role=cleanText(body.role??"manager",20,true);
+    const permissions=Array.isArray(body.permissions)?body.permissions.filter((value):value is string=>typeof value==="string"&&(permissionSections as readonly string[]).includes(value)).slice(0,permissionSections.length):[];
     if(!new Set(["manager","accountant","marketer"]).has(role))throw new HttpError(400,"Выберите допустимую роль");
     if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))throw new HttpError(400,"Укажите email менеджера");
     if(await db.prepare("SELECT id FROM staff WHERE email=?").bind(email).first())throw new HttpError(409,"Сотрудник с таким email уже существует");
     const token=Array.from(crypto.getRandomValues(new Uint8Array(32)),b=>b.toString(16).padStart(2,"0")).join("");
     const hash=await digest(token), expires=Math.floor(Date.now()/1000)+86400;
-    await db.batch([db.prepare("UPDATE staff_invites SET revoked=1 WHERE email=? AND used_at IS NULL").bind(email),db.prepare("INSERT INTO staff_invites(token_hash,email,created_by,role,expires_at) VALUES(?,?,?,?,?)").bind(hash,email,actor.id,role,expires),auditStatement(actor,"Создано приглашение",email,`Роль: ${role}`)]);
+    await db.batch([db.prepare("UPDATE staff_invites SET revoked=1 WHERE email=? AND used_at IS NULL").bind(email),db.prepare("INSERT INTO staff_invites(token_hash,email,created_by,role,permissions_json,expires_at) VALUES(?,?,?,?,?,?)").bind(hash,email,actor.id,role,JSON.stringify(permissions),expires),auditStatement(actor,"Создано приглашение",email,`Роль: ${role}; разделов: ${permissions.length}`)]);
     // The token stays in a URL fragment, not request logs or referrer headers.
     return Response.json({url:`${new URL(request.url).origin}/admin/join#${token}`,expiresAt:new Date(expires*1000).toISOString()},{status:201,headers:{"Cache-Control":"no-store"}});
   }catch(e){return fail(e);}

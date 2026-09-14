@@ -1,5 +1,5 @@
 import { getRawDb } from "../../../../db";
-import { requireActor } from "../../../lib/admin-auth";
+import { canUseSection, permissionSections, requireActor } from "../../../lib/admin-auth";
 import { auditStatement, canTransition, minor, stageLabels, stages, visibleDeal } from "../../../lib/crm";
 import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
 
@@ -10,14 +10,25 @@ async function loadStages(){const row=await getRawDb().prepare("SELECT value FRO
 export async function GET(request: Request) {
   try {
     const actor=await requireActor(request); const db=getRawDb(); const owner=actor.role==="owner"||actor.role==="director";const stageOptions=await loadStages();
+    const mode=new URL(request.url).searchParams.get("mode")||"deals";const section=mode==="customers"?"client-base":mode==="tasks"?"employee-tasks":mode==="team"?"team":mode==="costs"?"finance":mode==="audit"?"audit":"deals";
+    if(!canUseSection(actor,section))throw new HttpError(403,"Нет доступа к этому разделу");
+    const dealsQuery=mode==="deals"
+      ?db.prepare(`SELECT d.id,d.lead_id,d.customer_id,d.title,d.tractor_slug,d.stage,d.amount_minor,${owner?"d.cost_minor,":""}d.assigned_to,d.loss_reason,d.created_at,d.updated_at,d.version,c.name,c.phone FROM crm_deals d JOIN crm_customers c ON c.id=d.customer_id WHERE d.archived=0 ${owner?"":"AND d.assigned_to=?"} ORDER BY d.updated_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id]))
+      :mode==="tasks"?db.prepare(`SELECT id,title FROM crm_deals WHERE archived=0 ${owner?"":"AND assigned_to=?"} ORDER BY updated_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id])):null;
+    const customersQuery=mode==="customers"
+      ?db.prepare(`SELECT c.* FROM crm_customers c ${owner?"":"WHERE EXISTS(SELECT 1 FROM crm_deals d WHERE d.customer_id=c.id AND d.assigned_to=? AND d.archived=0)"} ORDER BY c.created_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id]))
+      :mode==="tasks"?db.prepare(`SELECT c.id,c.name,c.phone FROM crm_customers c ${owner?"":"WHERE EXISTS(SELECT 1 FROM crm_deals d WHERE d.customer_id=c.id AND d.assigned_to=? AND d.archived=0)"} ORDER BY c.name LIMIT 500`).bind(...(owner?[]:[actor.id])):null;
+    const staffQuery=mode==="team"
+      ?db.prepare(`SELECT id,display_name,email,role,active,avatar,phone,position,department,skills,bio,permissions_json FROM staff ${owner?"WHERE active>=0":"WHERE id=? AND active>=0"} ORDER BY created_at`).bind(...(owner?[]:[actor.id]))
+      :(mode==="deals"||mode==="tasks")?db.prepare(`SELECT id,display_name,active FROM staff ${owner?"WHERE active=1":"WHERE id=? AND active=1"} ORDER BY display_name`).bind(...(owner?[]:[actor.id])):null;
     const [deals,customers,tasks,staff,costs,audit,notes] = await Promise.all([
-      db.prepare(`SELECT d.id,d.lead_id,d.customer_id,d.title,d.tractor_slug,d.stage,d.amount_minor,${owner?"d.cost_minor,":""}d.assigned_to,d.loss_reason,d.created_at,d.updated_at,d.version,c.name,c.phone FROM crm_deals d JOIN crm_customers c ON c.id=d.customer_id WHERE d.archived=0 ${owner?"":"AND d.assigned_to=?"} ORDER BY d.updated_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id])).all(),
-      db.prepare(`SELECT c.* FROM crm_customers c ${owner?"":"WHERE EXISTS(SELECT 1 FROM crm_deals d WHERE d.customer_id=c.id AND d.assigned_to=? AND d.archived=0)"} ORDER BY c.created_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id])).all(),
-      db.prepare(`SELECT * FROM crm_tasks ${owner?"":"WHERE assigned_to=?"} ORDER BY done,due_at LIMIT 500`).bind(...(owner?[]:[actor.id])).all(),
-      db.prepare(`SELECT id,display_name,email,role,active FROM staff ${owner?"WHERE active>=0":"WHERE id=? AND active>=0"} ORDER BY created_at`).bind(...(owner?[]:[actor.id])).all(),
-      owner?db.prepare("SELECT * FROM product_costs").all():Promise.resolve({results:[]}),
-      owner?db.prepare("SELECT a.*,s.display_name FROM audit_logs a LEFT JOIN staff s ON s.id=a.actor_id ORDER BY a.created_at DESC LIMIT 200").all():Promise.resolve({results:[]}),
-      db.prepare(`SELECT n.*,s.display_name FROM crm_notes n JOIN staff s ON s.id=n.author_id JOIN crm_deals d ON d.id=n.deal_id ${owner?"":"WHERE d.assigned_to=?"} ORDER BY n.created_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id])).all(),
+      dealsQuery?dealsQuery.all():Promise.resolve({results:[]}),
+      customersQuery?customersQuery.all():Promise.resolve({results:[]}),
+      mode==="tasks"?db.prepare(`SELECT t.*,s.display_name assigned_name,d.title deal_title,c.name customer_name FROM crm_tasks t JOIN staff s ON s.id=t.assigned_to LEFT JOIN crm_deals d ON d.id=t.deal_id LEFT JOIN crm_customers c ON c.id=t.customer_id ${owner?"":"WHERE t.assigned_to=?"} ORDER BY t.done,t.due_at LIMIT 500`).bind(...(owner?[]:[actor.id])).all():Promise.resolve({results:[]}),
+      staffQuery?staffQuery.all():Promise.resolve({results:[]}),
+      owner&&mode==="costs"?db.prepare("SELECT * FROM product_costs").all():Promise.resolve({results:[]}),
+      owner&&mode==="audit"?db.prepare("SELECT a.*,s.display_name FROM audit_logs a LEFT JOIN staff s ON s.id=a.actor_id ORDER BY a.created_at DESC LIMIT 200").all():Promise.resolve({results:[]}),
+      mode==="deals"?db.prepare(`SELECT n.*,s.display_name FROM crm_notes n JOIN staff s ON s.id=n.author_id JOIN crm_deals d ON d.id=n.deal_id ${owner?"":"WHERE d.assigned_to=?"} ORDER BY n.created_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id])).all():Promise.resolve({results:[]}),
     ]);
     return Response.json({actor,deals:deals.results,customers:customers.results,tasks:tasks.results,staff:staff.results,costs:costs.results,audit:audit.results,notes:notes.results,stages:stageOptions.map(item=>[item.id,item.label])},{headers:{"Cache-Control":"no-store"}});
   }catch(e){return fail(e);}
@@ -26,6 +37,7 @@ export async function POST(request: Request) {
   try {
     sameOrigin(request);const actor=await requireActor(request);const body=await jsonBody(request);const db=getRawDb();const action=String(body.action);
     const owner=actor.role==="owner"||actor.role==="director"; const needOwner=()=>{if(!owner)throw new HttpError(403,"Доступно директору");};
+    const needed=action.includes("task")?"employee-tasks":action.startsWith("staff_")?"team":action==="save_cost"?"finance":action==="update_customer"?"client-base":"deals";if(!canUseSection(actor,needed))throw new HttpError(403,"Нет доступа к этому разделу");
     async function assignee(value:unknown) {
       const id = owner ? String(value||actor.id) : actor.id;
       if(!await db.prepare("SELECT id FROM staff WHERE id=? AND active=1").bind(id).first())throw new HttpError(400,"Сотрудник недоступен");
@@ -99,8 +111,10 @@ export async function POST(request: Request) {
       await db.batch([db.prepare("INSERT INTO crm_notes(id,deal_id,author_id,body) VALUES(?,?,?,?)").bind(crypto.randomUUID(),id,actor.id,cleanText(body.body,3000,true)),auditStatement(actor,action,id)]);
     }else if(action==="create_task"){
       const assigned=await assignee(body.assignedTo); const dealId=cleanText(body.dealId??"",100);if(dealId)await visibleDeal(actor,dealId);
+      const customerId=cleanText(body.customerId??"",100);if(customerId&&!await db.prepare(`SELECT c.id FROM crm_customers c WHERE c.id=? ${owner?"":"AND EXISTS(SELECT 1 FROM crm_deals d WHERE d.customer_id=c.id AND d.assigned_to=? AND d.archived=0)"}`).bind(...(owner?[customerId]:[customerId,actor.id])).first())throw new HttpError(400,"Клиент не найден");
       const due=new Date(cleanText(body.dueAt,50,true));if(!Number.isFinite(due.getTime()))throw new HttpError(400,"Укажите срок задачи");
-      const id=crypto.randomUUID();await db.batch([db.prepare("INSERT INTO crm_tasks(id,deal_id,title,assigned_to,due_at) VALUES(?,?,?,?,?)").bind(id,dealId||null,cleanText(body.title,300,true),assigned,due.toISOString()),auditStatement(actor,action,id)]);
+      const priority=cleanText(body.priority??"normal",20);if(!new Set(["low","normal","high","urgent"]).has(priority))throw new HttpError(400,"Неизвестный приоритет");
+      const id=crypto.randomUUID();await db.batch([db.prepare("INSERT INTO crm_tasks(id,deal_id,title,description,priority,customer_id,assigned_to,due_at) VALUES(?,?,?,?,?,?,?,?)").bind(id,dealId||null,cleanText(body.title,300,true),cleanText(body.description??"",3000),priority,customerId||null,assigned,due.toISOString()),auditStatement(actor,action,id,`Приоритет: ${priority}`)]);
     }else if(action==="toggle_task"){
       const id=cleanText(body.id,100,true);const task=await db.prepare("SELECT * FROM crm_tasks WHERE id=?").bind(id).first<{assigned_to:string;version:number}>();
       if(!task||(!owner&&task.assigned_to!==actor.id))throw new HttpError(404,"Задача не найдена");
@@ -130,6 +144,11 @@ export async function POST(request: Request) {
         db.prepare("UPDATE staff SET active=-1,email=?,display_name='Удалённый сотрудник',password_hash=NULL,salt=NULL,phone='',avatar=NULL WHERE id=?").bind(`deleted+${id}@local.invalid`,id),
         auditStatement(actor,action,id),
       ]);
+    }else if(action==="staff_permissions"){
+      needOwner();const id=cleanText(body.id,100,true);if(id===actor.id)throw new HttpError(400,"Собственные права директора не ограничиваются");
+      const permissions=Array.isArray(body.permissions)?body.permissions.filter((value):value is string=>typeof value==="string"&&(permissionSections as readonly string[]).includes(value)).slice(0,permissionSections.length):[];
+      const target=await db.prepare("SELECT role FROM staff WHERE id=? AND active>=0").bind(id).first<{role:string}>();if(!target||target.role==="owner"||target.role==="director")throw new HttpError(400,"Права директора не изменяются здесь");
+      await db.batch([db.prepare("UPDATE staff SET permissions_json=? WHERE id=?").bind(JSON.stringify(permissions),id),db.prepare("DELETE FROM staff_sessions WHERE staff_id=?").bind(id),auditStatement(actor,action,id,`Разделов: ${permissions.length}`)]);
     }else if(action==="save_preferences"){
       const theme=String(body.theme);if(!["field","light","dark","blue","violet","forest","red"].includes(theme))throw new HttpError(400,"Неизвестная тема");
       await db.prepare("UPDATE staff SET theme=?,display_name=?,phone=? WHERE id=?").bind(theme,cleanText(body.displayName,120,true),cleanText(body.phone??"",40),actor.id).run();

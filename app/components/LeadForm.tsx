@@ -3,7 +3,6 @@
 import { CheckCircle2, LoaderCircle, MessageCircle } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { useI18n } from "./I18n";
-import { useSiteSettings } from "./SiteSettings";
 import { Link } from "./SiteLink";
 
 const consentCopy={ru:{start:"Я согласен(на) на обработку данных согласно",link:"политике конфиденциальности",error:"Подтвердите согласие на обработку данных"},ky:{start:"Маалыматтарды иштетүүгө макулмун:",link:"купуялык саясаты",error:"Маалыматтарды иштетүүгө макулдукту ырастаңыз"},en:{start:"I agree to data processing under the",link:"privacy policy",error:"Please confirm your consent to data processing"}} as const;
@@ -13,7 +12,6 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false, defaultMe
   const [error, setError] = useState("");
   const [requestKey] = useState(() => crypto.randomUUID());
   const { t, locale } = useI18n();
-  const settings = useSiteSettings();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -39,8 +37,6 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false, defaultMe
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Не удалось отправить заявку");
       setState("success");
-      const text = [`Здравствуйте! Меня зовут ${payload.name}.`, tractorModel ? `Интересует трактор Changfa ${tractorModel}.` : "Хочу подобрать трактор Changfa.", payload.message].filter(Boolean).join(" ");
-      window.open(`https://wa.me/${settings.phone.replace(/\D/g, "")}?text=${encodeURIComponent(text)}`, "_blank", "noopener,noreferrer");
       formElement.reset();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Не удалось отправить заявку");

@@ -1,5 +1,5 @@
 import { getRawDb } from "../../../../db";
-import { requireActor, type Actor } from "../../../lib/admin-auth";
+import { canUseSection, requireActor, type Actor } from "../../../lib/admin-auth";
 import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
 
 const marketingKinds = new Set([
@@ -16,6 +16,8 @@ const allKinds = new Set([...marketingKinds, ...companyKinds]);
 const statuses = new Set(["draft", "published", "hidden", "active", "closed", "archived", "new", "contacted", "documents", "review", "approved", "rejected", "contract", "issued"]);
 
 function canAccess(actor: Actor, kind: string, mutate: boolean) {
+  const section=({parts:"parts",service_pages:"public-service",faq:"faq",leasing_terms:"leasing",leasing_model_terms:"leasing-models",promotions:"promotions",leasing_applications:"leasing-applications",sales:"sales",inventory_units:"inventory-units",suppliers:"suppliers",finance_entries:"expenses",payroll:"payroll",payments:"payments",debts:"debts"} as Record<string,string>)[kind];
+  if(section)return canUseSection(actor,section);
   if (actor.role === "owner" || actor.role === "director") return true;
   if (marketingKinds.has(kind)) return actor.role === "marketer";
   if (companyKinds.has(kind)) {
@@ -60,6 +62,8 @@ export async function GET(request: Request) {
     const url = new URL(request.url);
     const kind = cleanText(url.searchParams.get("kind"), 60, true);
     if (!allKinds.has(kind) || !canAccess(actor, kind, false)) throw new HttpError(403, "Нет доступа к этому разделу");
+    const historyFor=cleanText(url.searchParams.get("historyFor")??"",100);
+    if(historyFor){const history=await getRawDb().prepare("SELECT a.id,a.action,a.detail,a.created_at,s.display_name FROM audit_logs a LEFT JOIN staff s ON s.id=a.actor_id WHERE a.entity_id=? ORDER BY a.created_at DESC LIMIT 100").bind(historyFor).all();return Response.json({actor,history:history.results},{headers:{"Cache-Control":"no-store"}});}
     const q = cleanText(url.searchParams.get("q") ?? "", 120).toLowerCase();
     const status = cleanText(url.searchParams.get("status") ?? "all", 20);
     const page = Math.max(1, Math.min(10_000, Number(url.searchParams.get("page")) || 1));

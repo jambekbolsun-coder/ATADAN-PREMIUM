@@ -52,6 +52,9 @@ export const staff = sqliteTable("staff", {
   role: text("role", { enum: ["owner", "director", "manager", "accountant", "marketer"] }).notNull().default("manager"),
   passwordHash: text("password_hash"), salt: text("salt"), active: integer("active").notNull().default(1),
   theme: text("theme").notNull().default("field"), avatar: text("avatar"), phone: text("phone").notNull().default(""),
+  position: text("position").notNull().default(""), department: text("department").notNull().default(""),
+  skills: text("skills").notNull().default(""), bio: text("bio").notNull().default(""),
+  permissionsJson: text("permissions_json").notNull().default("[]"),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),
 });
 export const staffSessions = sqliteTable("staff_sessions", {
@@ -61,6 +64,7 @@ export const staffSessions = sqliteTable("staff_sessions", {
 export const staffInvites = sqliteTable("staff_invites", {
   tokenHash: text("token_hash").primaryKey(), email: text("email").notNull(), createdBy: text("created_by").notNull().references(() => staff.id),
   role: text("role", { enum: ["manager", "accountant", "marketer"] }).notNull().default("manager"),
+  permissionsJson: text("permissions_json").notNull().default("[]"),
   expiresAt: integer("expires_at").notNull(), usedAt: text("used_at"), revoked: integer("revoked").notNull().default(0),
 });
 export const crmCustomers = sqliteTable("crm_customers", {
@@ -82,6 +86,8 @@ export const crmDeals = sqliteTable("crm_deals", {
 }, t => [index("idx_deals_assigned_stage").on(t.assignedTo, t.stage)]);
 export const crmTasks = sqliteTable("crm_tasks", {
   id: text("id").primaryKey(), dealId: text("deal_id").references(() => crmDeals.id), title: text("title").notNull(),
+  description: text("description").notNull().default(""), priority: text("priority").notNull().default("normal"),
+  customerId: text("customer_id").references(() => crmCustomers.id),
   assignedTo: text("assigned_to").notNull().references(() => staff.id), dueAt: text("due_at").notNull(),
   done: integer("done").notNull().default(0), version: integer("version").notNull().default(1),
   createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),

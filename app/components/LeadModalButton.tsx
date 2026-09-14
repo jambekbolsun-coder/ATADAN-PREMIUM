@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { LeadForm } from "./LeadForm";
 import { useI18n } from "./I18n";
 
-const labels={ru:{button:"Оставить заявку",title:"Расскажите, что нужно",text:"Укажите имя, телефон и задачу. Заявка сохранится в ATADAN CRM, затем откроется WhatsApp."},ky:{button:"Өтүнмө калтыруу",title:"Эмне керек экенин айтыңыз",text:"Атыңызды, телефонуңузду жана тапшырманы жазыңыз. Өтүнмө CRMде сакталат, андан кийин WhatsApp ачылат."},en:{button:"Send a request",title:"Tell us what you need",text:"Add your name, phone and task. The request is saved in ATADAN CRM and then WhatsApp opens."}} as const;
+const labels={ru:{button:"Оставить заявку",title:"Расскажите, что нужно",text:"Укажите имя, телефон и задачу. Заявка сохранится в ATADAN CRM для менеджера."},ky:{button:"Өтүнмө калтыруу",title:"Эмне керек экенин айтыңыз",text:"Атыңызды, телефонуңузду жана тапшырманы жазыңыз. Өтүнмө ATADAN CRMде сакталат."},en:{button:"Send a request",title:"Tell us what you need",text:"Add your name, phone and task. The request is saved in ATADAN CRM for a manager."}} as const;
 
 export function LeadModalButton(){
   const {locale}=useI18n();const l=labels[locale];const [open,setOpen]=useState(false);const dialog=useRef<HTMLElement>(null);const trigger=useRef<HTMLButtonElement>(null);

@@ -15,7 +15,7 @@ type PeriodComparison={
 };
 
 type OverviewData={
-  actor:{role:"owner"|"director"|"manager"|"accountant"|"marketer"};
+  actor:{role:"owner"|"director"|"manager"|"accountant"|"marketer";display_name:string;position:string;department:string;permissions:string[]};
   catalog:Array<{inStock:boolean;model:string;slug:string;hp:number}>;
   leads:Array<{status:string}>;
   posts:Array<{status:string}>;
@@ -56,12 +56,36 @@ const stageLabels:Record<string,string>={new:"Новая",ai:"AI-обработ�
 
 export function AdminWorkspaceOverview({workspace,data,onNavigate,onSaveGoals}:{workspace:AdminWorkspace;data:OverviewData;onNavigate:(section:WorkspaceSection)=>void;onSaveGoals:(goals:DirectorGoals)=>Promise<boolean>}){
   const newLeads=data.leads.filter(item=>item.status==="new").length;
-  if(workspace==="marketing")return <div className="admin-workspace-dashboard"><WorkspaceHero icon={Megaphone} eyebrow="Маркетинг" title="Управление публичным сайтом" text="Контент, заявки и статистика собраны в одном рабочем пространстве."/><div className="workspace-kpis"><Kpi label="Моделей" value={data.catalog.length} note="в каталоге"/><Kpi label="Публикаций" value={data.posts.filter(item=>item.status==="published").length} note="опубликовано"/><Kpi label="Новых заявок" value={newLeads} note="ожидают ответа"/><Kpi label="Просмотров" value={data.totals?.views??0} note="с согласия посетителей"/></div><ModuleGrid modules={marketing} onNavigate={onNavigate}/></div>;
+  const director=data.actor.role==="owner"||data.actor.role==="director";
+  if(workspace==="marketing"){const modules=director?marketing:marketing.filter(([section])=>data.actor.permissions.includes(section));const leadsAccess=director||data.actor.permissions.includes("site-leads"),analyticsAccess=director||data.actor.permissions.includes("site-analytics");return <div className="admin-workspace-dashboard"><WorkspaceHero icon={Megaphone} eyebrow="Маркетинг" title="Управление публичным сайтом" text="Контент, заявки и статистика собраны в одном рабочем пространстве."/><div className="workspace-kpis"><Kpi label="Моделей" value={data.catalog.length} note="в каталоге"/><Kpi label="Публикаций" value={data.posts.filter(item=>item.status==="published").length} note="опубликовано"/><Kpi label="Новых заявок" value={leadsAccess?newLeads:"—"} note={leadsAccess?"ожидают ответа":"нет доступа"}/><Kpi label="Просмотров" value={analyticsAccess?data.totals?.views??0:"—"} note={analyticsAccess?"с согласия посетителей":"нет доступа"}/></div><ModuleGrid modules={modules} onNavigate={onNavigate}/></div>}
   if(workspace==="company"){
     const deals=data.director?.deals;const operations=data.director?.operations;const conversion=newLeads?Math.round((deals?.won??0)/newLeads*1000)/10:0;
-    return <div className="admin-workspace-dashboard"><WorkspaceHero icon={BriefcaseBusiness} eyebrow="Управление компанией" title="Сделки, склад и деньги — в одной системе" text="Шесть понятных разделов связаны между собой: успешная сделка автоматически попадает в продажи, а склад и расходы сохраняют реальную экономику."/><div className="workspace-kpis company-kpis"><Kpi label="Выручка" value={money(deals?.revenue_minor)} note="выигранные сделки"/><Kpi label="Расходы" value={moneySom(operations?.expenses_som)} note="проведённые операции"/><Kpi label="Прибыль" value={money(deals?.profit_minor)} note="с заполненной себестоимостью"/><Kpi label="Новые заявки" value={newLeads} note="уже в воронке"/><Kpi label="Конверсия" value={`${conversion}%`} note="продажи к новым заявкам"/><Kpi label="Активные сделки" value={deals?.active??0} note="в текущей воронке"/><Kpi label="Продажи" value={deals?.won??0} note="закрыто успешно"/><Kpi label="Техника на складе" value={operations?.stock_units??0} note="физические единицы по VIN"/></div><ModuleGrid modules={company} onNavigate={onNavigate}/></div>;
+    const modules=director?company:company.filter(([section])=>data.actor.permissions.includes(section));
+    const financeAccess=director||data.actor.permissions.includes("finance"),dealsAccess=director||data.actor.permissions.includes("deals"),leadsAccess=director||data.actor.permissions.includes("site-leads"),inventoryAccess=director||data.actor.permissions.includes("inventory-units");
+    return <div className="admin-workspace-dashboard"><WorkspaceHero icon={BriefcaseBusiness} eyebrow="Управление компанией" title="Сделки, склад и деньги — в одной системе" text="Шесть понятных разделов связаны между собой: успешная сделка автоматически попадает в продажи, а склад и расходы сохраняют реальную экономику."/><div className="workspace-kpis company-kpis"><Kpi label="Выручка" value={dealsAccess||financeAccess?money(deals?.revenue_minor):"—"} note={dealsAccess||financeAccess?"выигранные сделки":"нет доступа"}/><Kpi label="Расходы" value={financeAccess?moneySom(operations?.expenses_som):"—"} note={financeAccess?"проведённые операции":"нет доступа"}/><Kpi label="Прибыль" value={financeAccess?money(deals?.profit_minor):"—"} note={financeAccess?"с заполненной себестоимостью":"нет доступа"}/><Kpi label="Новые заявки" value={leadsAccess?newLeads:"—"} note={leadsAccess?"уже в воронке":"нет доступа"}/><Kpi label="Конверсия" value={dealsAccess&&leadsAccess?`${conversion}%`:"—"} note={dealsAccess&&leadsAccess?"продажи к новым заявкам":"нет доступа"}/><Kpi label="Активные сделки" value={dealsAccess?deals?.active??0:"—"} note={dealsAccess?"в текущей воронке":"нет доступа"}/><Kpi label="Продажи" value={dealsAccess?deals?.won??0:"—"} note={dealsAccess?"закрыто успешно":"нет доступа"}/><Kpi label="Техника на складе" value={inventoryAccess?operations?.stock_units??0:"—"} note={inventoryAccess?"физические единицы по VIN":"нет доступа"}/></div><ModuleGrid modules={modules} onNavigate={onNavigate}/></div>;
   }
+  if(data.actor.role!=="owner"&&data.actor.role!=="director")return <EmployeeHome data={data}/>;
   return <ControlCenter data={data} onNavigate={onNavigate} onSaveGoals={onSaveGoals}/>;
+}
+
+const employeeModules=[
+  ["catalog","/admin/marketing/catalog","Каталог","Товары, цены и публикация",Tractor],
+  ["news","/admin/marketing/news","Новости","Материалы публичного сайта",Newspaper],
+  ["leasing-applications","/admin/marketing/leasing-applications","Лизинг","Заявки и варианты расчёта",Landmark],
+  ["site-leads","/admin/marketing/site-leads","Заявки сайта","Новые обращения клиентов",MessageSquareText],
+  ["deals","/admin/company/deals","CRM","Сделки и этапы продаж",BriefcaseBusiness],
+  ["client-base","/admin/company/client-base","Клиенты","Контакты и история покупок",UsersRound],
+  ["inventory-units","/admin/company/inventory-units","Склад","Техника и физические единицы",Warehouse],
+  ["finance","/admin/company/finance","Финансы","Доходы, расходы и остаток",CircleDollarSign],
+  ["employee-tasks","/admin/company/employee-tasks","Задачи","Личные и назначенные задачи",Target],
+  ["chat","/admin/company/chat","Чат","Сообщения внутри компании",MessageSquareText],
+] as const;
+
+function EmployeeHome({data}:{data:OverviewData}){
+  const allowed=employeeModules.filter(([permission])=>data.actor.permissions.includes(permission));
+  const deals=data.director?.deals;const tasks=data.director?.tasks;const department=[data.actor.position,data.actor.department].filter(Boolean).join(" · ");
+  const tasksAccess=data.actor.permissions.includes("employee-tasks"),dealsAccess=data.actor.permissions.includes("deals"),leadsAccess=data.actor.permissions.includes("site-leads"),catalogAccess=data.actor.permissions.includes("catalog")||data.actor.permissions.includes("inventory-units");
+  return <div className="admin-workspace-dashboard employee-dashboard"><WorkspaceHero icon={BriefcaseBusiness} eyebrow={department||"Рабочее пространство"} title={`Здравствуйте, ${data.actor.display_name}`} text="Здесь собраны только те инструменты и данные, к которым вам предоставлен доступ."/><div className="workspace-kpis"><Kpi label="Открытые задачи" value={tasksAccess?tasks?.open??0:"—"} note={tasksAccess?`${tasks?.overdue??0} просрочено`:"нет доступа"}/><Kpi label="Активные сделки" value={dealsAccess?deals?.active??0:"—"} note={dealsAccess?"доступная вам воронка":"нет доступа"}/><Kpi label="Новые заявки" value={leadsAccess?data.leads.filter(item=>item.status==="new").length:"—"} note={leadsAccess?"ожидают обработки":"нет доступа"}/><Kpi label="Техника" value={catalogAccess?data.catalog.filter(item=>item.inStock).length:"—"} note={catalogAccess?"доступно в каталоге":"нет доступа"}/></div><section className="workspace-module-grid" aria-label="Доступные разделы">{allowed.map(([permission,path,title,text,Icon],index)=><Link href={path} key={permission}><i><Icon aria-hidden="true"/></i><span><small>{String(index+1).padStart(2,"0")}</small><strong>{title}</strong><em>{text}</em></span><ArrowRight aria-hidden="true"/></Link>)}</section>{!allowed.length?<section className="control-panel"><p className="control-empty">Доступ к рабочим разделам пока не назначен. Профиль можно открыть через меню пользователя.</p></section>:null}</div>;
 }
 
 function WorkspaceHero({icon:Icon,eyebrow,title,text}:{icon:typeof Megaphone;eyebrow:string;title:string;text:string}){return <section className="workspace-hero"><div><i><Icon aria-hidden="true"/></i><span>{eyebrow}</span></div><h2>{title}</h2><p>{text}</p></section>}

@@ -1,4 +1,4 @@
-import { requireActor } from "../../../lib/admin-auth";
+import { canUseSection, requireActor } from "../../../lib/admin-auth";
 import { getCatalog } from "../../../lib/catalog";
 import { getNewsPosts } from "../../../lib/news";
 import { cleanText, fail, jsonBody, safeMedia, sameOrigin } from "../../../lib/security";
@@ -59,59 +59,65 @@ export async function GET(request: Request) {
     const actor = await requireActor(request);
     await ensureDb();
     const db = getRawDb();
-    const owner = actor.role === "owner" || actor.role === "director";
-    const marketing = owner || actor.role === "marketer";
+    const canNews = canUseSection(actor,"news");
+    const canLeads = canUseSection(actor,"site-leads");
+    const canAnalytics = canUseSection(actor,"site-analytics");
+    const canDeals = canUseSection(actor,"deals");
+    const canTasks = canUseSection(actor,"employee-tasks");
+    const canInventory = canUseSection(actor,"inventory-units");
+    const canFinance = canUseSection(actor,"finance");
+    const isDirector = actor.role === "owner" || actor.role === "director";
     const [catalog, posts, leads, popular, popularPosts, totals, daily, dealTotals, taskTotals, pipeline, period, goalRow, operations, modelFunnel, channels, managers, comparison] = await Promise.all([
       getCatalog(true),
-      marketing ? getNewsPosts(true) : Promise.resolve([]),
-      marketing ? db.prepare("SELECT * FROM leads ORDER BY created_at DESC LIMIT 200").all() : Promise.resolve({ results: [] }),
-      db.prepare(`SELECT tractor_slug, COUNT(*) AS views FROM interest_events WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug ORDER BY views DESC LIMIT 8`).all(),
-      marketing ? db.prepare(`SELECT path, COUNT(*) AS views FROM interest_events WHERE path LIKE '/news/%' GROUP BY path ORDER BY views DESC LIMIT 20`).all() : Promise.resolve({ results: [] }),
-      db.prepare("SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_id) AS visitors FROM interest_events").first(),
-      db.prepare(`SELECT substr(created_at,1,10) AS day,COUNT(*) AS views FROM interest_events WHERE created_at>=datetime('now','-6 days') GROUP BY day ORDER BY day`).all(),
-      db.prepare(`SELECT COUNT(*) AS total,
+      canNews ? getNewsPosts(true) : Promise.resolve([]),
+      canLeads ? db.prepare("SELECT * FROM leads ORDER BY created_at DESC LIMIT 200").all() : Promise.resolve({ results: [] }),
+      canAnalytics ? db.prepare(`SELECT tractor_slug, COUNT(*) AS views FROM interest_events WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug ORDER BY views DESC LIMIT 8`).all() : Promise.resolve({ results: [] }),
+      canNews ? db.prepare(`SELECT path, COUNT(*) AS views FROM interest_events WHERE path LIKE '/news/%' GROUP BY path ORDER BY views DESC LIMIT 20`).all() : Promise.resolve({ results: [] }),
+      canAnalytics ? db.prepare("SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_id) AS visitors FROM interest_events").first() : Promise.resolve(null),
+      canAnalytics ? db.prepare(`SELECT substr(created_at,1,10) AS day,COUNT(*) AS views FROM interest_events WHERE created_at>=datetime('now','-6 days') GROUP BY day ORDER BY day`).all() : Promise.resolve({ results: [] }),
+      (canDeals || canFinance) ? db.prepare(`SELECT COUNT(*) AS total,
         SUM(CASE WHEN archived=0 AND stage NOT IN ('won','lost') THEN 1 ELSE 0 END) AS active,
         SUM(CASE WHEN stage='won' THEN 1 ELSE 0 END) AS won,
         COALESCE(SUM(CASE WHEN stage='won' THEN amount_minor ELSE 0 END),0) AS revenue_minor,
         COALESCE(SUM(CASE WHEN stage='won' AND cost_minor IS NOT NULL THEN amount_minor-cost_minor ELSE 0 END),0) AS profit_minor
-        FROM crm_deals`).first(),
-      db.prepare(`SELECT COUNT(*) AS total,
+        FROM crm_deals`).first() : Promise.resolve(null),
+      canTasks ? db.prepare(`SELECT COUNT(*) AS total,
         SUM(CASE WHEN done=0 THEN 1 ELSE 0 END) AS open,
         SUM(CASE WHEN done=0 AND due_at < datetime('now') THEN 1 ELSE 0 END) AS overdue
-        FROM crm_tasks`).first(),
-      db.prepare(`SELECT stage,COUNT(*) AS count,COALESCE(SUM(amount_minor),0) AS amount_minor FROM crm_deals WHERE archived=0 GROUP BY stage ORDER BY count DESC`).all(),
-      db.prepare(`SELECT
+        FROM crm_tasks`).first() : Promise.resolve(null),
+      canDeals ? db.prepare(`SELECT stage,COUNT(*) AS count,COALESCE(SUM(amount_minor),0) AS amount_minor FROM crm_deals WHERE archived=0 GROUP BY stage ORDER BY count DESC`).all() : Promise.resolve({ results: [] }),
+      (canAnalytics || canLeads) ? db.prepare(`SELECT
         (SELECT COUNT(*) FROM interest_events WHERE created_at>=datetime('now','-30 days')) AS views_30,
         (SELECT COUNT(DISTINCT visitor_id) FROM interest_events WHERE created_at>=datetime('now','-30 days')) AS visitors_30,
-        (SELECT COUNT(*) FROM leads WHERE created_at>=datetime('now','-30 days')) AS leads_30`).first(),
-      db.prepare("SELECT value FROM site_settings WHERE key='director_goals'").first<{value:string}>(),
-      db.prepare(`SELECT
+        (SELECT COUNT(*) FROM leads WHERE created_at>=datetime('now','-30 days')) AS leads_30`).first() : Promise.resolve(null),
+      isDirector ? db.prepare("SELECT value FROM site_settings WHERE key='director_goals'").first<{value:string}>() : Promise.resolve(null),
+      (isDirector || canInventory || canFinance) ? db.prepare(`SELECT
         (SELECT COUNT(*) FROM admin_records WHERE kind='inventory_units' AND archived=0) AS stock_units,
         (SELECT COUNT(*) FROM admin_records WHERE kind='shipments' AND archived=0 AND status NOT IN ('closed','archived')) AS active_shipments,
         (SELECT COUNT(*) FROM admin_records WHERE kind='meetings' AND archived=0 AND created_at>=datetime('now','-30 days')) AS meetings_30,
         (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='finance_entries' AND archived=0 AND json_extract(data_json,'$.type')='Доход') AS income_som,
         (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='finance_entries' AND archived=0 AND json_extract(data_json,'$.type')='Расход') AS expenses_som,
         (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='debts' AND archived=0 AND status NOT IN ('closed','archived')) AS debts_som,
-        (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.purchaseCost') AS INTEGER)+CAST(json_extract(data_json,'$.expenses') AS INTEGER)),0) FROM admin_records WHERE kind='inventory_units' AND archived=0 AND json_extract(data_json,'$.unitStatus') NOT IN ('Продан','Выдан')) AS stock_value_som`).first(),
-      db.prepare(`SELECT x.tractor_slug,
+        (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.purchaseCost') AS INTEGER)+CAST(json_extract(data_json,'$.expenses') AS INTEGER)),0) FROM admin_records WHERE kind='inventory_units' AND archived=0 AND json_extract(data_json,'$.unitStatus') NOT IN ('Продан','Выдан')) AS stock_value_som`).first() : Promise.resolve(null),
+      isDirector ? db.prepare(`SELECT x.tractor_slug,
         COALESCE(v.views,0) AS views,COALESCE(l.leads,0) AS leads,COALESCE(d.meetings,0) AS meetings,
         COALESCE(d.sales,0) AS sales,COALESCE(d.revenue_minor,0) AS revenue_minor,COALESCE(d.profit_minor,0) AS profit_minor
         FROM (SELECT tractor_slug FROM interest_events WHERE tractor_slug IS NOT NULL UNION SELECT tractor_slug FROM leads WHERE tractor_slug IS NOT NULL UNION SELECT tractor_slug FROM crm_deals WHERE tractor_slug IS NOT NULL) x
         LEFT JOIN (SELECT tractor_slug,COUNT(*) views FROM interest_events WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug) v ON v.tractor_slug=x.tractor_slug
         LEFT JOIN (SELECT tractor_slug,COUNT(*) leads FROM leads WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug) l ON l.tractor_slug=x.tractor_slug
         LEFT JOIN (SELECT tractor_slug,SUM(CASE WHEN stage IN ('meeting','negotiation','reserved','contract','awaiting_payment','won') THEN 1 ELSE 0 END) meetings,SUM(CASE WHEN stage='won' THEN 1 ELSE 0 END) sales,SUM(CASE WHEN stage='won' THEN amount_minor ELSE 0 END) revenue_minor,SUM(CASE WHEN stage='won' AND cost_minor IS NOT NULL THEN amount_minor-cost_minor ELSE 0 END) profit_minor FROM crm_deals WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug) d ON d.tractor_slug=x.tractor_slug
-        ORDER BY views DESC LIMIT 100`).all(),
-      db.prepare(`SELECT COALESCE(NULLIF(source,''),'Не указан') source,COUNT(*) leads,
+        ORDER BY views DESC LIMIT 100`).all() : Promise.resolve({ results: [] }),
+      isDirector ? db.prepare(`SELECT COALESCE(NULLIF(source,''),'Не указан') source,COUNT(*) leads,
         COALESCE(SUM(CASE WHEN d.stage='won' THEN 1 ELSE 0 END),0) sales,
         COALESCE(SUM(CASE WHEN d.stage='won' THEN d.amount_minor ELSE 0 END),0) revenue_minor,
         COALESCE(SUM(CASE WHEN d.stage='won' AND d.cost_minor IS NOT NULL THEN d.amount_minor-d.cost_minor ELSE 0 END),0) profit_minor
-        FROM leads l LEFT JOIN crm_deals d ON d.lead_id=l.id GROUP BY COALESCE(NULLIF(source,''),'Не указан') ORDER BY leads DESC`).all(),
-      db.prepare(`SELECT s.id,s.display_name,COUNT(d.id) deals,
+        FROM leads l LEFT JOIN crm_deals d ON d.lead_id=l.id GROUP BY COALESCE(NULLIF(source,''),'Не указан') ORDER BY leads DESC`).all() : Promise.resolve({ results: [] }),
+      isDirector ? db.prepare(`SELECT s.id,s.display_name,COUNT(d.id) deals,
         COALESCE(SUM(CASE WHEN d.stage='won' THEN 1 ELSE 0 END),0) sales,
         COALESCE(SUM(CASE WHEN d.stage='won' THEN d.amount_minor ELSE 0 END),0) revenue_minor,
         COALESCE((SELECT COUNT(*) FROM crm_tasks t WHERE t.assigned_to=s.id AND t.done=0),0) open_tasks
-        FROM staff s LEFT JOIN crm_deals d ON d.assigned_to=s.id WHERE s.active=1 GROUP BY s.id,s.display_name ORDER BY sales DESC,deals DESC`).all(),
-      db.prepare(`SELECT
+        FROM staff s LEFT JOIN crm_deals d ON d.assigned_to=s.id WHERE s.active=1 GROUP BY s.id,s.display_name ORDER BY sales DESC,deals DESC`).all() : Promise.resolve({ results: [] }),
+      isDirector ? db.prepare(`SELECT
         (SELECT COUNT(*) FROM leads WHERE created_at>=datetime('now','-30 days')) AS leads_current,
         (SELECT COUNT(*) FROM leads WHERE created_at>=datetime('now','-60 days') AND created_at<datetime('now','-30 days')) AS leads_previous,
         (SELECT COUNT(*) FROM crm_deals WHERE stage='won' AND updated_at>=datetime('now','-30 days')) AS sales_current,
@@ -121,8 +127,19 @@ export async function GET(request: Request) {
         (SELECT COALESCE(SUM(CASE WHEN cost_minor IS NOT NULL THEN amount_minor-cost_minor ELSE 0 END),0) FROM crm_deals WHERE stage='won' AND updated_at>=datetime('now','-30 days')) AS profit_current_minor,
         (SELECT COALESCE(SUM(CASE WHEN cost_minor IS NOT NULL THEN amount_minor-cost_minor ELSE 0 END),0) FROM crm_deals WHERE stage='won' AND updated_at>=datetime('now','-60 days') AND updated_at<datetime('now','-30 days')) AS profit_previous_minor,
         (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='finance_entries' AND archived=0 AND json_extract(data_json,'$.type')='Расход' AND created_at>=datetime('now','-30 days')) AS expenses_current_som,
-        (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='finance_entries' AND archived=0 AND json_extract(data_json,'$.type')='Расход' AND created_at>=datetime('now','-60 days') AND created_at<datetime('now','-30 days')) AS expenses_previous_som`).first(),
+        (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='finance_entries' AND archived=0 AND json_extract(data_json,'$.type')='Расход' AND created_at>=datetime('now','-60 days') AND created_at<datetime('now','-30 days')) AS expenses_previous_som`).first() : Promise.resolve(null),
     ]);
+    const rawOperations = operations as Record<string, number> | null;
+    const safeOperations = isDirector ? operations : rawOperations ? {
+      stock_units: canInventory ? Number(rawOperations.stock_units ?? 0) : 0,
+      active_shipments: 0,
+      meetings_30: 0,
+      income_som: canFinance ? Number(rawOperations.income_som ?? 0) : 0,
+      expenses_som: canFinance ? Number(rawOperations.expenses_som ?? 0) : 0,
+      debts_som: canFinance ? Number(rawOperations.debts_som ?? 0) : 0,
+      stock_value_som: canFinance ? Number(rawOperations.stock_value_som ?? 0) : 0,
+    } : null;
+    const safeDeals = !dealTotals || isDirector || canFinance ? dealTotals : { ...dealTotals, profit_minor: 0 };
     return Response.json({
       actor,
       catalog,
@@ -133,18 +150,18 @@ export async function GET(request: Request) {
       totals,
       daily: daily.results,
       director: {
-        deals: dealTotals,
+        deals: safeDeals,
         tasks: taskTotals,
         pipeline: pipeline.results,
         period,
-        goals: parseGoals(goalRow?.value),
-        operations,
+        goals: isDirector ? parseGoals(goalRow?.value) : parseGoals(),
+        operations: safeOperations,
         models: modelFunnel.results,
         channels: channels.results,
         managers: managers.results,
         comparison,
       },
-      profile: { display_name: actor.display_name, phone: actor.phone, email: actor.email, avatar: actor.avatar, theme: actor.theme },
+      profile: { display_name: actor.display_name, phone: actor.phone, email: actor.email, avatar: actor.avatar, theme: actor.theme,position:actor.position,department:actor.department,skills:actor.skills,bio:actor.bio },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     console.error("admin dashboard load failed", error);
@@ -162,23 +179,19 @@ export async function PATCH(request: Request) {
     const ownerOnly = () => {
       if (actor.role !== "owner" && actor.role !== "director") throw Object.assign(new Error("Действие доступно только директору"), { status: 403 });
     };
-    const marketingOnly = () => {
-      if (!["owner", "director", "marketer"].includes(actor.role)) throw Object.assign(new Error("Действие доступно отделу маркетинга"), { status: 403 });
-    };
-
     if (action === "save_product") {
-      marketingOnly();
+      if(!canUseSection(actor,"catalog"))return Response.json({error:"Нет доступа к каталогу"},{status:403});
       let product: Tractor;
       try { product = normalizedProduct(body.product); } catch { return Response.json({ error: "Проверьте поля товара, ссылки и числовые значения" }, { status: 400 }); }
       await db.prepare(`INSERT INTO product_overrides(slug,data_json,is_deleted,updated_at) VALUES(?,?,0,CURRENT_TIMESTAMP)
         ON CONFLICT(slug) DO UPDATE SET data_json=excluded.data_json,is_deleted=0,updated_at=CURRENT_TIMESTAMP`).bind(product.slug, JSON.stringify(product)).run();
     } else if (action === "delete_product") {
-      marketingOnly();
+      if(!canUseSection(actor,"catalog"))return Response.json({error:"Нет доступа к каталогу"},{status:403});
       const slug = cleanText(body.slug, 100, true);
       await db.prepare(`INSERT INTO product_overrides(slug,data_json,is_deleted,updated_at) VALUES(?,'{}',1,CURRENT_TIMESTAMP)
         ON CONFLICT(slug) DO UPDATE SET is_deleted=1,updated_at=CURRENT_TIMESTAMP`).bind(slug).run();
     } else if (action === "save_news") {
-      marketingOnly();
+      if(!canUseSection(actor,"news"))return Response.json({error:"Нет доступа к новостям"},{status:403});
       const post = body.post as Record<string, unknown> | undefined;
       const title = post?.title as Record<string, unknown> | undefined;
       const slug = cleanText(post?.slug, 100, true);
@@ -199,12 +212,12 @@ export async function PATCH(request: Request) {
       if (original && original !== slug) await db.prepare(`INSERT INTO news_posts(slug,data_json,is_deleted,updated_at) VALUES(?,'{}',1,CURRENT_TIMESTAMP)
         ON CONFLICT(slug) DO UPDATE SET is_deleted=1,updated_at=CURRENT_TIMESTAMP`).bind(original).run();
     } else if (action === "delete_news") {
-      marketingOnly();
+      if(!canUseSection(actor,"news"))return Response.json({error:"Нет доступа к новостям"},{status:403});
       const slug = cleanText(body.slug, 100, true);
       await db.prepare(`INSERT INTO news_posts(slug,data_json,is_deleted,updated_at) VALUES(?,'{}',1,CURRENT_TIMESTAMP)
         ON CONFLICT(slug) DO UPDATE SET is_deleted=1,updated_at=CURRENT_TIMESTAMP`).bind(slug).run();
     } else if (action === "lead_status") {
-      marketingOnly();
+      if(!canUseSection(actor,"site-leads"))return Response.json({error:"Нет доступа к заявкам"},{status:403});
       const id = cleanText(body.id, 100, true);
       const status = cleanText(body.status, 20, true);
       if (!new Set(["new", "contacted", "closed"]).has(status)) return Response.json({ error: "Некорректный статус" }, { status: 400 });
@@ -213,8 +226,8 @@ export async function PATCH(request: Request) {
       const profile = body.profile as Record<string, unknown>;
       const theme = String(profile?.theme ?? "blue");
       if (!["field","light","dark","blue","violet","forest","red"].includes(theme)) return Response.json({ error:"Неизвестная тема" },{status:400});
-      await db.prepare("UPDATE staff SET display_name=?,phone=?,avatar=?,theme=? WHERE id=?")
-        .bind(cleanText(profile?.displayName, 120, true), cleanText(profile?.phone ?? "", 40), safeMedia(profile?.avatar ?? "", true) || null, theme, actor.id).run();
+      await db.prepare("UPDATE staff SET display_name=?,phone=?,avatar=?,theme=?,position=?,department=?,skills=?,bio=? WHERE id=?")
+        .bind(cleanText(profile?.displayName, 120, true), cleanText(profile?.phone ?? "", 40), safeMedia(profile?.avatar ?? "", true) || null, theme,cleanText(profile?.position??"",120),cleanText(profile?.department??"",120),cleanText(profile?.skills??"",500),cleanText(profile?.bio??"",2000), actor.id).run();
     } else if (action === "save_goals") {
       ownerOnly();
       const goals=body.goals as Record<string,unknown>;

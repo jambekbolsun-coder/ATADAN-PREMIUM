@@ -50,6 +50,13 @@
       "when": 1789010200000,
       "tag": "0006_seed_atadan_admins",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1789415823166,
+      "tag": "0007_remarkable_thing",
+      "breakpoints": true
     }
   ]
 }

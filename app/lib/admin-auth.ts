@@ -177,14 +177,25 @@ export function clearAdminCookie() {
 }
 
 export type StaffRole = "owner" | "director" | "manager" | "accountant" | "marketer";
-export type Actor = { id: string; email: string; display_name: string; role: StaffRole; active: number; theme: string; avatar: string | null; phone: string };
-const ACTOR_FIELDS = "id,email,display_name,role,active,theme,avatar,phone";
+export const permissionSections = ["catalog","parts","news","public-service","faq","leasing","leasing-models","promotions","leasing-applications","site-leads","site-analytics","site-settings","deals","client-base","inventory-units","sales","suppliers","expenses","finance","payroll","payments","debts","employee-tasks","notifications","chat","groups","team","audit"] as const;
+export type PermissionSection = typeof permissionSections[number];
+const defaultPermissions: Record<StaffRole,PermissionSection[]> = {
+  owner:[...permissionSections], director:[...permissionSections],
+  manager:["deals","client-base","inventory-units","sales","payments","employee-tasks","notifications","chat","groups","leasing-applications"],
+  accountant:["suppliers","expenses","finance","payroll","payments","debts","employee-tasks","notifications","chat","groups"],
+  marketer:["catalog","parts","news","public-service","faq","leasing","leasing-models","promotions","site-leads","site-analytics","employee-tasks","notifications","chat","groups"],
+};
+export type Actor = { id: string; email: string; display_name: string; role: StaffRole; active: number; theme: string; avatar: string | null; phone: string; position:string; department:string; skills:string; bio:string; permissions:PermissionSection[] };
+type ActorRow = Omit<Actor,"permissions"> & {permissions_json:string};
+const ACTOR_FIELDS = "id,email,display_name,role,active,theme,avatar,phone,position,department,skills,bio,permissions_json";
+function actorFromRow(row:ActorRow|null){if(!row)return null;let permissions:PermissionSection[]|null=null;try{const parsed=JSON.parse(row.permissions_json) as unknown;if(Array.isArray(parsed))permissions=parsed.filter((value):value is PermissionSection=>typeof value==="string"&&(permissionSections as readonly string[]).includes(value));}catch{permissions=null}permissions??=defaultPermissions[row.role];const {permissions_json:_,...actor}=row;void _;return {...actor,permissions};}
+export function canUseSection(actor:Actor,section:string){return actor.role==="owner"||actor.role==="director"||actor.permissions.includes(section as PermissionSection);}
 const STAFF_COOKIE = "atadan_staff";
 function staffToken(request: Request) { return request.headers.get("cookie")?.split(";").map(v => v.trim()).find(v => v.startsWith(`${STAFF_COOKIE}=`))?.slice(STAFF_COOKIE.length + 1); }
 export async function getActor(request: Request): Promise<Actor | null> {
   await ensureDb();
   const token = staffToken(request);
-  if (token) return getRawDb().prepare(`SELECT s.id,s.email,s.display_name,s.role,s.active,s.theme,s.avatar,s.phone FROM staff s JOIN staff_sessions se ON se.staff_id=s.id WHERE se.token_hash=? AND se.expires_at>? AND s.active=1`).bind(await digest(token), Math.floor(Date.now()/1000)).first<Actor>();
+  if (token) return actorFromRow(await getRawDb().prepare(`SELECT s.${ACTOR_FIELDS.split(",").join(",s.")} FROM staff s JOIN staff_sessions se ON se.staff_id=s.id WHERE se.token_hash=? AND se.expires_at>? AND s.active=1`).bind(await digest(token), Math.floor(Date.now()/1000)).first<ActorRow>());
   if (!(await isAdmin(request))) return null;
   const legacy = request.headers.get("cookie")?.split(";").map(v=>v.trim()).find(v=>v.startsWith(`${COOKIE_NAME}=`))?.slice(COOKIE_NAME.length+1).split(".")[0];
   if (!legacy) return null;
@@ -196,7 +207,7 @@ async function ensureOwner(email: string): Promise<Actor | null> {
   const db = getRawDb();
   await db.prepare(`INSERT INTO staff (id,email,display_name,role) VALUES (?,?,?,'owner') ON CONFLICT(email) DO NOTHING`).bind(crypto.randomUUID(), email, email.split("@")[0]).run();
   await db.prepare("UPDATE staff SET role='owner',active=1 WHERE email=?").bind(email).run();
-  return db.prepare(`SELECT ${ACTOR_FIELDS} FROM staff WHERE email=? AND active=1`).bind(email).first<Actor>();
+  return actorFromRow(await db.prepare(`SELECT ${ACTOR_FIELDS} FROM staff WHERE email=? AND active=1`).bind(email).first<ActorRow>());
 }
 export async function requireActor(request: Request, ownerOnly = false) {
   const actor = await getActor(request);
@@ -212,10 +223,10 @@ export async function hashPassword(password: string) {
 export async function authenticateStaff(email: string, password: string, request: Request) {
   await ensureDb();
   const normalized = normalizeIdentifier(email);
-  const stored = await getRawDb().prepare(`SELECT ${ACTOR_FIELDS},password_hash,salt FROM staff WHERE email=?`).bind(normalized).first<Actor & {password_hash:string|null;salt:string|null}>();
+  const stored = await getRawDb().prepare(`SELECT ${ACTOR_FIELDS},password_hash,salt FROM staff WHERE email=?`).bind(normalized).first<ActorRow & {password_hash:string|null;salt:string|null}>();
   if (stored?.active && stored.password_hash && stored.salt) {
     const hash = await derivePasswordHash(password, stored.salt, DEFAULT_PBKDF2_ITERATIONS);
-    if (constantTimeEqual(hash, stored.password_hash)) return stored;
+    if (constantTimeEqual(hash, stored.password_hash)) return actorFromRow(stored);
   }
   if (!(await verifyCredentials(normalized, password, request))) return null;
   const owner = await ensureOwner(normalized);
