@@ -21,7 +21,12 @@ function databaseUrl() {
 
 function pool() {
   if (!globalDb.__atadanPool) {
-    globalDb.__atadanPool = new Pool({ connectionString: databaseUrl(), max: 8 });
+    globalDb.__atadanPool = new Pool({
+      connectionString: databaseUrl(),
+      max: 8,
+      connectionTimeoutMillis: 10_000,
+      idleTimeoutMillis: 30_000,
+    });
     attachDatabasePool(globalDb.__atadanPool);
   }
   return globalDb.__atadanPool;
@@ -102,10 +107,14 @@ export async function ensureDb() {
   initialized = (async () => {
     const client = await pool().connect();
     try {
-      await client.query("SELECT pg_advisory_lock(hashtext('atadan-schema-v1'))");
+      await client.query("BEGIN");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('atadan-schema-v1'))");
       await client.query(POSTGRES_SCHEMA_SQL);
+      await client.query("COMMIT");
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
     } finally {
-      await client.query("SELECT pg_advisory_unlock(hashtext('atadan-schema-v1'))").catch(() => undefined);
       client.release();
     }
   })().catch((error) => {
