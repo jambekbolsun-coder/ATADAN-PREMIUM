@@ -1,15 +1,11 @@
-import { env } from "cloudflare:workers";
+import { list } from "@vercel/blob";
 
 export async function GET(_request: Request, context: { params: Promise<{ key: string[] }> }) {
   const { key: segments } = await context.params;
   const key = segments.join("/");
   if (!/^banners\/[a-z0-9-]+\.(?:jpg|png|webp|avif)$/.test(key)) return new Response("Not found", { status: 404 });
-  const object = await env.MEDIA.get(key);
+  const result = await list({ prefix: key, limit: 10 });
+  const object = result.blobs.find((blob) => blob.pathname === key);
   if (!object) return new Response("Not found", { status: 404 });
-  const headers = new Headers();
-  object.writeHttpMetadata(headers);
-  headers.set("etag", object.httpEtag);
-  headers.set("cache-control", "public, max-age=31536000, immutable");
-  headers.set("x-content-type-options", "nosniff");
-  return new Response(object.body, { headers });
+  return Response.redirect(object.url, 307);
 }

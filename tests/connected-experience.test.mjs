@@ -65,9 +65,10 @@ test("deal movement creates an idempotent sale and can update linked stock", asy
   assert.match(ui, /action:"move_deal"/);
   assert.match(crm, /action==="update_deal"\|\|action==="move_deal"/);
   assert.match(crm, /WHERE NOT EXISTS\(SELECT 1 FROM admin_records WHERE kind='sales'/);
-  assert.match(crm, /json_set\(data_json,'\$\.unitStatus','Продан'/);
+  assert.match(crm, /unitStatus:"Продан"/);
   assert.match(crm, /json_extract\(data_json,'\$\.saleDealId'\)/);
-  assert.match(crm, /json_remove\(json_set\(data_json,'\$\.unitStatus','На складе'/);
+  assert.match(crm, /unitStatus:"На складе"/);
+  assert.match(crm, /delete data\.saleDealId/);
 });
 
 test("published service and FAQ records reach their public surfaces", async () => {

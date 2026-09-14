@@ -1,4 +1,3 @@
-import { env } from "cloudflare:workers";
 import { ensureDb, getRawDb } from "../../db";
 import { digest, HttpError } from "./security";
 
@@ -22,7 +21,7 @@ type ConfiguredAdmin = {
 };
 
 function runtimeEnv() {
-  return env as unknown as Record<string, string | undefined>;
+  return process.env as Record<string, string | undefined>;
 }
 
 function normalizeIdentifier(value: string) {

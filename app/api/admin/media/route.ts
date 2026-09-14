@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { put } from "@vercel/blob";
 import { requireActor } from "../../../lib/admin-auth";
 import { fail, HttpError, sameOrigin } from "../../../lib/security";
 
@@ -22,11 +22,12 @@ export async function POST(request: Request) {
     if (!extension) throw new HttpError(415, "Поддерживаются JPG, PNG, WEBP и AVIF");
     if (!file.size || file.size > 8_000_000) throw new HttpError(413, "Изображение должно быть меньше 8 МБ");
     const key = `banners/${Date.now()}-${crypto.randomUUID()}.${extension}`;
-    await env.MEDIA.put(key, file.stream(), {
-      httpMetadata: { contentType: file.type, cacheControl: "public, max-age=31536000, immutable" },
-      customMetadata: { uploadedBy: actor.id },
+    const blob = await put(key, file, {
+      access: "public",
+      addRandomSuffix: false,
+      contentType: file.type,
     });
-    return Response.json({ url: `/api/media/${key}` });
+    return Response.json({ url: blob.url, uploadedBy: actor.id });
   } catch (error) {
     return fail(error);
   }

@@ -4,8 +4,10 @@ import { auditStatement, canTransition, minor, stageLabels, stages, visibleDeal 
 import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
 
 type StageOption={id:string;label:string};
+type JsonRecordRow={id:string;data_json:string};
 const defaultStageOptions:StageOption[]=stages.map(id=>({id,label:stageLabels[id]}));
 async function loadStages(){const row=await getRawDb().prepare("SELECT value FROM site_settings WHERE key='crm_pipeline_stages'").first<{value:string}>();if(!row)return defaultStageOptions;try{const parsed=JSON.parse(row.value) as StageOption[];return Array.isArray(parsed)&&parsed.length?parsed:defaultStageOptions}catch{return defaultStageOptions}}
+function recordData(value:string){try{return JSON.parse(value) as Record<string,unknown>}catch{return {}}}
 
 export async function GET(request: Request) {
   try {
@@ -85,24 +87,22 @@ export async function POST(request: Request) {
       canTransition(deal.stage,stage,actor.role,reason,amount);
       const assigned=moving?deal.assigned_to:owner?await assignee(body.assignedTo):deal.assigned_to;
       if(Number(body.version)!==deal.version)throw new HttpError(409,"Запись изменена другим сотрудником. Обновите данные.");
-      const result=await db.batch([
-        db.prepare("UPDATE crm_deals SET stage=?,amount_minor=?,assigned_to=?,loss_reason=?,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND version=?").bind(stage,amount,assigned,reason,id,deal.version),
-        db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) SELECT ?,?,?,?,? WHERE changes()=1").bind(crypto.randomUUID(),actor.id,action,id,JSON.stringify({from:deal.stage,to:stage,amountMinor:amount,assignedTo:assigned})),
-      ]);
-      if(!result[0].meta.changes)throw new HttpError(409,"Запись уже изменилась. Обновите страницу.");
+      const result=await db.prepare("UPDATE crm_deals SET stage=?,amount_minor=?,assigned_to=?,loss_reason=?,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND version=?").bind(stage,amount,assigned,reason,id,deal.version).run();
+      if(!result.meta.changes)throw new HttpError(409,"Запись уже изменилась. Обновите страницу.");
+      await auditStatement(actor,action,id,JSON.stringify({from:deal.stage,to:stage,amountMinor:amount,assignedTo:assigned})).run();
       const customer=await db.prepare("SELECT name,phone FROM crm_customers WHERE id=?").bind(deal.customer_id).first<{name:string;phone:string}>();
       if(stage==="won"){
         const soldAt=new Date().toISOString().slice(0,10);
         const saleData=JSON.stringify({dealId:id,customer:customer?.name??"Клиент",phone:customer?.phone??"",tractorModel:deal.tractor_slug??"Не указана",tractorVin:"",salePrice:amount/100,costPrice:(deal.cost_minor??0)/100,saleDate:soldAt,manager:actor.display_name,paymentMethod:"",automated:"true"});
-        await db.batch([
-          db.prepare("INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json,created_by,updated_by) SELECT ?,'sales',?,?, 'active','Автоматически из CRM',0,?,?,? WHERE NOT EXISTS(SELECT 1 FROM admin_records WHERE kind='sales' AND archived=0 AND json_extract(data_json,'$.dealId')=?)").bind(crypto.randomUUID(),`Продажа · ${deal.title}`,`${customer?.name??"Клиент"} · ${deal.tractor_slug??"модель не указана"}`,saleData,actor.id,actor.id,id),
-          db.prepare("UPDATE admin_records SET data_json=json_set(data_json,'$.unitStatus','Продан','$.customer',?,'$.salePrice',?,'$.saleDealId',?),updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=(SELECT id FROM admin_records WHERE kind='inventory_units' AND archived=0 AND json_extract(data_json,'$.tractorSlug')=? AND COALESCE(json_extract(data_json,'$.unitStatus'),'') NOT IN ('Продан','Выдан') ORDER BY created_at LIMIT 1)").bind(customer?.name??"Клиент",amount/100,id,actor.id,deal.tractor_slug??""),
-        ]);
+        const unit=await db.prepare("SELECT id,data_json FROM admin_records WHERE kind='inventory_units' AND archived=0 AND json_extract(data_json,'$.tractorSlug')=? AND COALESCE(json_extract(data_json,'$.unitStatus'),'') NOT IN ('Продан','Выдан') ORDER BY created_at LIMIT 1").bind(deal.tractor_slug??"").first<JsonRecordRow>();
+        const statements=[db.prepare("INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json,created_by,updated_by) SELECT ?,'sales',?,?, 'active','Автоматически из CRM',0,?,?,? WHERE NOT EXISTS(SELECT 1 FROM admin_records WHERE kind='sales' AND archived=0 AND json_extract(data_json,'$.dealId')=?)").bind(crypto.randomUUID(),`Продажа · ${deal.title}`,`${customer?.name??"Клиент"} · ${deal.tractor_slug??"модель не указана"}`,saleData,actor.id,actor.id,id)];
+        if(unit){const data={...recordData(unit.data_json),unitStatus:"Продан",customer:customer?.name??"Клиент",salePrice:amount/100,saleDealId:id};statements.push(db.prepare("UPDATE admin_records SET data_json=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?").bind(JSON.stringify(data),actor.id,unit.id));}
+        await db.batch(statements);
       }else if(deal.stage==="won"){
-        await db.batch([
-          db.prepare("UPDATE admin_records SET archived=1,status='archived',updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE kind='sales' AND archived=0 AND json_extract(data_json,'$.dealId')=? AND json_extract(data_json,'$.automated')='true'").bind(actor.id,id),
-          db.prepare("UPDATE admin_records SET data_json=json_remove(json_set(data_json,'$.unitStatus','На складе'),'$.customer','$.saleDealId'),updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE kind='inventory_units' AND archived=0 AND json_extract(data_json,'$.saleDealId')=?").bind(actor.id,id),
-        ]);
+        const units=await db.prepare("SELECT id,data_json FROM admin_records WHERE kind='inventory_units' AND archived=0 AND json_extract(data_json,'$.saleDealId')=?").bind(id).all<JsonRecordRow>();
+        const statements=[db.prepare("UPDATE admin_records SET archived=1,status='archived',updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE kind='sales' AND archived=0 AND json_extract(data_json,'$.dealId')=? AND json_extract(data_json,'$.automated')='true'").bind(actor.id,id)];
+        for(const unit of units.results){const data:Record<string,unknown>={...recordData(unit.data_json),unitStatus:"На складе"};delete data.customer;delete data.saleDealId;statements.push(db.prepare("UPDATE admin_records SET data_json=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?").bind(JSON.stringify(data),actor.id,unit.id));}
+        await db.batch(statements);
       }
       return Response.json({ok:true});
     }
@@ -118,8 +118,9 @@ export async function POST(request: Request) {
     }else if(action==="toggle_task"){
       const id=cleanText(body.id,100,true);const task=await db.prepare("SELECT * FROM crm_tasks WHERE id=?").bind(id).first<{assigned_to:string;version:number}>();
       if(!task||(!owner&&task.assigned_to!==actor.id))throw new HttpError(404,"Задача не найдена");
-      const result=await db.batch([db.prepare("UPDATE crm_tasks SET done=?,version=version+1 WHERE id=? AND version=?").bind(body.done?1:0,id,Number(body.version)),db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id) SELECT ?,?,?,? WHERE changes()=1").bind(crypto.randomUUID(),actor.id,action,id)]);
-      if(!result[0].meta.changes)throw new HttpError(409,"Задача изменилась. Обновите данные.");
+      const result=await db.prepare("UPDATE crm_tasks SET done=?,version=version+1 WHERE id=? AND version=?").bind(body.done?1:0,id,Number(body.version)).run();
+      if(!result.meta.changes)throw new HttpError(409,"Задача изменилась. Обновите данные.");
+      await auditStatement(actor,action,id).run();
     }else if(action==="save_cost"){
       needOwner();const slug=cleanText(body.slug,120,true),cost=minor(body.cost);
       const expected=Number(body.version??0);
