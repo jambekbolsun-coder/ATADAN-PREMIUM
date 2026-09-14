@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://atadan.bekbolsunjamshutov.chatgpt.site"),
+  metadataBase: new URL("https://atadan-changfa.vercel.app"),
   title: "ATADAN Changfa — тракторы в Кыргызстане",
   description: "Официальный дистрибьютор тракторов Changfa. Подбор техники, лизинг, гарантия и сервис в Кыргызстане.",
   icons: {
