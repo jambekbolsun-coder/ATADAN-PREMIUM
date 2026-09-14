@@ -16,7 +16,13 @@ const globalDb = globalThis as typeof globalThis & { __atadanPool?: Pool };
 function databaseUrl() {
   const value = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (!value) throw new Error("DATABASE_URL is unavailable. Connect the Neon database to this project.");
-  return value;
+  try {
+    const url = new URL(value);
+    if (url.searchParams.get("sslmode") === "require") url.searchParams.set("sslmode", "verify-full");
+    return url.toString();
+  } catch {
+    return value;
+  }
 }
 
 function pool() {
@@ -107,9 +113,12 @@ export async function ensureDb() {
   initialized = (async () => {
     const client = await pool().connect();
     try {
+      const probe = await client.query("SELECT to_regclass('public.product_overrides') AS table_name");
+      if (probe.rows[0]?.table_name) return;
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtext('atadan-schema-v1'))");
-      await client.query(POSTGRES_SCHEMA_SQL);
+      const lockedProbe = await client.query("SELECT to_regclass('public.product_overrides') AS table_name");
+      if (!lockedProbe.rows[0]?.table_name) await client.query(POSTGRES_SCHEMA_SQL);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);

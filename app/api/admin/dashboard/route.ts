@@ -1,7 +1,7 @@
 import { canUseSection, requireActor } from "../../../lib/admin-auth";
 import { getCatalog } from "../../../lib/catalog";
 import { getNewsPosts } from "../../../lib/news";
-import { cleanText, fail, jsonBody, safeMedia, sameOrigin } from "../../../lib/security";
+import { cleanText, fail, HttpError, jsonBody, safeMedia, sameOrigin } from "../../../lib/security";
 import type { Tractor } from "../../../types";
 import { ensureDb, getRawDb } from "../../../../db";
 
@@ -164,7 +164,7 @@ export async function GET(request: Request) {
       profile: { display_name: actor.display_name, phone: actor.phone, email: actor.email, avatar: actor.avatar, theme: actor.theme,position:actor.position,department:actor.department,skills:actor.skills,bio:actor.bio },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    console.error("admin dashboard load failed", error);
+    if (!(error instanceof HttpError) || error.status >= 500) console.error("admin dashboard load failed", error);
     return fail(error);
   }
 }
