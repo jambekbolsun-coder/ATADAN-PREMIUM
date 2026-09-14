@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateLease, salePrice } from "../app/lib/leasing.ts";
+import { calculateInstallment, calculateLease, salePrice } from "../app/lib/leasing.ts";
 
 test("zero-rate lease preserves principal exactly", () => {
   const result = calculateLease({ price: 3_000_000, downPercent: 30, months: 84, annualRate: 0, fee: 0, method: "annuity" });
@@ -30,4 +30,16 @@ test("differentiated payments decrease and sale discount is bounded", () => {
 test("invalid financial values are rejected", () => {
   assert.throws(() => calculateLease({ price: 0, downPercent: 20, months: 36, annualRate: 12, fee: 0, method: "annuity" }));
   assert.throws(() => calculateLease({ price: 1_000_000, downPercent: 20, months: 85, annualRate: 12, fee: 0, method: "annuity" }));
+});
+
+test("leasing calculator follows the configured business formula and zero-percent override",()=>{
+  const result=calculateInstallment({price:4_000_000,options:[{name:"Ковш",price:150_000}],delivery:50_000,discount:200_000,downMode:"percent",downValue:25,months:24,markupPercent:12,annualRate:0,fixedCommission:20_000,commissionPercent:1,insurance:0,processingFee:5_000,includeDelivery:true,includeInsurance:false,includeCommission:true,discountOrder:"before",rounding:100,zeroPercent:false});
+  assert.equal(result.downPayment,1_000_000);
+  assert.equal(result.financed,3_000_000);
+  assert.equal(result.contractTotal,3_415_000);
+  assert.equal(result.schedule.at(-1).balance,0);
+  const zero=calculateInstallment({price:4_000_000,options:[],delivery:0,discount:0,downMode:"amount",downValue:1_000_000,months:12,markupPercent:30,annualRate:20,fixedCommission:0,commissionPercent:0,insurance:0,processingFee:0,includeDelivery:false,includeInsurance:false,includeCommission:false,discountOrder:"before",rounding:1,zeroPercent:true});
+  assert.equal(zero.markup,0);
+  assert.equal(zero.overpayment,0);
+  assert.equal(zero.contractTotal,3_000_000);
 });

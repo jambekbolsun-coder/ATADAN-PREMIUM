@@ -211,8 +211,8 @@ export async function PATCH(request: Request) {
       await db.prepare("UPDATE leads SET status=? WHERE id=?").bind(status, id).run();
     } else if (action === "save_profile") {
       const profile = body.profile as Record<string, unknown>;
-      const theme = String(profile?.theme ?? "field");
-      if (!["field","light","dark"].includes(theme)) return Response.json({ error:"Неизвестная тема" },{status:400});
+      const theme = String(profile?.theme ?? "blue");
+      if (!["field","light","dark","blue","violet","forest","red"].includes(theme)) return Response.json({ error:"Неизвестная тема" },{status:400});
       await db.prepare("UPDATE staff SET display_name=?,phone=?,avatar=?,theme=? WHERE id=?")
         .bind(cleanText(profile?.displayName, 120, true), cleanText(profile?.phone ?? "", 40), safeMedia(profile?.avatar ?? "", true) || null, theme, actor.id).run();
     } else if (action === "save_goals") {

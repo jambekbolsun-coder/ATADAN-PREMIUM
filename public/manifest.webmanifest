@@ -1,0 +1,10 @@
+{
+  "name": "ATADAN CRM",
+  "short_name": "ATADAN",
+  "description": "Рабочее пространство ATADAN: CRM, склад, задачи и финансы",
+  "start_url": "/admin",
+  "display": "standalone",
+  "background_color": "#f4f7fb",
+  "theme_color": "#10243e",
+  "icons": [{"src":"/favicon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}]
+}

@@ -24,6 +24,7 @@ export const metadata: Metadata = {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
   },
+  manifest: "/manifest.webmanifest",
   openGraph: {
     title: "ATADAN Changfa — тракторы в Кыргызстане",
     description: "Каталог тракторов Changfa от 50 до 240 л.с., лизинг, гарантия и сервис.",

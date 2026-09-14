@@ -1,11 +1,15 @@
 import { getRawDb } from "../../../../db";
 import { requireActor } from "../../../lib/admin-auth";
-import { auditStatement, canTransition, minor, visibleDeal } from "../../../lib/crm";
+import { auditStatement, canTransition, minor, stageLabels, stages, visibleDeal } from "../../../lib/crm";
 import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
+
+type StageOption={id:string;label:string};
+const defaultStageOptions:StageOption[]=stages.map(id=>({id,label:stageLabels[id]}));
+async function loadStages(){const row=await getRawDb().prepare("SELECT value FROM site_settings WHERE key='crm_pipeline_stages'").first<{value:string}>();if(!row)return defaultStageOptions;try{const parsed=JSON.parse(row.value) as StageOption[];return Array.isArray(parsed)&&parsed.length?parsed:defaultStageOptions}catch{return defaultStageOptions}}
 
 export async function GET(request: Request) {
   try {
-    const actor=await requireActor(request); const db=getRawDb(); const owner=actor.role==="owner"||actor.role==="director";
+    const actor=await requireActor(request); const db=getRawDb(); const owner=actor.role==="owner"||actor.role==="director";const stageOptions=await loadStages();
     const [deals,customers,tasks,staff,costs,audit,notes] = await Promise.all([
       db.prepare(`SELECT d.id,d.lead_id,d.customer_id,d.title,d.tractor_slug,d.stage,d.amount_minor,${owner?"d.cost_minor,":""}d.assigned_to,d.loss_reason,d.created_at,d.updated_at,d.version,c.name,c.phone FROM crm_deals d JOIN crm_customers c ON c.id=d.customer_id WHERE d.archived=0 ${owner?"":"AND d.assigned_to=?"} ORDER BY d.updated_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id])).all(),
       db.prepare(`SELECT c.* FROM crm_customers c ${owner?"":"WHERE EXISTS(SELECT 1 FROM crm_deals d WHERE d.customer_id=c.id AND d.assigned_to=? AND d.archived=0)"} ORDER BY c.created_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id])).all(),
@@ -15,7 +19,7 @@ export async function GET(request: Request) {
       owner?db.prepare("SELECT a.*,s.display_name FROM audit_logs a LEFT JOIN staff s ON s.id=a.actor_id ORDER BY a.created_at DESC LIMIT 200").all():Promise.resolve({results:[]}),
       db.prepare(`SELECT n.*,s.display_name FROM crm_notes n JOIN staff s ON s.id=n.author_id JOIN crm_deals d ON d.id=n.deal_id ${owner?"":"WHERE d.assigned_to=?"} ORDER BY n.created_at DESC LIMIT 500`).bind(...(owner?[]:[actor.id])).all(),
     ]);
-    return Response.json({actor,deals:deals.results,customers:customers.results,tasks:tasks.results,staff:staff.results,costs:costs.results,audit:audit.results,notes:notes.results},{headers:{"Cache-Control":"no-store"}});
+    return Response.json({actor,deals:deals.results,customers:customers.results,tasks:tasks.results,staff:staff.results,costs:costs.results,audit:audit.results,notes:notes.results,stages:stageOptions.map(item=>[item.id,item.label])},{headers:{"Cache-Control":"no-store"}});
   }catch(e){return fail(e);}
 }
 export async function POST(request: Request) {
@@ -26,6 +30,14 @@ export async function POST(request: Request) {
       const id = owner ? String(value||actor.id) : actor.id;
       if(!await db.prepare("SELECT id FROM staff WHERE id=? AND active=1").bind(id).first())throw new HttpError(400,"Сотрудник недоступен");
       return id;
+    }
+    if(action==="save_stages"){
+      needOwner();if(!Array.isArray(body.stages)||body.stages.length<3||body.stages.length>12)throw new HttpError(400,"Воронка должна содержать от 3 до 12 этапов");
+      const configured=body.stages.map(value=>{if(!value||typeof value!=="object"||Array.isArray(value))throw new HttpError(400,"Проверьте этапы");const entry=value as Record<string,unknown>,id=cleanText(entry.id,40,true),label=cleanText(entry.label,60,true);if(!/^[a-z][a-z0-9_]{1,39}$/.test(id))throw new HttpError(400,"Некорректный код этапа");return {id,label}}),ids=new Set(configured.map(item=>item.id));
+      if(ids.size!==configured.length||!["new","won","lost"].every(id=>ids.has(id)))throw new HttpError(400,"Сохраните уникальные этапы «Новая», «Продано» и «Закрыто»");
+      const used=await db.prepare("SELECT DISTINCT stage FROM crm_deals WHERE archived=0").all<{stage:string}>(),missing=used.results.find(row=>!ids.has(row.stage));if(missing)throw new HttpError(409,"Сначала перенесите сделки с удаляемого этапа");
+      await db.batch([db.prepare("INSERT INTO site_settings(key,value,version) VALUES('crm_pipeline_stages',?,1) ON CONFLICT(key) DO UPDATE SET value=excluded.value,version=site_settings.version+1").bind(JSON.stringify(configured)),auditStatement(actor,"Настроена воронка","crm_pipeline_stages",configured.map(item=>item.label).join(" → "))]);
+      return Response.json({ok:true});
     }
     if(action==="update_customer"){
       const id=cleanText(body.id,100,true);
@@ -57,6 +69,7 @@ export async function POST(request: Request) {
       const id=cleanText(body.id,100,true),deal=await visibleDeal(actor,id);
       const moving=action==="move_deal";
       const stage=cleanText(body.stage,30,true), reason=cleanText(body.lossReason??(deal.stage==="lost"?"Закрыто ранее":""),1000),amount=moving?deal.amount_minor:minor(body.amount);
+      if(!(await loadStages()).some(item=>item.id===stage))throw new HttpError(400,"Этап больше не доступен");
       canTransition(deal.stage,stage,actor.role,reason,amount);
       const assigned=moving?deal.assigned_to:owner?await assignee(body.assignedTo):deal.assigned_to;
       if(Number(body.version)!==deal.version)throw new HttpError(409,"Запись изменена другим сотрудником. Обновите данные.");
@@ -118,7 +131,7 @@ export async function POST(request: Request) {
         auditStatement(actor,action,id),
       ]);
     }else if(action==="save_preferences"){
-      const theme=String(body.theme);if(!["field","light","dark"].includes(theme))throw new HttpError(400,"Неизвестная тема");
+      const theme=String(body.theme);if(!["field","light","dark","blue","violet","forest","red"].includes(theme))throw new HttpError(400,"Неизвестная тема");
       await db.prepare("UPDATE staff SET theme=?,display_name=?,phone=? WHERE id=?").bind(theme,cleanText(body.displayName,120,true),cleanText(body.phone??"",40),actor.id).run();
     }else{throw new HttpError(400,"Неизвестное действие");}
     return Response.json({ok:true});

@@ -11,8 +11,9 @@ import { LeadForm } from "./LeadForm";
 import { Link } from "./SiteLink";
 import { TractorCard } from "./TractorCard";
 import { useI18n } from "./I18n";
+import type { LeasePublicConfig } from "../lib/leasing";
 
-export function ProductDetailClient({ tractor, related }: { tractor: Tractor; related: Tractor[] }) {
+export function ProductDetailClient({ tractor, related, leasingConfig }: { tractor: Tractor; related: Tractor[]; leasingConfig:LeasePublicConfig }) {
   const { t } = useI18n();
   const rawGallery = (tractor.images?.length ? tractor.images : [tractor.image]).slice(0, 7);
   const preferredIndex = rawGallery.findIndex((image) => !image.includes("/images/tractors"));
@@ -87,7 +88,7 @@ export function ProductDetailClient({ tractor, related }: { tractor: Tractor; re
       </div>
     </section>
 
-    <div className="section-shell product-lease"><FinanceCalculator tractor={tractor}/></div>
+    <div className="section-shell product-lease"><FinanceCalculator tractor={tractor} config={leasingConfig}/></div>
     <ProductVideo tractor={tractor}/>
     <section className="product-request-v3" id="request"><div className="section-shell product-request-inner"><div><span className="section-label light">{t("product.requestLabel")}</span><h2>{t("product.requestTitle", { model: tractor.model })}</h2><p>{t("product.requestText")}</p></div><LeadForm tractorSlug={tractor.slug} tractorModel={tractor.model} /></div></section>
 

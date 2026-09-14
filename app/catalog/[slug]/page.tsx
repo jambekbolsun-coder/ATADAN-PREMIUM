@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { ProductDetailClient } from "../../components/ProductDetailClient";
 import { getCatalog, getTractor } from "../../lib/catalog";
+import { getLeasingPublicConfig } from "../../lib/leasing-public";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -16,7 +17,7 @@ export default async function TractorDetail({ params }: { params: Promise<{ slug
   const { slug } = await params;
   const tractor = await getTractor(slug);
   if (!tractor) notFound();
-  const catalog = await getCatalog();
+  const [catalog,leasingConfig] = await Promise.all([getCatalog(),getLeasingPublicConfig()]);
   const related = catalog.filter((item) => item.slug !== tractor.slug).sort((a, b) => Math.abs(a.hp - tractor.hp) - Math.abs(b.hp - tractor.hp)).slice(0, 3);
-  return <ProductDetailClient tractor={tractor} related={related} />;
+  return <ProductDetailClient tractor={tractor} related={related} leasingConfig={leasingConfig} />;
 }

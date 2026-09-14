@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronLeft, ChevronRight, Clipboard, Clock3, GripVertical, Plus, RefreshCw, ShieldCheck, UserRoundPlus } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Clipboard, Clock3, GripVertical, Plus, RefreshCw, Settings2, ShieldCheck, Trash2, UserRoundPlus } from "lucide-react";
 import Image from "next/image";
 import QRCode from "qrcode";
 import { type DragEvent, FormEvent, useCallback, useEffect, useState } from "react";
@@ -15,8 +15,8 @@ type Staff = { id:string; display_name:string; email:string; role:string; active
 type Cost = { slug:string; cost_minor:number; version:number };
 type Audit = { id:string; action:string; entity_id:string; detail:string; created_at:string; display_name:string|null };
 type Note = { id:string; deal_id:string; body:string; created_at:string; display_name:string };
-type CrmData = { actor:Actor; deals:Deal[]; customers:Customer[]; tasks:Task[]; staff:Staff[]; costs:Cost[]; audit:Audit[]; notes:Note[] };
-const stages = [["new","Новая заявка"],["ai","AI-консультация"],["qualified","Квалифицирован"],["meeting","Встреча"],["negotiation","Переговоры"],["reserved","Бронь"],["contract","Договор"],["awaiting_payment","Ожидание оплаты"],["won","Успешно продано"],["lost","Закрыто"]] as const;
+type StageOption=[string,string];
+type CrmData = { actor:Actor; deals:Deal[]; customers:Customer[]; tasks:Task[]; staff:Staff[]; costs:Cost[]; audit:Audit[]; notes:Note[]; stages:StageOption[] };
 const money=(minor:number)=>new Intl.NumberFormat("ru-RU").format(Math.round(minor/100))+" сом";
 
 export function AdminCRM({mode,catalog,onSessionChange}:{mode:CrmMode;catalog:Tractor[];onSessionChange?:(actor:Actor)=>void}) {
@@ -65,6 +65,7 @@ export function AdminCRM({mode,catalog,onSessionChange}:{mode:CrmMode;catalog:Tr
 
 function Deals({data,catalog,action}:{data:CrmData;catalog:Tractor[];action:(p:Record<string,unknown>)=>Promise<unknown>}) {
   const [dragOver,setDragOver]=useState<string|null>(null);
+  const [settingsOpen,setSettingsOpen]=useState(false);
   async function create(event:FormEvent<HTMLFormElement>){
     event.preventDefault();const f=new FormData(event.currentTarget);
     await action({action:"create_deal",name:f.get("name"),phone:f.get("phone"),title:f.get("title"),tractorSlug:f.get("tractorSlug"),amount:Number(f.get("amount")||0),assignedTo:f.get("assignedTo")});
@@ -92,11 +93,13 @@ function Deals({data,catalog,action}:{data:CrmData;catalog:Tractor[];action:(p:R
       {["owner","director"].includes(data.actor.role)?<label><span>Ответственный</span><select name="assignedTo">{data.staff.filter(s=>s.active).map(s=><option key={s.id} value={s.id}>{s.display_name}</option>)}</select></label>:null}
       <button className="admin-primary" type="submit"><Plus size={17}/>Создать</button>
     </form>
-    <section className="crm-pipeline" aria-label="Воронка сделок"><header><div><span>Воронка продаж</span><h2>Перетаскивайте сделки между этапами</h2></div><p><GripVertical/>Можно мышкой или кнопками в карточке</p></header><div className="crm-kanban">{stages.map(([id,label])=>{const deals=data.deals.filter(deal=>deal.stage===id);return <section className={`crm-kanban-column stage-${id}${dragOver===id?" drag-over":""}`} key={id} onDragEnter={()=>setDragOver(id)} onDragOver={event=>event.preventDefault()} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))setDragOver(null)}} onDrop={event=>drop(event,id)}><header><span>{label}</span><b>{deals.length}</b></header><div>{deals.map(deal=><DealCard key={deal.id} deal={deal} data={data} action={action} move={target=>void moveDeal(deal,target)}/>)}</div>{!deals.length?<p className="crm-kanban-empty">Перетащите сделку сюда</p>:null}</section>})}</div></section>
+    <section className="crm-pipeline" aria-label="Воронка сделок"><header><div><span>Воронка продаж</span><h2>Перетаскивайте сделки между этапами</h2></div><div className="pipeline-actions"><p><GripVertical/>Можно мышкой или кнопками</p>{["owner","director"].includes(data.actor.role)?<button type="button" onClick={()=>setSettingsOpen(value=>!value)}><Settings2/>Настроить этапы</button>:null}</div></header>{settingsOpen?<StageSettings stages={data.stages} close={()=>setSettingsOpen(false)} action={action}/>:null}<div className="crm-kanban">{data.stages.map(([id,label])=>{const deals=data.deals.filter(deal=>deal.stage===id);return <section className={`crm-kanban-column stage-${id}${dragOver===id?" drag-over":""}`} key={id} onDragEnter={()=>setDragOver(id)} onDragOver={event=>event.preventDefault()} onDragLeave={event=>{if(!event.currentTarget.contains(event.relatedTarget as Node))setDragOver(null)}} onDrop={event=>drop(event,id)}><header><span>{label}</span><b>{deals.length}</b></header><div>{deals.map(deal=><DealCard key={deal.id} deal={deal} data={data} stages={data.stages} action={action} move={target=>void moveDeal(deal,target)}/>)}</div>{!deals.length?<p className="crm-kanban-empty">Перетащите сделку сюда</p>:null}</section>})}</div></section>
   </>;
 }
 
-function DealCard({deal,data,action,move}:{deal:Deal;data:CrmData;action:(p:Record<string,unknown>)=>Promise<unknown>;move:(stage:string)=>void}){
+function StageSettings({stages,close,action}:{stages:StageOption[];close:()=>void;action:(payload:Record<string,unknown>)=>Promise<unknown>}){const [items,setItems]=useState<StageOption[]>(stages.map(item=>[...item]));const locked=new Set(["new","won","lost"]);function add(){if(items.length>=12)return;setItems(current=>[...current,[`stage_${Date.now()}`,"Новый этап"]])}async function save(){await action({action:"save_stages",stages:items.map(([id,label])=>({id,label}))});close()}return <div className="pipeline-settings"><header><div><strong>Этапы воронки</strong><small>До 12 этапов. Системные этапы сохраняют автоматизацию продаж.</small></div><button type="button" onClick={add} disabled={items.length>=12}><Plus/>Добавить</button></header><div>{items.map(([id,label],index)=><label key={id}><span>{index+1}</span><input value={label} maxLength={60} onChange={event=>setItems(current=>current.map((item,itemIndex)=>itemIndex===index?[item[0],event.target.value]:item))}/><button type="button" disabled={locked.has(id)} onClick={()=>setItems(current=>current.filter(item=>item[0]!==id))} aria-label={`Удалить этап ${label}`}><Trash2/></button></label>)}</div><footer><button type="button" onClick={close}>Отмена</button><button className="admin-primary" type="button" onClick={()=>void save()}><Check/>Сохранить этапы</button></footer></div>}
+
+function DealCard({deal,data,stages,action,move}:{deal:Deal;data:CrmData;stages:StageOption[];action:(p:Record<string,unknown>)=>Promise<unknown>;move:(stage:string)=>void}){
   const [loss,setLoss]=useState(deal.loss_reason||"");
   const [note,setNote]=useState("");
   async function update(event:FormEvent<HTMLFormElement>){event.preventDefault();const f=new FormData(event.currentTarget);await action({action:"update_deal",id:deal.id,version:deal.version,stage:f.get("stage"),amount:Number(f.get("amount")||0),assignedTo:f.get("assignedTo"),lossReason:loss});}

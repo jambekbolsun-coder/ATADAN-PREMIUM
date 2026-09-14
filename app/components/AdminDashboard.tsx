@@ -2,15 +2,16 @@
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { BarChart3, Bell, Bot, Calculator, Check, ChevronRight, CircleUserRound, Eye, EyeOff, Gauge, Landmark, LayoutDashboard, ListChecks, LoaderCircle, LogOut, MapPinned, Menu, MessageSquareText, Newspaper, Pencil, Percent, Plus, Search, Settings, ShieldCheck, Sparkles, Tractor, Trash2, TrendingUp, UsersRound, Warehouse, Wrench, X } from "lucide-react";
+import { BarChart3, Bell, Bot, Calculator, Check, ChevronDown, ChevronRight, CircleUserRound, CreditCard, Eye, EyeOff, FolderKanban, Gauge, Landmark, LayoutDashboard, ListChecks, LoaderCircle, LogOut, MapPinned, Menu, MessageCircleMore, MessageSquareText, Newspaper, PackageSearch, Pencil, Percent, Plus, Search, Settings, ShieldCheck, Sparkles, Tractor, Trash2, TrendingUp, UserRoundCog, UsersRound, Warehouse, Wrench, X } from "lucide-react";
 import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Lead, NewsPost, Tractor as TractorType } from "../types";
 import { AdminNewsManager } from "./AdminNewsManager";
 import { AdminCRM, type CrmMode } from "./AdminCRM";
 import { AdminSiteSettings } from "./AdminSiteSettings";
-import { AdminPortalHome, type AdminWorkspace } from "./AdminPortalHome";
+import type { AdminWorkspace } from "./AdminPortalHome";
 import { AdminWorkspaceOverview } from "./AdminWorkspaceOverview";
 import { AdminRecordsManager, type RecordKind } from "./AdminRecordsManager";
+import { AdminCollaboration, type CollaborationMode } from "./AdminCollaboration";
 
 type DashboardData = {
   actor: { id:string; email:string; display_name:string; role:"owner"|"director"|"manager"|"accountant"|"marketer"; theme:string; phone:string; avatar:string|null };
@@ -36,28 +37,74 @@ type DashboardData = {
   };
 };
 
-type SectionDef={id:string;label:string;icon:typeof LayoutDashboard;kind?:RecordKind;ownerOnly?:boolean;navHidden?:boolean};
+type ActorRole=DashboardData["actor"]["role"];
+type SectionDef={id:string;label:string;icon:typeof LayoutDashboard;kind?:RecordKind;ownerOnly?:boolean;navHidden?:boolean;roles?:ActorRole[]};
 const workspaceSections:Record<AdminWorkspace,SectionDef[]>={
   marketing:[
-    {id:"overview",label:"Маркетинг",icon:LayoutDashboard,navHidden:true},{id:"catalog",label:"Каталог",icon:Tractor},{id:"news",label:"Новости · Публикации",icon:Newspaper},{id:"public-service",label:"Сервис",icon:Wrench,kind:"service_pages"},{id:"faq",label:"Чатбот",icon:Bot,kind:"faq"},{id:"leasing",label:"Лизинг и рассрочка",icon:Landmark,kind:"leasing_terms"},
+    {id:"overview",label:"Маркетинг",icon:LayoutDashboard,navHidden:true},
+    {id:"catalog",label:"Каталог товаров",icon:Tractor},
+    {id:"parts",label:"Запчасти",icon:PackageSearch,kind:"parts"},
+    {id:"news",label:"Новости · Публикации",icon:Newspaper},
+    {id:"public-service",label:"Сервис",icon:Wrench,kind:"service_pages"},
+    {id:"faq",label:"Чатбот · FAQ",icon:Bot,kind:"faq"},
+    {id:"leasing",label:"Лизинг и рассрочка",icon:Landmark,kind:"leasing_terms"},
+    {id:"leasing-models",label:"Условия по моделям",icon:Tractor,kind:"leasing_model_terms"},
+    {id:"promotions",label:"Акции",icon:Percent,kind:"promotions"},
+    {id:"leasing-applications",label:"Заявки на лизинг",icon:CreditCard,kind:"leasing_applications"},
+    {id:"site-leads",label:"Заявки с сайта",icon:MessageSquareText},
+    {id:"site-analytics",label:"Аналитика сайта",icon:BarChart3},
+    {id:"site-settings",label:"Настройки сайта",icon:Settings},
   ],
   company:[
-    {id:"overview",label:"Управление компанией",icon:LayoutDashboard,navHidden:true},{id:"deals",label:"Сделки",icon:Gauge},{id:"inventory-units",label:"Склад",icon:Warehouse,kind:"inventory_units"},{id:"sales",label:"Продажи",icon:TrendingUp,kind:"sales"},{id:"suppliers",label:"Поставщики",icon:UsersRound,kind:"suppliers"},{id:"finance",label:"Расходы",icon:Calculator,kind:"finance_entries"},{id:"team",label:"Сотрудники",icon:CircleUserRound},
+    {id:"overview",label:"Управление компанией",icon:LayoutDashboard,navHidden:true},
+    {id:"deals",label:"Воронка продаж",icon:Gauge,roles:["owner","director","manager"]},
+    {id:"client-base",label:"Клиенты",icon:UsersRound,roles:["owner","director","manager"]},
+    {id:"inventory-units",label:"Склад",icon:Warehouse,roles:["owner","director","manager"]},
+    {id:"sales",label:"Продажи",icon:TrendingUp,kind:"sales",roles:["owner","director","manager"]},
+    {id:"suppliers",label:"Поставщики",icon:PackageSearch,kind:"suppliers",roles:["owner","director","manager","accountant"]},
+    {id:"expenses",label:"Расходы",icon:Calculator,kind:"finance_entries",roles:["owner","director","accountant"]},
+    {id:"finance",label:"Финансы",icon:CreditCard,roles:["owner","director","accountant"]},
+    {id:"payroll",label:"Зарплаты",icon:CircleUserRound,kind:"payroll",roles:["owner","director","accountant"]},
+    {id:"payments",label:"Платежи",icon:CreditCard,kind:"payments",roles:["owner","director","accountant","manager"]},
+    {id:"debts",label:"Задолженности",icon:Landmark,kind:"debts",roles:["owner","director","accountant"]},
+    {id:"employee-tasks",label:"Задачи",icon:ListChecks},
+    {id:"notifications",label:"Уведомления",icon:Bell},
+    {id:"chat",label:"Чат",icon:MessageCircleMore},
+    {id:"groups",label:"Группы",icon:FolderKanban},
+    {id:"team",label:"Сотрудники",icon:UserRoundCog,roles:["owner","director"]},
+    {id:"audit",label:"Журнал действий",icon:ShieldCheck,roles:["owner","director"]},
   ],
   control:[
-    {id:"overview",label:"Сводка директора",icon:LayoutDashboard},{id:"control-plan",label:"План / факт",icon:Gauge},{id:"control-models",label:"Аналитика моделей",icon:Tractor},{id:"control-demand",label:"Спрос и регионы",icon:MapPinned},{id:"control-stock",label:"Риски склада",icon:Warehouse},{id:"control-managers",label:"Менеджеры",icon:UsersRound},{id:"control-attribution",label:"Сквозная аналитика",icon:BarChart3},{id:"control-forecast",label:"Прогноз",icon:TrendingUp},{id:"control-ai",label:"AI-директор",icon:Bot},{id:"profile",label:"Профиль",icon:Settings},
+    {id:"overview",label:"Рабочий стол",icon:LayoutDashboard},{id:"control-plan",label:"План / факт",icon:Gauge,roles:["owner","director"]},{id:"control-models",label:"Аналитика моделей",icon:Tractor,roles:["owner","director"]},{id:"control-demand",label:"Спрос и регионы",icon:MapPinned,roles:["owner","director"]},{id:"control-stock",label:"Риски склада",icon:Warehouse,roles:["owner","director"]},{id:"control-managers",label:"Менеджеры",icon:UsersRound,roles:["owner","director"]},{id:"control-attribution",label:"Сквозная аналитика",icon:BarChart3,roles:["owner","director"]},{id:"control-forecast",label:"Прогноз",icon:TrendingUp,roles:["owner","director"]},{id:"control-ai",label:"AI-директор",icon:Bot,roles:["owner","director"]},{id:"profile",label:"Мой профиль",icon:Settings},
   ],
 };
 type SectionId=string;
-const workspaceNames:Record<AdminWorkspace,string>={marketing:"Маркетинг",company:"Управление компанией",control:"Центр управления"};
+const workspaceNames:Record<AdminWorkspace,string>={marketing:"Маркетинг",company:"CRM и компания",control:"Рабочий стол"};
+type NavItem={workspace:AdminWorkspace;section:string};
+type NavGroup={id:string;label:string;items:NavItem[]};
+const navGroups:NavGroup[]=[
+  {id:"marketing",label:"Маркетинг",items:[
+    {workspace:"marketing",section:"catalog"},{workspace:"marketing",section:"parts"},{workspace:"marketing",section:"news"},{workspace:"marketing",section:"public-service"},{workspace:"marketing",section:"leasing"},{workspace:"marketing",section:"leasing-models"},{workspace:"marketing",section:"promotions"},{workspace:"marketing",section:"leasing-applications"},{workspace:"marketing",section:"faq"},{workspace:"marketing",section:"site-leads"},{workspace:"marketing",section:"site-analytics"},
+  ]},
+  {id:"crm",label:"CRM и компания",items:[
+    {workspace:"company",section:"deals"},{workspace:"company",section:"client-base"},{workspace:"company",section:"inventory-units"},{workspace:"company",section:"sales"},{workspace:"company",section:"suppliers"},{workspace:"company",section:"expenses"},{workspace:"company",section:"finance"},{workspace:"company",section:"payroll"},{workspace:"company",section:"payments"},{workspace:"company",section:"debts"},{workspace:"company",section:"employee-tasks"},
+  ]},
+  {id:"team",label:"Совместная работа",items:[
+    {workspace:"company",section:"notifications"},{workspace:"company",section:"chat"},{workspace:"company",section:"groups"},{workspace:"company",section:"team"},
+  ]},
+  {id:"system",label:"Настройки и контроль",items:[
+    {workspace:"control",section:"profile"},{workspace:"marketing",section:"site-settings"},{workspace:"company",section:"audit"},{workspace:"control",section:"control-plan"},{workspace:"control",section:"control-models"},{workspace:"control",section:"control-demand"},{workspace:"control",section:"control-stock"},{workspace:"control",section:"control-managers"},{workspace:"control",section:"control-attribution"},{workspace:"control",section:"control-forecast"},{workspace:"control",section:"control-ai"},
+  ]},
+];
 
 export function AdminDashboard({initialWorkspace=null,initialSection="overview"}:{initialWorkspace?:AdminWorkspace|null;initialSection?:string}={}) {
   const [authenticated, setAuthenticated] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState<DashboardData | null>(null);
   const [section, setSection] = useState<SectionId>(initialSection);
-  const [workspace, setWorkspace] = useState<AdminWorkspace | null>(initialWorkspace);
+  const [workspace, setWorkspace] = useState<AdminWorkspace>(initialWorkspace ?? "control");
   const [sidebar, setSidebar] = useState(false);
+  const [openGroups,setOpenGroups]=useState<Record<string,boolean>>({marketing:true,crm:true,team:false,system:false});
   const [productEditor, setProductEditor] = useState<TractorType | null>(null);
   const [toast, setToast] = useState("");
   const [dashboardError,setDashboardError]=useState("");
@@ -89,7 +136,7 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
     const handlePopState=()=>{
       const parts=window.location.pathname.split("/").filter(Boolean);
       if(parts[0]!=="admin"){return}
-      const nextWorkspace=(["marketing","company","control"] as const).find(value=>value===parts[1])??null;
+      const nextWorkspace=(["marketing","company","control"] as const).find(value=>value===parts[1])??"control";
       setWorkspace(nextWorkspace);
       setSection(parts[2]||"overview");
     };
@@ -97,9 +144,9 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
     return()=>window.removeEventListener("popstate",handlePopState);
   },[]);
 
-  function openWorkspace(choice:AdminWorkspace){setWorkspace(choice);setSection("overview");window.history.pushState({},"",`/admin/${choice}/overview`)}
-  function openSection(id:string){if(!workspace)return;setSection(id);setSidebar(false);window.history.pushState({},"",`/admin/${workspace}/${id}`)}
-  function closeWorkspace(){setWorkspace(null);setSection("overview");setSidebar(false);window.history.pushState({},"","/admin")}
+  function openSection(id:string){setSection(id);setSidebar(false);window.history.pushState({},"",`/admin/${workspace}/${id}`)}
+  function navigateTo(target:NavItem){setWorkspace(target.workspace);setSection(target.section);setSidebar(false);window.history.pushState({},"",`/admin/${target.workspace}/${target.section}`)}
+  function toggleGroup(id:string){setOpenGroups(current=>({...current,[id]:!current[id]}))}
 
   async function login(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -127,7 +174,8 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
     await fetch("/api/admin/session", { method: "DELETE" });
     setAuthenticated(false);
     setData(null);
-    setWorkspace(null);
+    setWorkspace("control");
+    setSection("overview");
   }
 
   if (authenticated === null) return <div className="admin-loader"><LoaderCircle className="spin" /><span>Загружаем кабинет</span></div>;
@@ -151,31 +199,42 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
   );
 
   if (!data) return <div className="admin-loader">{dashboardError?<><ShieldCheck/><span>{dashboardError}</span><button type="button" onClick={()=>void load()}>Повторить</button></>:<><LoaderCircle className="spin" /><span>Загружаем данные</span></>}</div>;
-  if (!workspace) return <AdminPortalHome actor={data.actor} onChoose={openWorkspace} onLogout={logout}/>;
   const newLeads = data?.leads.filter((lead) => lead.status === "new").length ?? 0;
   const director=data.actor.role==="owner"||data.actor.role==="director";
-  const visibleSections=workspaceSections[workspace].filter(item=>!item.ownerOnly||director);
+  const visibleSections=workspaceSections[workspace].filter(item=>(!item.ownerOnly||director)&&(!item.roles||item.roles.includes(data.actor.role)));
   const activeDefinition=visibleSections.find(item=>item.id===section)??visibleSections[0];
   const renderedSection=activeDefinition?.id??"overview";
+  const activeGroup=navGroups.find(group=>group.items.some(item=>item.workspace===workspace&&item.section===renderedSection));
+  const definitionFor=(target:NavItem)=>workspaceSections[target.workspace].find(item=>item.id===target.section);
+  const crmMode:CrmMode|null=renderedSection==="client-base"?"customers":renderedSection==="employee-tasks"?"tasks":(["deals","team","costs","audit"] as CrmMode[]).includes(renderedSection as CrmMode)?renderedSection as CrmMode:null;
   return (
-    <main className="admin-shell" data-admin-theme={data.profile?.theme ?? "field"} data-workspace={workspace}>
+    <main className="admin-shell admin-shell-unified" data-admin-theme={data.profile?.theme ?? "field"} data-workspace={workspace}>
       <aside className={`admin-sidebar ${sidebar ? "is-open" : ""}`}>
-        <div className="admin-logo"><Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={240} height={83} /><button type="button" onClick={() => setSidebar(false)} aria-label="Закрыть меню"><X /></button></div>
-        <button className="workspace-back" type="button" onClick={closeWorkspace}>← Все пространства</button>
-        <span className="workspace-sidebar-label">{workspaceNames[workspace]}</span>
-        <nav>{visibleSections.filter(item=>!item.navHidden).map(({id,label,icon:Icon}) => <button type="button" className={renderedSection === id ? "active" : ""} onClick={() => openSection(id)} key={id}><Icon size={19} />{label}</button>)}</nav>
+        <div className="admin-logo"><span><Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={240} height={83} /><small>рабочее пространство</small></span><button type="button" onClick={() => setSidebar(false)} aria-label="Закрыть меню"><X /></button></div>
+        <nav className="admin-unified-nav" aria-label="Основная навигация">
+          <button type="button" className={workspace==="control"&&renderedSection==="overview"?"active":""} onClick={()=>navigateTo({workspace:"control",section:"overview"})}><LayoutDashboard size={19}/>Рабочий стол</button>
+          {navGroups.map(group=>{
+            const items=group.items.map(target=>({target,definition:definitionFor(target)})).filter((item):item is {target:NavItem;definition:SectionDef}=>Boolean(item.definition&&(!item.definition.roles||item.definition.roles.includes(data.actor.role))&&(!item.definition.ownerOnly||director)));
+            if(!items.length)return null;
+            const expanded=Boolean(openGroups[group.id]);
+            return <section className="admin-nav-folder" key={group.id}><button className="admin-nav-folder-toggle" type="button" aria-expanded={expanded} onClick={()=>toggleGroup(group.id)}><span>{group.label}</span><ChevronDown aria-hidden="true"/></button>{expanded?<div>{items.map(({target,definition})=>{const Icon=definition.icon;const active=workspace===target.workspace&&renderedSection===target.section;return <button type="button" className={active?"active":""} onClick={()=>navigateTo(target)} key={`${target.workspace}-${target.section}`}><Icon size={18}/>{definition.label}</button>})}</div>:null}</section>
+          })}
+        </nav>
         <div className="admin-sidebar-footer"><AvatarVisual avatar={data?.profile?.avatar ?? null} size={38} /><div><strong>{data?.profile?.display_name ?? "Администратор"}</strong><span>{data?.profile?.email}</span></div><button type="button" onClick={logout} aria-label="Выйти"><LogOut size={18} /></button></div>
       </aside>
       <section className="admin-main">
-        <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / {workspaceNames[workspace]}</span><h1>{activeDefinition?.label}</h1></div><div className="admin-header-tools"><button type="button" onClick={()=>workspace==="company"?openSection("deals"):window.location.assign("/admin/company/deals")} aria-label="Открыть новые заявки в сделках"><Bell size={18} />{newLeads ? <b>{newLeads}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
+        <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / {activeGroup?.label??workspaceNames[workspace]}</span><h1>{activeDefinition?.label}</h1></div><div className="admin-header-tools"><button type="button" onClick={()=>navigateTo({workspace:"company",section:"notifications"})} aria-label="Открыть уведомления"><Bell size={18} />{newLeads ? <b>{newLeads}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
         {renderedSection === "overview" ? <AdminWorkspaceOverview workspace={workspace} data={data} onNavigate={openSection} onSaveGoals={async goals=>action({action:"save_goals",goals})}/> : null}
-        {(["deals","customers","tasks","team","costs","audit"] as CrmMode[]).includes(renderedSection as CrmMode) ? <AdminCRM mode={renderedSection as CrmMode} catalog={data?.catalog ?? []} /> : null}
+        {crmMode ? <AdminCRM mode={crmMode} catalog={data?.catalog ?? []} /> : null}
         {renderedSection === "catalog" ? <Products data={data} edit={setProductEditor} remove={(slug) => action({ action: "delete_product", slug })} /> : null}
         {renderedSection === "news" ? <AdminNewsManager posts={data?.posts ?? []} catalog={data?.catalog ?? []} popularPosts={data?.popularPosts ?? []} save={async (post, originalSlug) => { await action({ action: "save_news", post, originalSlug }); }} remove={async (slug) => { await action({ action: "delete_news", slug }); }} /> : null}
         {renderedSection === "site-leads" ? <Leads data={data} update={(id, status) => action({ action: "lead_status", id, status })} /> : null}
         {renderedSection === "site-analytics" ? <Analytics data={data} /> : null}
         {renderedSection === "profile" ? <Profile data={data} save={(profile) => action({ action: "save_profile", profile })} /> : null}
         {renderedSection === "site-settings" ? <AdminSiteSettings /> : null}
+        {renderedSection === "inventory-units" ? <InventoryCatalog data={data}/> : null}
+        {renderedSection === "finance" ? <FinanceCenter data={data} navigate={navigateTo}/> : null}
+        {(["notifications","chat","groups"] as CollaborationMode[]).includes(renderedSection as CollaborationMode) ? <AdminCollaboration mode={renderedSection as CollaborationMode}/> : null}
         {activeDefinition?.kind ? <AdminRecordsManager key={activeDefinition.kind} kind={activeDefinition.kind}/> : null}
         {workspace==="control"&&renderedSection!=="overview"?<DirectorDetail section={renderedSection} data={data} onNavigate={openSection}/>:null}
       </section>
@@ -191,6 +250,20 @@ function AvatarVisual({ avatar, size }: { avatar: string | null; size: number })
 }
 
 function Metric({ label, value, icon: Icon, note }: { label: string; value: string | number; icon: typeof Gauge; note: string }) { return <article className="metric-card"><div><span>{label}</span><strong>{value}</strong><small>{note}</small></div><i><Icon size={21} /></i></article>; }
+
+function InventoryCatalog({data}:{data:DashboardData}){
+  const [query,setQuery]=useState("");
+  const products=data.catalog.filter(item=>`${item.model} ${item.category} ${item.hp}`.toLowerCase().includes(query.toLowerCase()));
+  return <div className="inventory-center"><section className="admin-content"><div className="admin-panel inventory-catalog-panel"><div className="records-intro inventory-heading"><div><span>Единый каталог</span><h2>Все товары уже связаны со складом</h2><p>Карточка товара используется на публичном сайте и в складском учёте. Для физической единицы добавьте VIN и статус ниже.</p></div><label><Search aria-hidden="true"/><input value={query} onChange={event=>setQuery(event.target.value)} placeholder="Модель, мощность или категория" aria-label="Поиск по складскому каталогу"/></label></div><div className="inventory-catalog-grid">{products.map(product=><article key={product.slug}><span><Image src={product.image} alt={`Changfa ${product.model}`} width={150} height={105}/></span><div><small>{product.category}</small><h3>Changfa {product.model}</h3><p>{product.hp} л.с. · {product.inStock?"доступен к продаже":"под заказ"}</p></div><strong>{product.price?`${new Intl.NumberFormat("ru-RU").format(product.price)} сом`:"Цена по запросу"}</strong></article>)}</div>{!products.length?<div className="admin-empty"><Search/><h3>Товары не найдены</h3><p>Измените поисковый запрос.</p></div>:null}</div></section><AdminRecordsManager kind="inventory_units"/></div>;
+}
+
+function FinanceCenter({data,navigate}:{data:DashboardData;navigate:(target:NavItem)=>void}){
+  const deals=data.director?.deals,operations=data.director?.operations;
+  const revenue=Math.round((deals?.revenue_minor??0)/100),expenses=Math.round(operations?.expenses_som??0),profit=Math.round((deals?.profit_minor??0)/100),balance=revenue-expenses;
+  const money=(value:number)=>new Intl.NumberFormat("ru-RU").format(value)+" сом";
+  const links:[string,string,typeof Calculator][]=[["expenses","Расходы",Calculator],["payroll","Зарплаты",CircleUserRound],["payments","Платежи",CreditCard],["debts","Задолженности",Landmark]];
+  return <div className="admin-content finance-center"><section className="admin-panel finance-summary"><header><div><span>Управленческий учёт</span><h2>Финансы компании</h2><p>Выручка, расходы и прибыль рассчитаны только по сохранённым сделкам и операциям.</p></div><b>За всё время</b></header><div className="finance-summary-grid"><Metric label="Заработали" value={money(revenue)} icon={TrendingUp} note="выигранные сделки"/><Metric label="Потратили" value={money(expenses)} icon={Calculator} note="проведённые расходы"/><Metric label="Прибыль" value={money(profit)} icon={BarChart3} note="с заполненной себестоимостью"/><Metric label="Денежный остаток" value={money(balance)} icon={CreditCard} note="выручка минус расходы"/></div></section><section className="admin-panel finance-journal-links"><div className="panel-head"><div><span>Финансовый журнал</span><h2>Операции и обязательства</h2></div></div>{links.map(([section,label,Icon])=><button type="button" key={section} onClick={()=>navigate({workspace:"company",section})}><Icon aria-hidden="true"/><span><strong>{label}</strong><small>Открыть записи, фильтры и добавление</small></span><ChevronRight aria-hidden="true"/></button>)}</section></div>;
+}
 
 function Products({ data, edit, remove }: { data: DashboardData | null; edit: (product: TractorType) => void; remove: (slug: string) => void }) {
   const [query, setQuery] = useState("");
@@ -247,7 +320,7 @@ function AiDirector({data}:{data:DashboardData}){const [question,setQuestion]=us
 
 function Profile({ data, save }: { data: DashboardData | null; save: (profile: { displayName: string; phone: string; avatar:string; theme:string }) => void }) {
   function submit(event: FormEvent<HTMLFormElement>) { event.preventDefault(); const f = new FormData(event.currentTarget); save({ displayName: String(f.get("displayName")), phone: String(f.get("phone")), avatar:String(f.get("avatar")), theme:String(f.get("theme")) }); }
-  return <div className="admin-content"><form className="admin-panel profile-form" onSubmit={submit}><div className="profile-heading"><AvatarVisual avatar={data?.profile?.avatar ?? null} size={92} /><div><span className="panel-kicker">Настройки аккаунта</span><h2>Профиль сотрудника</h2><p>Данные хранятся в SQL и доступны на любом устройстве.</p></div></div><div className="profile-fields"><label><span>Имя</span><input name="displayName" defaultValue={data?.profile?.display_name} required /></label><label><span>Рабочий телефон</span><input name="phone" defaultValue={data?.profile?.phone} /></label><label><span>Email для входа</span><input value={data?.profile?.email ?? ""} readOnly /></label><label><span>Ссылка на аватар</span><input name="avatar" type="url" defaultValue={data?.profile?.avatar ?? ""} placeholder="https://…"/></label><label><span>Фон кабинета</span><select name="theme" defaultValue={data?.profile?.theme ?? "field"}><option value="field">Поле</option><option value="light">Светлый</option><option value="dark">Тёмный</option></select></label></div><button type="submit" className="admin-primary">Сохранить профиль</button></form></div>;
+  return <div className="admin-content"><form className="admin-panel profile-form" onSubmit={submit}><div className="profile-heading"><AvatarVisual avatar={data?.profile?.avatar ?? null} size={92} /><div><span className="panel-kicker">Настройки аккаунта</span><h2>Профиль сотрудника</h2><p>Имя, контакты, фотография и личная цветовая тема синхронизируются на всех устройствах.</p></div></div><div className="profile-fields"><label><span>ФИО</span><input name="displayName" defaultValue={data?.profile?.display_name} required /></label><label><span>Рабочий телефон</span><input name="phone" defaultValue={data?.profile?.phone} /></label><label><span>Email для входа</span><input value={data?.profile?.email ?? ""} readOnly /></label><label><span>Ссылка на аватар</span><input name="avatar" type="url" defaultValue={data?.profile?.avatar ?? ""} placeholder="https://…"/></label><label><span>Цвет кабинета</span><select name="theme" defaultValue={data?.profile?.theme ?? "blue"}><option value="blue">Синий</option><option value="violet">Фиолетовый</option><option value="forest">Тёмно-зелёный</option><option value="red">Красный</option></select></label></div><button type="submit" className="admin-primary">Сохранить профиль</button></form></div>;
 }
 
 function emptyProduct(): TractorType { return { id: crypto.randomUUID(), slug: "", model: "", hp: 50, category: "Универсальные", farmArea: "до 30 га", price: null, discountPercent: null, promotionLabel: null, inStock: true, status:"draft", sortOrder:0, image: "/images/tractors-4k/cfb504-x.webp", images: ["/images/tractors-4k/cfb504-x.webp"], videoUrl: null, description: "", comfort: "", equipment: [], specs: {} }; }
