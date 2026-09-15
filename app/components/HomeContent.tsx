@@ -1,7 +1,6 @@
 "use client";
 import { Instagram } from "./BrandIcons";
 
-import Image from "next/image";
 import { ArrowDown, ArrowUpRight, BadgeCheck, Banknote, Headphones, Pause, Play, ShieldCheck, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Tractor } from "../types";
@@ -12,6 +11,7 @@ import { TractorCard } from "./TractorCard";
 import { useI18n } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
 import { ResponsiveHeroMedia } from "./ResponsiveHeroMedia";
+import { ViewportVideo } from "./ViewportVideo";
 
 const heroSlides = [
   { image: "/images/hero/atadan-field-wide.png", mobile: "/images/hero/atadan-field-mobile.png", key: "slide1", position: "center" },
@@ -79,13 +79,10 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
 
     <section className="support-story section-shell">
       <div className="support-photo">
-        <Image src="/images/hero/atadan-field-original.png" alt="Трактор Changfa в поле" fill sizes="(max-width: 820px) 100vw, 50vw" />
-        <div className="support-photo-caption"><strong>ATADAN</strong><span>Changfa · Kyrgyzstan</span></div>
+        <ViewportVideo src="/videos/editorial/home-cab-10s-v2.mp4" poster="/images/series/changfa-cabin-4k.webp" label={t("home.supportVideoLabel")} className="support-video" />
       </div>
       <div className="support-copy">
-        <span className="section-label">{t("home.supportLabel")}</span>
-        <h2>{t("home.supportTitle")}</h2>
-        <p>{t("home.supportText")}</p>
+        <div className="support-intro"><span className="section-label">{t("home.supportLabel")}</span><h2>{t("home.supportTitle")}</h2><p>{t("home.supportText")}</p></div>
         <div className="support-list">
           <article><BadgeCheck /><div><strong>{t("home.official")}</strong><span>{t("home.officialText")}</span></div></article>
           <article><Wrench /><div><strong>{t("home.service")}</strong><span>{t("home.serviceText")}</span></div></article>

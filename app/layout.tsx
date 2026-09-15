@@ -48,7 +48,7 @@ export default async function RootLayout({
   const [{ settings },faqRecords] = await Promise.all([getSiteSettings(),getPublishedRecords("faq")]);
   const faqs=faqRecords.map(record=>({id:record.id,question:record.data.question||record.title,answer:record.data.answer||record.subtitle,buttonLabel:record.data.buttonLabel,buttonUrl:record.data.buttonUrl})).filter(item=>item.question&&item.answer);
   return (
-    <html lang="ru" className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="ru" data-scroll-behavior="smooth" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="antialiased"><SiteSettingsProvider value={settings}><AppChrome faqs={faqs}>{children}</AppChrome></SiteSettingsProvider></body>
     </html>
   );

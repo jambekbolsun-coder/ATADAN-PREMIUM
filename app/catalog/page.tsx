@@ -10,5 +10,5 @@ export default async function CatalogPage({ searchParams }: { searchParams: Prom
   const [tractors,parts] = await Promise.all([getCatalog(),getPublishedRecords("parts")]);
   const { power, search, popular } = await searchParams;
   const initialPower = Number.parseInt(power ?? "", 10);
-  return <main><PageHero image="/images/banners/catalog.webp" kickerId="catalog.kicker" titleId="catalog.title" subtitleId="catalog.subtitle" values={{ count: tractors.length }} /><div className="section-shell catalog-shell"><CatalogExplorer tractors={tractors} parts={parts} initialPower={Number.isFinite(initialPower) ? initialPower : undefined} initialQuery={search ?? ""} initialPopular={popular === "1"} /></div></main>;
+  return <main><PageHero image="/images/banners/catalog.webp" video="/videos/editorial/catalog-field-10s-v2.mp4" kickerId="catalog.kicker" titleId="catalog.title" subtitleId="catalog.subtitle" values={{ count: tractors.length }} /><div className="section-shell catalog-shell"><CatalogExplorer tractors={tractors} parts={parts} initialPower={Number.isFinite(initialPower) ? initialPower : undefined} initialQuery={search ?? ""} initialPopular={popular === "1"} /></div></main>;
 }

@@ -4,9 +4,11 @@ import { Link } from "./SiteLink";
 import { ChevronRight } from "lucide-react";
 import { useI18n } from "./I18n";
 import { ResponsiveHeroMedia } from "./ResponsiveHeroMedia";
+import { ViewportVideo } from "./ViewportVideo";
 
 type PageHeroProps = {
   image: string;
+  video?: string;
   kickerId: string;
   titleId: string;
   subtitleId: string;
@@ -14,12 +16,12 @@ type PageHeroProps = {
   pageLabelId?: string;
 };
 
-export function PageHero({ image, kickerId, titleId, subtitleId, values, pageLabelId }: PageHeroProps) {
+export function PageHero({ image, video, kickerId, titleId, subtitleId, values, pageLabelId }: PageHeroProps) {
   const { t } = useI18n();
-  const mediaName=image.split("/").pop()?.replace(/\.[a-z0-9]+$/i,"").replace(/[^a-z0-9-]/gi,"-").toLowerCase()||"default";
+  const mediaName=(video ?? image).split("/").pop()?.replace(/\.[a-z0-9]+$/i,"").replace(/[^a-z0-9-]/gi,"-").toLowerCase()||"default";
   return (
     <section className={`page-hero page-hero-image page-hero-${mediaName}`}>
-      <ResponsiveHeroMedia image={image} priority />
+      {video ? <ViewportVideo src={video} poster={image} label={t(titleId, values)} className="page-hero-video" priority /> : <ResponsiveHeroMedia image={image} priority />}
       <div className="page-hero-overlay" />
       <div className="page-hero-content">
         <nav className="page-breadcrumb" aria-label="Хлебные крошки">
