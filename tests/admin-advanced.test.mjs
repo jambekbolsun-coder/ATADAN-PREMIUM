@@ -50,3 +50,13 @@ test("lead submission stays inside CRM without WhatsApp automation", async () =>
   assert.doesNotMatch(form, /wa\.me|window\.open/);
   assert.match(form, /\/api\/leads/);
 });
+
+test("staff login uses a PostgreSQL-safe rate-limit upsert", async () => {
+  const [security, session] = await Promise.all([
+    source("../app/lib/security.ts"),
+    source("../app/api/admin/session/route.ts"),
+  ]);
+  assert.match(security, /SET hits=request_limits\.hits\+1 RETURNING hits/);
+  assert.match(session, /authenticateStaff\(username, password, request\)/);
+  assert.match(session, /createStaffSession\(actor, request\)/);
+});

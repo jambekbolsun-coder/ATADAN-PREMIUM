@@ -16,7 +16,13 @@ export async function POST(request: Request) {
     const actor = await authenticateStaff(username, password, request);
     if (!actor) throw new HttpError(401, "Неверный логин или пароль");
     return Response.json({ authenticated:true }, {headers:{"Set-Cookie":await createStaffSession(actor, request),"Cache-Control":"no-store"}});
-  } catch(e) { return fail(e); }
+  } catch(e) {
+    if (!(e instanceof HttpError) || e.status >= 500) {
+      const error=e as Error & {code?:string};
+      console.error("[admin/session] login failed", {name:error?.name,message:error?.message,code:error?.code});
+    }
+    return fail(e);
+  }
 }
 export async function DELETE(request: Request) {
   try { sameOrigin(request); await ensureDb(); const headers = new Headers({"Cache-Control":"no-store"}); headers.append("Set-Cookie",await revokeStaffSession(request)); headers.append("Set-Cookie",clearAdminCookie()); return Response.json({authenticated:false},{headers}); } catch(e) {return fail(e);}

@@ -35,7 +35,7 @@ export async function digest(value: string) { return Array.from(new Uint8Array(a
 export async function rateLimit(key: string, max: number, windowSeconds: number) {
   const bucket = Math.floor(Date.now() / 1000 / windowSeconds);
   const id = await digest(`${key}:${bucket}`);
-  const row = await getRawDb().prepare(`INSERT INTO request_limits (id, hits, expires_at) VALUES (?,1,?) ON CONFLICT(id) DO UPDATE SET hits=hits+1 RETURNING hits`).bind(id, (bucket + 1) * windowSeconds).first<{hits:number}>();
+  const row = await getRawDb().prepare(`INSERT INTO request_limits (id, hits, expires_at) VALUES (?,1,?) ON CONFLICT(id) DO UPDATE SET hits=request_limits.hits+1 RETURNING hits`).bind(id, (bucket + 1) * windowSeconds).first<{hits:number}>();
   if ((row?.hits ?? 0) > max) throw new HttpError(429, "Слишком много попыток. Подождите несколько минут.");
 }
 export function fail(error: unknown) {
