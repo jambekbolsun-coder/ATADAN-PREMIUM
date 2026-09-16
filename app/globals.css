@@ -2509,13 +2509,13 @@ html.lenis,html.lenis body{height:auto}
 
 /* 2026-09-16: requested header, news media, favicon and loading states */
 .brand{
-  width:210px;
-  height:68px;
+  width:190px;
+  height:62px;
   padding:4px 0;
   overflow:visible;
 }
 .brand img{
-  width:210px;
+  width:190px;
   height:auto;
   object-fit:contain;
 }
@@ -2596,12 +2596,12 @@ html.lenis,html.lenis body{height:auto}
 @keyframes atadan-loader-in{from{opacity:0}to{opacity:1}}
 
 @media(max-width:1060px){
-  .brand{width:164px;height:58px}
-  .brand img{width:164px}
+  .brand{width:154px;height:55px}
+  .brand img{width:154px}
 }
 @media(max-width:620px){
-  .brand{width:148px;height:52px}
-  .brand img{width:148px}
+  .brand{width:140px;height:50px}
+  .brand img{width:140px}
   .news-hero{min-height:500px}
   .news-hero>.news-hero-video{top:-18%!important;height:165%!important;object-position:62% center}
   .news-hero-caption{width:calc(100% - 40px);padding:24px 0 4px}

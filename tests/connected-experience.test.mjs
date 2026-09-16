@@ -64,8 +64,8 @@ test("catalog, news and home support use distinct ten-second viewport videos", a
   assert.match(contacts, /contacts-cfk2404-g4-v3\.png/);
 });
 
-test("classic site wordmark, premium favicon and reference-style loaders are wired", async () => {
-  const [header, footer, dashboard, chrome, loader, transition, css, layout, manifest, logo] = await Promise.all([
+test("classic site wordmark, installable PWA assets and reference-style loaders are wired", async () => {
+  const [header, footer, dashboard, chrome, loader, transition, css, layout, manifest, worker, icon192, icon512] = await Promise.all([
     source("app/components/SiteHeader.tsx"),
     source("app/components/SiteFooter.tsx"),
     source("app/components/AdminDashboard.tsx"),
@@ -75,7 +75,9 @@ test("classic site wordmark, premium favicon and reference-style loaders are wir
     source("app/globals.css"),
     source("app/layout.tsx"),
     source("public/manifest.webmanifest"),
-    readFile(new URL("public/atadan-premium-logo.png", project)),
+    source("public/sw.js"),
+    readFile(new URL("public/icons/atadan-app-192.png", project)),
+    readFile(new URL("public/icons/atadan-app-512.png", project)),
   ]);
   assert.match(header, /atadan-logo-cropped\.png/);
   assert.match(footer, /atadan-logo-cropped\.png/);
@@ -89,9 +91,15 @@ test("classic site wordmark, premium favicon and reference-style loaders are wir
   assert.doesNotMatch(transition, /location\.assign|preventDefault/);
   assert.match(css, /#071c10/i);
   assert.match(css, /#79c94b/i);
-  assert.match(layout, /atadan-premium-logo\.png/);
-  assert.match(manifest, /atadan-premium-logo\.png/);
-  assert.ok(logo.byteLength > 1_000_000, "the supplied high-resolution logo is included");
+  assert.match(layout, /atadan-app-192\.png/);
+  assert.match(manifest, /"sizes":"192x192"/);
+  assert.match(manifest, /"sizes":"512x512"/);
+  assert.match(manifest, /"display": "standalone"/);
+  assert.match(worker, /atadan-shell-v2/);
+  assert.equal(icon192.readUInt32BE(16), 192);
+  assert.equal(icon192.readUInt32BE(20), 192);
+  assert.equal(icon512.readUInt32BE(16), 512);
+  assert.equal(icon512.readUInt32BE(20), 512);
 });
 
 test("visible app copy no longer contains em dash placeholders", async () => {

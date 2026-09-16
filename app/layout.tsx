@@ -21,9 +21,9 @@ export const metadata: Metadata = {
   title: "ATADAN Changfa: тракторы в Кыргызстане",
   description: "Официальный дистрибьютор тракторов Changfa. Подбор техники, лизинг, гарантия и сервис в Кыргызстане.",
   icons: {
-    icon: [{ url: "/atadan-premium-logo.png", type: "image/png", sizes: "1254x1254" }],
-    shortcut: "/atadan-premium-logo.png",
-    apple: "/atadan-premium-logo.png",
+    icon: [{ url: "/icons/atadan-app-192.png", type: "image/png", sizes: "192x192" }],
+    shortcut: "/icons/atadan-app-192.png",
+    apple: "/icons/atadan-app-192.png",
   },
   manifest: "/manifest.webmanifest",
   openGraph: {
