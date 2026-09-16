@@ -28,7 +28,7 @@ export default function JoinTeamPage(){
     history.replaceState(null,"",location.pathname);setStatus("done");setMessage("");
   }
   return <main className="join-page"><section className="join-card">
-    <Image className="premium-brand-image" src="/atadan-premium-logo.png" alt="ATADAN, официальный дистрибьютор Changfa" width={1254} height={1254}/>
+    <Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={250} height={86}/>
     {status==="loading"?<div className="join-state"><LoaderCircle className="spin"/><h1>Проверяем приглашение</h1></div>:null}
     {status==="error"?<div className="join-state error"><ShieldCheck/><h1>Ссылка недоступна</h1><p>{message}</p><Link href="/admin">Вернуться ко входу</Link></div>:null}
     {status==="done"?<div className="join-state success"><CheckCircle2/><h1>Аккаунт создан</h1><p>Теперь войдите с адресом <strong>{email}</strong> и новым паролем.</p><Link className="admin-primary" href="/admin">Войти в кабинет</Link></div>:null}

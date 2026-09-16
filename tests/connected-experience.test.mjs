@@ -64,8 +64,8 @@ test("catalog, news and home support use distinct ten-second viewport videos", a
   assert.match(contacts, /contacts-cfk2404-g4-v3\.png/);
 });
 
-test("premium brand, admin loader and public transition loader are wired", async () => {
-  const [header, footer, dashboard, chrome, loader, transition, css, logo] = await Promise.all([
+test("classic site wordmark, premium favicon and reference-style loaders are wired", async () => {
+  const [header, footer, dashboard, chrome, loader, transition, css, layout, manifest, logo] = await Promise.all([
     source("app/components/SiteHeader.tsx"),
     source("app/components/SiteFooter.tsx"),
     source("app/components/AdminDashboard.tsx"),
@@ -73,17 +73,24 @@ test("premium brand, admin loader and public transition loader are wired", async
     source("app/components/AtadanLoader.tsx"),
     source("app/components/PageTransitionLoader.tsx"),
     source("app/globals.css"),
+    source("app/layout.tsx"),
+    source("public/manifest.webmanifest"),
     readFile(new URL("public/atadan-premium-logo.png", project)),
   ]);
-  assert.match(header, /atadan-premium-logo\.png/);
-  assert.match(footer, /atadan-premium-logo\.png/);
+  assert.match(header, /atadan-logo-cropped\.png/);
+  assert.match(footer, /atadan-logo-cropped\.png/);
+  assert.match(dashboard, /atadan-logo-cropped\.png/);
+  assert.doesNotMatch(header, /atadan-premium-logo\.png/);
   assert.match(dashboard, /<AtadanLoader/);
   assert.match(chrome, /<PageTransitionLoader key=\{pathname\}\/>/);
   assert.match(loader, /role="status"/);
+  assert.match(loader, /atadan-loader-wheel/);
   assert.match(transition, /setVisible\(true\)/);
   assert.doesNotMatch(transition, /location\.assign|preventDefault/);
-  assert.match(css, /#23816f/i);
-  assert.match(css, /#43c97a/i);
+  assert.match(css, /#071c10/i);
+  assert.match(css, /#79c94b/i);
+  assert.match(layout, /atadan-premium-logo\.png/);
+  assert.match(manifest, /atadan-premium-logo\.png/);
   assert.ok(logo.byteLength > 1_000_000, "the supplied high-resolution logo is included");
 });
 

@@ -184,7 +184,7 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
     <main className="admin-login-page">
       <div className="admin-login-glow glow-one" aria-hidden="true"/><div className="admin-login-glow glow-two" aria-hidden="true"/>
       <section className="admin-login-brand" aria-label="ATADAN CRM">
-        <Image className="premium-brand-image" src="/atadan-premium-logo.png" alt="ATADAN, официальный дистрибьютор Changfa" width={1254} height={1254} priority />
+        <Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={360} height={125} priority />
         <div className="admin-login-story"><span><Sparkles/> ATADAN CRM</span><h2>Вся работа с техникой в одном пространстве</h2><p>Каталог, клиенты, сделки, заявки и аналитика доступны вашей команде в защищённом кабинете.</p></div>
         <div className="admin-login-trust"><ShieldCheck/><span><strong>Защищённый вход</strong><small>Данные передаются по шифрованному соединению</small></span></div>
       </section>
@@ -213,7 +213,7 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
   return (
     <main className="admin-shell admin-shell-unified" data-admin-theme={data.profile?.theme ?? "field"} data-workspace={workspace}>
       <aside className={`admin-sidebar ${sidebar ? "is-open" : ""}`}>
-        <div className="admin-logo"><span><Image className="premium-brand-image" src="/atadan-premium-logo.png" alt="ATADAN, официальный дистрибьютор Changfa" width={1254} height={1254} /><small>рабочее пространство</small></span><button type="button" onClick={() => setSidebar(false)} aria-label="Закрыть меню"><X /></button></div>
+        <div className="admin-logo"><span><Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={240} height={83} /><small>рабочее пространство</small></span><button type="button" onClick={() => setSidebar(false)} aria-label="Закрыть меню"><X /></button></div>
         <nav className="admin-unified-nav" aria-label="Основная навигация">
           <button type="button" className={workspace==="control"&&renderedSection==="overview"?"active":""} onClick={()=>navigateTo({workspace:"control",section:"overview"})}><LayoutDashboard size={19}/>Рабочий стол</button>
           {navGroups.map(group=>{

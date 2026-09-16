@@ -11,11 +11,10 @@ export function AtadanLoader({
 }: AtadanLoaderProps) {
   return (
     <div className={`atadan-loader ${className}`.trim()} role="status" aria-live="polite" aria-busy="true">
-      <div className="atadan-loader-inner">
+      <div className="atadan-loader-mark">
+        <span className="atadan-loader-wheel" aria-hidden="true" />
         <span className="atadan-loader-wordmark" aria-hidden="true">ATADAN</span>
-        <strong>{label}</strong>
-        <span className="atadan-loader-track" aria-hidden="true"><i /></span>
-        <small>{detail}</small>
+        <span className="atadan-loader-accessible">{label}. {detail}</span>
       </div>
     </div>
   );
