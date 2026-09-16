@@ -23,6 +23,8 @@ test("desktop header keeps search, stable navigation and the reference-style lan
   assert.match(header, /\["nav\.about", "\/about"\]/);
   assert.match(css, /header-actions>\.header-search\{display:flex!important/);
   assert.match(css, /\.desktop-nav a\{[^}]*white-space:nowrap/);
+  assert.match(css, /@media\(min-width:1480px\)[\s\S]*?\.desktop-nav a\{[^}]*font-size:15\.5px/);
+  assert.match(css, /@media\(min-width:1061px\) and \(max-width:1479px\)[\s\S]*?\.desktop-nav a\{[^}]*font-size:13\.5px/);
   assert.match(i18n, /language-options-label/);
   assert.match(i18n, /document\.addEventListener\("pointerdown", closeOutside\)/);
   assert.match(css, /\.language-options::before/);
@@ -63,13 +65,24 @@ test("catalog, news and home support use distinct ten-second viewport videos", a
 test("every 160-240 hp product clip is a real ten-second local MP4", async () => {
   const names = ["cfg1600", "cfg1600-h", "cfg1604-a", "cfh1604-m", "cfh1804-m", "cfj1804-g4", "cfj2004-g4", "cfj2204-g4", "cfk2304-g4", "cfk2404-g4"];
   for (const name of names) {
-    const buffer = await readFile(new URL(`public/videos/${name}-10s.mp4`, project));
-    assert.ok(mp4Duration(buffer) >= 9.95, `${name} duration is at least 9.95 seconds`);
+    const [hd, sd] = await Promise.all([
+      readFile(new URL(`public/videos/models/hd/${name}-10s.mp4`, project)),
+      readFile(new URL(`public/videos/models/sd/${name}-10s.mp4`, project)),
+    ]);
+    assert.ok(mp4Duration(hd) >= 9.95 && mp4Duration(hd) <= 10.05, `${name} HD duration is exactly ten seconds`);
+    assert.ok(mp4Duration(sd) >= 9.95 && mp4Duration(sd) <= 10.05, `${name} data-saver duration is exactly ten seconds`);
+    assert.ok(hd.byteLength > sd.byteLength, `${name} serves a lighter file on slow connections`);
   }
   const component = await source("app/components/ProductVideo.tsx");
   assert.match(component, /new IntersectionObserver/);
-  assert.match(component, /void v\.play\(\)/);
-  assert.match(component, /else v\.pause\(\)/);
+  assert.match(component, /void video\.play\(\)/);
+  assert.match(component, /else video\.pause\(\)/);
+  assert.match(component, /connection\.saveData/);
+  assert.match(component, /connection\.effectiveType/);
+  assert.match(component, /connection\.downlink < 3/);
+  assert.match(component, /videos\/models\/\$\{quality\}/);
+  assert.match(component, /AUTO · FULL HD/);
+  assert.match(component, /AUTO · DATA/);
   assert.doesNotMatch(component, /<video[^>]* controls/);
   assert.doesNotMatch(component, /10 секунд официальной динамики модели/);
   assert.match(component, /В интерактивном видео крупным планом показаны кабина/);
