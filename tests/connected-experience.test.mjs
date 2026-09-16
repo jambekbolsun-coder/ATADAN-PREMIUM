@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 
 const project = new URL("../", import.meta.url);
 const source = (path) => readFile(new URL(path, project), "utf8");
@@ -23,8 +23,8 @@ test("desktop header keeps search, stable navigation and the reference-style lan
   assert.match(header, /\["nav\.about", "\/about"\]/);
   assert.match(css, /header-actions>\.header-search\{display:flex!important/);
   assert.match(css, /\.desktop-nav a\{[^}]*white-space:nowrap/);
-  assert.match(css, /@media\(min-width:1480px\)[\s\S]*?\.desktop-nav a\{[^}]*font-size:15\.5px/);
-  assert.match(css, /@media\(min-width:1061px\) and \(max-width:1479px\)[\s\S]*?\.desktop-nav a\{[^}]*font-size:13\.5px/);
+  assert.match(css, /2026-09-16[\s\S]*?@media\(min-width:1480px\)[\s\S]*?\.desktop-nav a\{[^}]*font-size:16\.5px/);
+  assert.match(css, /2026-09-16[\s\S]*?@media\(min-width:1061px\) and \(max-width:1479px\)[\s\S]*?\.desktop-nav a\{[^}]*font-size:14\.5px/);
   assert.match(i18n, /language-options-label/);
   assert.match(i18n, /document\.addEventListener\("pointerdown", closeOutside\)/);
   assert.match(css, /\.language-options::before/);
@@ -48,18 +48,50 @@ test("catalog, news and home support use distinct ten-second viewport videos", a
     source("app/components/ViewportVideo.tsx"),
     source("app/contacts/page.tsx"),
   ]);
-  const clips = ["catalog-field-10s-v2", "news-field-10s-v2", "home-cab-10s-v2"];
+  const clips = ["catalog-field-10s-v2", "news-field-10s-v2", "home-cab-10s-v2", "selection-montage-10s"];
   for (const clip of clips) {
     const buffer = await readFile(new URL(`public/videos/editorial/${clip}.mp4`, project));
     assert.ok(mp4Duration(buffer) >= 9.95, `${clip} is a complete ten-second MP4`);
   }
   assert.match(catalog, /catalog-field-10s-v2\.mp4/);
   assert.match(news, /news-field-10s-v2\.mp4/);
+  assert.match(news, /selection-montage-10s\.mp4/);
+  assert.doesNotMatch(news, /news-hero-content|news-hero-shade/);
   assert.match(home, /home-cab-10s-v2\.mp4/);
   assert.match(viewport, /new IntersectionObserver/);
   assert.match(viewport, /prefers-reduced-motion/);
   assert.doesNotMatch(viewport, /controls\s*=/);
   assert.match(contacts, /contacts-cfk2404-g4-v3\.png/);
+});
+
+test("premium brand, admin loader and public transition loader are wired", async () => {
+  const [header, footer, dashboard, chrome, loader, transition, css, logo] = await Promise.all([
+    source("app/components/SiteHeader.tsx"),
+    source("app/components/SiteFooter.tsx"),
+    source("app/components/AdminDashboard.tsx"),
+    source("app/components/AppChrome.tsx"),
+    source("app/components/AtadanLoader.tsx"),
+    source("app/components/PageTransitionLoader.tsx"),
+    source("app/globals.css"),
+    readFile(new URL("public/atadan-premium-logo.png", project)),
+  ]);
+  assert.match(header, /atadan-premium-logo\.png/);
+  assert.match(footer, /atadan-premium-logo\.png/);
+  assert.match(dashboard, /<AtadanLoader/);
+  assert.match(chrome, /<PageTransitionLoader key=\{pathname\}\/>/);
+  assert.match(loader, /role="status"/);
+  assert.match(transition, /setVisible\(true\)/);
+  assert.doesNotMatch(transition, /location\.assign|preventDefault/);
+  assert.match(css, /#23816f/i);
+  assert.match(css, /#43c97a/i);
+  assert.ok(logo.byteLength > 1_000_000, "the supplied high-resolution logo is included");
+});
+
+test("visible app copy no longer contains em dash placeholders", async () => {
+  const entries = await readdir(new URL("app/", project), { recursive: true });
+  const files = entries.filter((entry) => /\.(?:ts|tsx|json)$/.test(entry));
+  const contents = await Promise.all(files.map((entry) => source(`app/${entry.replaceAll("\\", "/")}`)));
+  assert.doesNotMatch(contents.join("\n"), /—/);
 });
 
 test("every 160-240 hp product clip is a real ten-second local MP4", async () => {

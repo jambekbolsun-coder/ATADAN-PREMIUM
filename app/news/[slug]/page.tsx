@@ -7,9 +7,9 @@ import { getTractor } from "../../lib/catalog";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const post = await getNewsPost(slug);
-  if (!post) return { title: "Материал не найден — ATADAN" };
+  if (!post) return { title: "Материал не найден: ATADAN" };
   return {
-    title: `${post.title.ru} — ATADAN АгроЖурнал`,
+    title: `${post.title.ru}: ATADAN АгроЖурнал`,
     description: post.excerpt.ru,
     alternates: { canonical: `/news/${post.slug}` },
     openGraph: { title: post.title.ru, description: post.excerpt.ru, type: "article", publishedTime: post.publishedAt, images: [{ url: post.coverImage, alt: post.title.ru }] },

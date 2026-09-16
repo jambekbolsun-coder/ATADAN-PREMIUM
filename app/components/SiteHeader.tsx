@@ -62,8 +62,8 @@ export function SiteHeader() {
         </div>
       </div>
       <div className="site-header">
-        <Link href="/" className="brand" aria-label="ATADAN Changfa — на главную">
-          <Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={260} height={90} priority />
+        <Link href="/" className="brand" aria-label="ATADAN Changfa: на главную">
+          <Image className="premium-brand-image" src="/atadan-premium-logo.png" alt="ATADAN, официальный дистрибьютор Changfa" width={1254} height={1254} priority />
         </Link>
         <nav className="desktop-nav" aria-label="Основная навигация">
           {nav.map(([label, href]) => <Link href={href} className={isActive(href) ? "active" : ""} aria-current={isActive(href) ? "page" : undefined} key={href}>{t(label)}</Link>)}

@@ -6,7 +6,7 @@ import { useI18n } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
 
 const labels={
-  ru:{kicker:"Приезжайте в ATADAN",title:"Покажем технику и ответим на вопросы",text:"Бишкек, улица Шевченко, 114. Перед приездом позвоните — подготовим нужную модель и специалиста.",show:"Показать интерактивную карту",external:"Карта загрузится с OpenStreetMap только после нажатия.",route:"Построить маршрут"},
+  ru:{kicker:"Приезжайте в ATADAN",title:"Покажем технику и ответим на вопросы",text:"Бишкек, улица Шевченко, 114. Перед приездом позвоните: подготовим нужную модель и специалиста.",show:"Показать интерактивную карту",external:"Карта загрузится с OpenStreetMap только после нажатия.",route:"Построить маршрут"},
   ky:{kicker:"ATADANга келиңиз",title:"Техниканы көрсөтүп, суроолорго жооп беребиз",text:"Бишкек, Шевченко көчөсү, 114. Келерден мурун чалыңыз.",show:"Интерактивдүү картаны көрсөтүү",external:"Карта OpenStreetMapтан баскандан кийин гана жүктөлөт.",route:"Маршрут түзүү"},
   en:{kicker:"Visit ATADAN",title:"See the machinery and talk to a specialist",text:"114 Shevchenko Street, Bishkek. Call before visiting so we can prepare the right model and specialist.",show:"Show interactive map",external:"The OpenStreetMap frame loads only after you click.",route:"Get directions"},
 } as const;

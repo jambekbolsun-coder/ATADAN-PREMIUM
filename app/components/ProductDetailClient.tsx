@@ -38,7 +38,7 @@ export function ProductDetailClient({ tractor, related, leasingConfig }: { tract
           <div className={`gallery-main ${gallery[activeImage].includes("/images/tractors") ? "product-cutout" : "series-photo"}`}>
             <span className={`stock-badge ${tractor.inStock ? "available" : "order"}`}>{tractor.inStock ? t("product.inStock") : t("product.onOrder")}</span>
             {discount ? <span className="promotion-badge detail-promo"><small>{tractor.promotionLabel || t("product.promo")}</small><strong>−{discount}%</strong></span> : null}
-            <Image key={gallery[activeImage]} src={gallery[activeImage]} alt={`Changfa ${tractor.model} — ${t("product.photo", { current: activeImage + 1, total: gallery.length })}`} fill priority={activeImage === 0} sizes="(max-width: 900px) 100vw, 58vw" />
+            <Image key={gallery[activeImage]} src={gallery[activeImage]} alt={`Changfa ${tractor.model}: ${t("product.photo", { current: activeImage + 1, total: gallery.length })}`} fill priority={activeImage === 0} sizes="(max-width: 900px) 100vw, 58vw" />
             {gallery.length > 1 ? <div className="gallery-arrows"><button type="button" onClick={() => moveGallery(-1)} aria-label={t("product.prevPhoto")}><ArrowLeft /></button><button type="button" onClick={() => moveGallery(1)} aria-label={t("product.nextPhoto")}><ArrowRight /></button></div> : null}
             <span className="gallery-count">{t("product.photo", { current: activeImage + 1, total: gallery.length })}</span>
           </div>

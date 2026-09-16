@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { ArrowUpRight, Clock3, Search, Sparkles, Tractor } from "lucide-react";
+import { ArrowUpRight, Clock3, Search, Tractor } from "lucide-react";
 import { useMemo, useState } from "react";
 import { newsCategoryLabels } from "../data/news";
 import type { NewsCategory, NewsPost } from "../types";
@@ -38,18 +38,12 @@ export function NewsHub({ posts }: { posts: NewsPost[] }) {
   return <main className="news-hub">
     <section className="news-hero">
       <ViewportVideo src="/videos/editorial/news-field-10s-v2.mp4" poster="/images/news/journal-hero-4k.webp" label={labels.title} className="news-hero-video" priority />
-      <div className="news-hero-shade" />
-      <div className="section-shell news-hero-content">
-        <span><Sparkles size={15} /> {labels.brand}</span>
-        <h1>{labels.title}</h1>
-        <p>{labels.subtitle}</p>
-        <a href="#latest" className="news-hero-cta">{labels.cta}<ArrowUpRight size={18} /></a>
-      </div>
     </section>
+    <header className="news-hero-caption section-shell"><h1>{labels.title}</h1></header>
 
     <section className="news-feature section-shell" aria-label={featuredCopy.title}>
       <Link href={`/news/${featured.slug}`} className="news-feature-card">
-        <div className="news-feature-media"><Image src={featured.coverImage} alt={featuredCopy.title} fill sizes="(max-width: 900px) 100vw, 56vw" /></div>
+        <div className="news-feature-media news-feature-video-media"><ViewportVideo src="/videos/editorial/selection-montage-10s.mp4" poster={featured.coverImage} label={featuredCopy.title} className="news-selection-video" /></div>
         <div className="news-feature-copy"><span>{newsCategoryLabels[locale][featured.category]}</span><h2>{featuredCopy.title}</h2><p>{featuredCopy.excerpt}</p><div><small><Clock3 size={14} /> {featured.readingMinutes} {labels.read}</small><b>{labels.open}<ArrowUpRight size={17} /></b></div></div>
       </Link>
     </section>

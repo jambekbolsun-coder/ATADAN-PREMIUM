@@ -7,7 +7,7 @@ import { PageHero } from "../components/PageHero";
 import { FounderLetter } from "../components/FounderLetter";
 import { OfficeMap } from "../components/OfficeMap";
 
-export const metadata: Metadata = { title: "О компании ATADAN Changfa", description: "ATADAN — официальный дистрибьютор тракторов Changfa в Кыргызстане, 6 лет на рынке." };
+export const metadata: Metadata = { title: "О компании ATADAN Changfa", description: "ATADAN: официальный дистрибьютор тракторов Changfa в Кыргызстане, 6 лет на рынке." };
 
 export default function AboutPage() {
   return <main className="about-page-v2">
@@ -34,7 +34,7 @@ export default function AboutPage() {
     <section className="founder-message">
       <div className="section-shell founder-message-layout">
         <aside className="founder-profile">
-          <div className="founder-portrait"><Image src="/images/about/founder-portrait-4k.webp" alt="Islam Mirbek uulu — ATADAN" fill sizes="(max-width: 820px) 100vw, 38vw" /></div>
+          <div className="founder-portrait"><Image src="/images/about/founder-portrait-4k.webp" alt="Islam Mirbek uulu: ATADAN" fill sizes="(max-width: 820px) 100vw, 38vw" /></div>
           <div className="founder-identity"><span><Trans id="about.founderRole" /></span><h3><Trans id="about.founderName" /></h3><p>ATADAN · CHANGFA · Кыргызстан</p></div>
         </aside>
         <FounderLetter />

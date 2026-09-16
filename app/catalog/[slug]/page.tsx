@@ -8,7 +8,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   const { slug } = await params;
   const tractor = await getTractor(slug);
   if (!tractor) return { title: "Модель не найдена | ATADAN" };
-  return { title: `Changfa ${tractor.model} — ${tractor.hp} л.с. | ATADAN`, description: tractor.description, openGraph: { title: `Changfa ${tractor.model}`, description: tractor.description, images: tractor.imageUrl ? [{ url: tractor.imageUrl, alt: `Changfa ${tractor.model}` }] : [] }, twitter: { card: "summary_large_image", title: `Changfa ${tractor.model}`, description: tractor.description, images: tractor.imageUrl ? [tractor.imageUrl] : [] } };
+  return { title: `Changfa ${tractor.model}: ${tractor.hp} л.с. | ATADAN`, description: tractor.description, openGraph: { title: `Changfa ${tractor.model}`, description: tractor.description, images: tractor.imageUrl ? [{ url: tractor.imageUrl, alt: `Changfa ${tractor.model}` }] : [] }, twitter: { card: "summary_large_image", title: `Changfa ${tractor.model}`, description: tractor.description, images: tractor.imageUrl ? [tractor.imageUrl] : [] } };
 }
 
 export async function generateStaticParams() { return (await getCatalog()).map((tractor) => ({ slug: tractor.slug })); }
