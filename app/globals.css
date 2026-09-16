@@ -2540,9 +2540,9 @@ html.lenis,html.lenis body{height:auto}
 
 .news-hero{align-items:stretch;background:#071d11}
 .news-hero>.news-hero-video{
-  top:-12%!important;
+  top:-18%!important;
   bottom:auto!important;
-  height:150%!important;
+  height:165%!important;
   object-position:center 68%;
 }
 .news-hero-caption{
@@ -2658,7 +2658,7 @@ html.lenis,html.lenis body{height:auto}
 @media(max-width:620px){
   .brand{width:148px;height:52px;border-radius:11px}
   .news-hero{min-height:500px}
-  .news-hero>.news-hero-video{top:-12%!important;height:150%!important;object-position:62% center}
+  .news-hero>.news-hero-video{top:-18%!important;height:165%!important;object-position:62% center}
   .news-hero-caption{width:calc(100% - 40px);padding:24px 0 4px}
   .news-hero-caption h1{font-size:clamp(31px,10vw,43px)}
   .news-feature{padding-top:34px}
