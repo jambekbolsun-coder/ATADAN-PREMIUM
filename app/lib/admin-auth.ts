@@ -176,12 +176,12 @@ export function clearAdminCookie() {
 }
 
 export type StaffRole = "owner" | "director" | "manager" | "accountant" | "marketer";
-export const permissionSections = ["catalog","parts","news","public-service","faq","leasing","leasing-models","promotions","leasing-applications","site-leads","site-analytics","site-settings","deals","client-base","inventory-units","sales","suppliers","expenses","finance","payroll","payments","debts","employee-tasks","notifications","chat","groups","team","audit"] as const;
+export const permissionSections = ["catalog","parts","news","public-service","faq","leasing","leasing-models","promotions","leasing-applications","site-leads","site-analytics","site-settings","deals","client-base","inventory-units","sales","suppliers","purchases","shipments","expenses","finance","financial-accounts","payroll","payments","debts","documents","meetings","service-cases","employee-tasks","notifications","chat","groups","team","audit"] as const;
 export type PermissionSection = typeof permissionSections[number];
 const defaultPermissions: Record<StaffRole,PermissionSection[]> = {
   owner:[...permissionSections], director:[...permissionSections],
-  manager:["deals","client-base","inventory-units","sales","payments","employee-tasks","notifications","chat","groups","leasing-applications"],
-  accountant:["suppliers","expenses","finance","payroll","payments","debts","employee-tasks","notifications","chat","groups"],
+  manager:["deals","client-base","inventory-units","sales","meetings","documents","service-cases","payments","employee-tasks","notifications","chat","groups","leasing-applications"],
+  accountant:["suppliers","purchases","shipments","expenses","finance","financial-accounts","payroll","payments","debts","documents","employee-tasks","notifications","chat","groups"],
   marketer:["catalog","parts","news","public-service","faq","leasing","leasing-models","promotions","site-leads","site-analytics","employee-tasks","notifications","chat","groups"],
 };
 export type Actor = { id: string; email: string; display_name: string; role: StaffRole; active: number; theme: string; avatar: string | null; phone: string; position:string; department:string; skills:string; bio:string; permissions:PermissionSection[] };
@@ -194,7 +194,12 @@ function staffToken(request: Request) { return request.headers.get("cookie")?.sp
 export async function getActor(request: Request): Promise<Actor | null> {
   await ensureDb();
   const token = staffToken(request);
-  if (token) return actorFromRow(await getRawDb().prepare(`SELECT s.${ACTOR_FIELDS.split(",").join(",s.")} FROM staff s JOIN staff_sessions se ON se.staff_id=s.id WHERE se.token_hash=? AND se.expires_at>? AND s.active=1`).bind(await digest(token), Math.floor(Date.now()/1000)).first<ActorRow>());
+  if (token) {
+    const db=getRawDb(),tokenHash=await digest(token);
+    const row=await db.prepare(`SELECT s.${ACTOR_FIELDS.split(",").join(",s.")},se.id AS session_id,se.last_seen_at AS session_last_seen FROM staff s JOIN staff_sessions se ON se.staff_id=s.id WHERE se.token_hash=? AND se.expires_at>? AND s.active=1`).bind(tokenHash, Math.floor(Date.now()/1000)).first<ActorRow & {session_id:string|null;session_last_seen:string}>();
+    if(row?.session_id&&Date.now()-new Date(row.session_last_seen).getTime()>15*60*1000)await db.prepare("UPDATE staff_sessions SET last_seen_at=CURRENT_TIMESTAMP WHERE id=?").bind(row.session_id).run();
+    return actorFromRow(row);
+  }
   if (!(await isAdmin(request))) return null;
   const legacy = request.headers.get("cookie")?.split(";").map(v=>v.trim()).find(v=>v.startsWith(`${COOKIE_NAME}=`))?.slice(COOKIE_NAME.length+1).split(".")[0];
   if (!legacy) return null;
@@ -237,14 +242,19 @@ export async function authenticateStaff(email: string, password: string, request
 export async function createStaffSession(actor: Actor, request: Request) {
   const token = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
   const now=Math.floor(Date.now()/1000);
+  const ip=request.headers.get("cf-connecting-ip")||request.headers.get("x-forwarded-for")?.split(",")[0]||"local";
   await getRawDb().batch([
     getRawDb().prepare("DELETE FROM staff_sessions WHERE expires_at<=?").bind(now),
-    getRawDb().prepare("INSERT INTO staff_sessions(token_hash,staff_id,expires_at) VALUES(?,?,?)").bind(await digest(token),actor.id,now+SESSION_TTL_SECONDS),
+    getRawDb().prepare("INSERT INTO staff_sessions(token_hash,staff_id,expires_at,id,ip_hash,user_agent) VALUES(?,?,?,?,?,?)").bind(await digest(token),actor.id,now+SESSION_TTL_SECONDS,crypto.randomUUID(),await digest(ip),request.headers.get("user-agent")?.slice(0,500)??""),
+    getRawDb().prepare("INSERT INTO auth_events(id,staff_id,identifier,event_type,ip_hash,user_agent) VALUES(?,?,?,'login_success',?,?)").bind(crypto.randomUUID(),actor.id,actor.email,await digest(ip),request.headers.get("user-agent")?.slice(0,500)??""),
   ]);
   return `${STAFF_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_TTL_SECONDS}${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`;
 }
 export async function revokeStaffSession(request: Request) {
   const token = staffToken(request);
-  if (token) await getRawDb().prepare("DELETE FROM staff_sessions WHERE token_hash=?").bind(await digest(token)).run();
+  if (token) {
+    const tokenHash=await digest(token),session=await getRawDb().prepare("SELECT staff_id FROM staff_sessions WHERE token_hash=?").bind(tokenHash).first<{staff_id:string}>();
+    await getRawDb().batch([getRawDb().prepare("DELETE FROM staff_sessions WHERE token_hash=?").bind(tokenHash),getRawDb().prepare("INSERT INTO auth_events(id,staff_id,event_type) VALUES(?,?,'logout')").bind(crypto.randomUUID(),session?.staff_id??null)]);
+  }
   return `${STAFF_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
 }

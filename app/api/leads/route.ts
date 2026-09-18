@@ -1,6 +1,7 @@
 import { ensureDb, getRawDb } from "../../../db";
 import { getCatalog } from "../../lib/catalog";
 import { cleanText, digest, fail, HttpError, jsonBody, rateLimit, sameOrigin } from "../../lib/security";
+import { normalizePhone } from "../../lib/business";
 
 export async function POST(request: Request) {
   try {
@@ -9,6 +10,7 @@ export async function POST(request: Request) {
     if (body.website) return Response.json({ ok: true }, { status: 201 });
     const name = cleanText(body.name, 120, true);
     const phone = cleanText(body.phone, 40, true);
+    const normalizedPhone = normalizePhone(phone);
     const message = cleanText(body.message ?? "", 1000);
     if (body.consent !== true) throw new HttpError(400, "Необходимо согласие на обработку персональных данных");
     const consentVersion = cleanText(body.consentVersion ?? "", 40, true);
@@ -36,18 +38,29 @@ export async function POST(request: Request) {
     }
 
     const leadId = crypto.randomUUID();
-    const customerId = crypto.randomUUID();
+    const proposedCustomerId = crypto.randomUUID();
     const dealId = crypto.randomUUID();
     const assignee = await db.prepare("SELECT id FROM staff WHERE role='owner' AND active=1 ORDER BY created_at LIMIT 1").first<{id:string}>();
     const priceMinor = tractor?.price ? Math.round(tractor.price * (1 - (tractor.discountPercent ?? 0) / 100) * 100) : 0;
     const cost = tractor ? await db.prepare("SELECT cost_minor FROM product_costs WHERE slug=?").bind(tractor.slug).first<{cost_minor:number}>() : null;
+    const customer = await db.prepare(`INSERT INTO crm_customers(id,name,phone,normalized_phone,notes,source,tractor_slug,assigned_to)
+      VALUES(?,?,?,?,?,'website',?,?) ON CONFLICT(normalized_phone) WHERE normalized_phone IS NOT NULL AND normalized_phone<>'' AND archived=0
+      DO UPDATE SET name=CASE WHEN crm_customers.name='' THEN excluded.name ELSE crm_customers.name END,phone=excluded.phone,updated_at=CURRENT_TIMESTAMP,version=crm_customers.version+1
+      RETURNING id`).bind(proposedCustomerId,name,phone,normalizedPhone,message,tractor?.slug??null,assignee?.id??null).first<{id:string}>();
+    if(!customer)throw new HttpError(500,"Не удалось связать клиента");
+    const customerId=customer.id;
     try {
-      await db.batch([
-        db.prepare("INSERT INTO leads(id,tractor_slug,tractor_model,name,phone,message,source,consent_version,consent_at,source_path) VALUES(?,?,?,?,?,?,'website',?,?,?)").bind(leadId, tractor?.slug ?? null, tractor?.model ?? null, name, phone, message, consentVersion, consentAt, sourcePath),
-        db.prepare("INSERT INTO crm_customers(id,name,phone,notes,assigned_to) VALUES(?,?,?,?,?)").bind(customerId, name, phone, message, assignee?.id ?? null),
+      const statements = [
+        db.prepare("INSERT INTO leads(id,tractor_slug,tractor_model,name,phone,normalized_phone,customer_id,message,source,consent_version,consent_at,source_path) VALUES(?,?,?,?,?,?,?,?,'website',?,?,?)").bind(leadId, tractor?.slug ?? null, tractor?.model ?? null, name, phone, normalizedPhone, customerId, message, consentVersion, consentAt, sourcePath),
         db.prepare("INSERT INTO crm_deals(id,lead_id,customer_id,title,tractor_slug,amount_minor,cost_minor,assigned_to) VALUES(?,?,?,?,?,?,?,?)").bind(dealId, leadId, customerId, tractor ? `Заявка: Changfa ${tractor.model}` : "Подбор трактора Changfa", tractor?.slug ?? null, priceMinor, cost?.cost_minor ?? null, assignee?.id ?? null),
         db.prepare("INSERT INTO lead_requests(id,payload_hash,lead_id) VALUES(?,?,?)").bind(requestId, payloadHash, leadId),
-      ]);
+      ];
+      if(assignee?.id){
+        const due=new Date(Date.now()+30*60_000).toISOString();
+        statements.push(db.prepare("INSERT INTO crm_tasks(id,deal_id,customer_id,title,description,priority,assigned_to,due_at) VALUES(?,?,?,'Связаться с новым лидом','Новая заявка с публичного сайта','high',?,?)").bind(crypto.randomUUID(),dealId,customerId,assignee.id,due));
+        statements.push(db.prepare("INSERT INTO notifications_v2(id,recipient_id,type,priority,title,body,entity_type,entity_id,target_url) VALUES(?,?,'new_lead','high',?,?,'deal',?,'/admin/company/deals')").bind(crypto.randomUUID(),assignee.id,`Новый лид: ${name}`,phone,dealId));
+      }
+      await db.batch(statements);
     } catch (error) {
       const raced = await db.prepare("SELECT payload_hash,lead_id FROM lead_requests WHERE id=?").bind(requestId).first<{payload_hash:string;lead_id:string}>();
       if (raced?.payload_hash === payloadHash) return Response.json({ id: raced.lead_id, duplicate: true }, { status: 200 });

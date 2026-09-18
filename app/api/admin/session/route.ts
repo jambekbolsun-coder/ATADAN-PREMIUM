@@ -1,6 +1,6 @@
 import { authenticateStaff, clearAdminCookie, createStaffSession, getActor, revokeStaffSession } from "../../../lib/admin-auth";
-import { ensureDb } from "../../../../db";
-import { cleanText, fail, HttpError, jsonBody, rateLimit, sameOrigin } from "../../../lib/security";
+import { ensureDb, getRawDb } from "../../../../db";
+import { cleanText, digest, fail, HttpError, jsonBody, rateLimit, sameOrigin } from "../../../lib/security";
 export async function GET(request: Request) {
   try { const actor = await getActor(request); return Response.json({authenticated:!!actor, actor}, {headers:{"Cache-Control":"no-store"}}); } catch(e) { return fail(e); }
 }
@@ -14,7 +14,10 @@ export async function POST(request: Request) {
     await rateLimit(`login-ip:${ip}`, 30, 900);
     await rateLimit(`login:${ip}:${username}`, 8, 900);
     const actor = await authenticateStaff(username, password, request);
-    if (!actor) throw new HttpError(401, "Неверный логин или пароль");
+    if (!actor) {
+      await getRawDb().prepare("INSERT INTO auth_events(id,identifier,event_type,ip_hash,user_agent) VALUES(?,?,'login_failed',?,?)").bind(crypto.randomUUID(),username,await digest(ip),request.headers.get("user-agent")?.slice(0,500)??"").run();
+      throw new HttpError(401, "Неверный логин или пароль");
+    }
     return Response.json({ authenticated:true }, {headers:{"Set-Cookie":await createStaffSession(actor, request),"Cache-Control":"no-store"}});
   } catch(e) {
     if (!(e instanceof HttpError) || e.status >= 500) {

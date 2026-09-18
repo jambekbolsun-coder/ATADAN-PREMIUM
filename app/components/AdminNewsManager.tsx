@@ -30,6 +30,7 @@ export function AdminNewsManager({ posts, catalog, popularPosts, save, remove }:
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [editor, setEditor] = useState<EditorState | null>(null);
+  const [pendingDelete,setPendingDelete]=useState<NewsPost|null>(null);
   const visible = useMemo(() => posts.filter((post) => (status === "all" || post.status === status) && `${post.title.ru} ${post.tags.join(" ")}`.toLowerCase().includes(query.toLowerCase())), [posts, query, status]);
   const published = posts.filter((post) => post.status === "published").length;
   const views = new Map(popularPosts.map((item) => [item.path.replace(/^\/news\//, ""), Number(item.views)]));
@@ -41,10 +42,10 @@ export function AdminNewsManager({ posts, catalog, popularPosts, save, remove }:
       <div className="admin-news-list">{visible.map((post) => <article key={post.slug}>
         <div className="admin-news-cover"><Image src={post.coverImage} alt="" fill sizes="180px" />{post.featured ? <span><Star size={12} />Главная</span> : null}</div>
         <div className="admin-news-copy"><div><span>{categories.find(([id]) => id === post.category)?.[1]}</span><i className={post.status}>{post.status === "published" ? "Опубликовано" : post.status === "draft" ? "Черновик" : "Архив"}</i></div><h3>{post.title.ru || "Без названия"}</h3><p>{post.excerpt.ru || "Добавьте краткое описание публикации."}</p><small><CalendarDays size={13} />{new Date(`${post.publishedAt}T12:00:00`).toLocaleDateString("ru-RU")} · {post.readingMinutes} мин. · {views.get(post.slug) ?? 0} просмотров</small></div>
-        <div className="admin-news-actions">{post.status === "published" ? <Link href={`/news/${post.slug}`} target="_blank" aria-label={`Открыть ${post.title.ru}`}><Eye size={17} /></Link> : null}<button type="button" onClick={() => setEditor({ post: structuredClone(post), originalSlug: post.slug })} aria-label={`Изменить ${post.title.ru}`}><Pencil size={16} /></button><button type="button" className="danger" onClick={() => confirm(`Удалить «${post.title.ru}»?`) && void remove(post.slug)} aria-label={`Удалить ${post.title.ru}`}><Trash2 size={16} /></button><ChevronRight size={17} /></div>
+        <div className="admin-news-actions">{post.status === "published" ? <Link href={`/news/${post.slug}`} target="_blank" aria-label={`Открыть ${post.title.ru}`}><Eye size={17} /></Link> : null}<button type="button" onClick={() => setEditor({ post: structuredClone(post), originalSlug: post.slug })} aria-label={`Изменить ${post.title.ru}`}><Pencil size={16} /></button><button type="button" className="danger" onClick={() => setPendingDelete(post)} aria-label={`Архивировать ${post.title.ru}`}><Trash2 size={16} /></button><ChevronRight size={17} /></div>
       </article>)}</div>
     </div>
-    {editor ? <NewsEditor state={editor} catalog={catalog} close={() => setEditor(null)} save={async (post) => { await save(post, editor.originalSlug); setEditor(null); }} /> : null}
+    {editor ? <NewsEditor state={editor} catalog={catalog} close={() => setEditor(null)} save={async (post) => { await save(post, editor.originalSlug); setEditor(null); }} /> : null}{pendingDelete?<div className="news-editor-overlay"><div className="news-editor-backdrop"/><section className="news-editor compact-confirm" role="dialog" aria-modal="true" aria-labelledby="archive-news-title"><header><h2 id="archive-news-title">Архивировать публикацию?</h2></header><p>«{pendingDelete.title.ru}» будет скрыта, но сохранится в базе.</p><footer><button type="button" onClick={()=>setPendingDelete(null)}>Отмена</button><button type="button" className="danger" onClick={async()=>{const slug=pendingDelete.slug;setPendingDelete(null);await remove(slug)}}>Архивировать</button></footer></section></div>:null}
   </div>;
 }
 
@@ -67,7 +68,7 @@ function NewsEditor({ state, catalog, close, save }: { state: EditorState; catal
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!post.slug || !post.title.ru || !post.coverImage) return;
+    if (!post.slug || !post.title.ru.trim() || !post.excerpt.ru.trim() || !post.content.ru.trim() || !post.coverImage) return;
     setSaving(true);
     await save(post);
     setSaving(false);

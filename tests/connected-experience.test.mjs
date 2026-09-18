@@ -135,16 +135,15 @@ test("every 160-240 hp product clip is a real ten-second local MP4", async () =>
   assert.match(component, /В интерактивном видео крупным планом показаны кабина/);
 });
 
-test("admin navigation exposes only the requested marketing and company modules", async () => {
+test("admin navigation exposes connected marketing and company modules", async () => {
   const dashboard = await source("app/components/AdminDashboard.tsx");
   const marketing = dashboard.match(/marketing:\[(.*?)\],\s*company:/s)?.[1] ?? "";
   const company = dashboard.match(/company:\[(.*?)\],\s*control:/s)?.[1] ?? "";
   for (const id of ["catalog", "news", "public-service", "faq", "leasing"]) assert.match(marketing, new RegExp(`id:"${id}"`));
-  for (const id of ["deals", "inventory-units", "sales", "suppliers", "finance", "team"]) assert.match(company, new RegExp(`id:"${id}"`));
-  for (const id of ["documents", "meetings", "customers", "tasks"]) assert.doesNotMatch(company, new RegExp(`id:"${id}"`));
+  for (const id of ["deals", "client-base", "inventory-units", "sales", "suppliers", "purchases", "shipments", "financial-accounts", "documents", "meetings", "service-cases", "finance", "team"]) assert.match(company, new RegExp(`id:"${id}"`));
 });
 
-test("deal movement creates an idempotent sale and can update linked stock", async () => {
+test("deal movement creates one normalized sale and locks the linked VIN", async () => {
   const [crm, ui] = await Promise.all([
     source("app/api/admin/crm/route.ts"),
     source("app/components/AdminCRM.tsx"),
@@ -154,10 +153,11 @@ test("deal movement creates an idempotent sale and can update linked stock", asy
   assert.match(ui, /action:"move_deal"/);
   assert.match(crm, /action==="update_deal"\|\|action==="move_deal"/);
   assert.match(crm, /WHERE NOT EXISTS\(SELECT 1 FROM admin_records WHERE kind='sales'/);
-  assert.match(crm, /unitStatus:"Продан"/);
-  assert.match(crm, /json_extract\(data_json,'\$\.saleDealId'\)/);
-  assert.match(crm, /unitStatus:"На складе"/);
-  assert.match(crm, /delete data\.saleDealId/);
+  assert.match(crm, /INSERT INTO sales_v2/);
+  assert.match(crm, /ON CONFLICT\(deal_id\)/);
+  assert.match(crm, /status='sold'/);
+  assert.match(crm, /полной фактической оплаты/);
+  assert.match(crm, /подписанный договор/);
 });
 
 test("published service and FAQ records reach their public surfaces", async () => {

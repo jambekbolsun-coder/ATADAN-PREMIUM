@@ -27,7 +27,7 @@ test("tasks include priority, description, customer and assignee context", async
   ]);
   assert.match(schema, /priority: text\("priority"\)/);
   assert.match(schema, /customerId: text\("customer_id"\)/);
-  assert.match(route, /INSERT INTO crm_tasks\(id,deal_id,title,description,priority,customer_id,assigned_to,due_at\)/);
+  assert.match(route, /INSERT INTO crm_tasks\(id,deal_id,title,description,priority,customer_id,assigned_to,due_at,reminder_at,status\)/);
   assert.match(crm, /Срочно/);
   assert.match(crm, /Клиент/);
 });

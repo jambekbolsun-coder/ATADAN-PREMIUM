@@ -76,15 +76,16 @@ export async function GET(request: Request) {
       canAnalytics ? db.prepare("SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_id) AS visitors FROM interest_events").first() : Promise.resolve(null),
       canAnalytics ? db.prepare(`SELECT substr(created_at,1,10) AS day,COUNT(*) AS views FROM interest_events WHERE created_at>=datetime('now','-6 days') GROUP BY day ORDER BY day`).all() : Promise.resolve({ results: [] }),
       (canDeals || canFinance) ? db.prepare(`SELECT COUNT(*) AS total,
-        SUM(CASE WHEN archived=0 AND stage NOT IN ('won','lost') THEN 1 ELSE 0 END) AS active,
-        SUM(CASE WHEN stage='won' THEN 1 ELSE 0 END) AS won,
-        COALESCE(SUM(CASE WHEN stage='won' THEN amount_minor ELSE 0 END),0) AS revenue_minor,
-        COALESCE(SUM(CASE WHEN stage='won' AND cost_minor IS NOT NULL THEN amount_minor-cost_minor ELSE 0 END),0) AS profit_minor
-        FROM crm_deals`).first() : Promise.resolve(null),
+        (SELECT COUNT(*) FROM crm_deals WHERE archived=0 AND stage NOT IN ('won','lost')) AS active,
+        (SELECT COUNT(*) FROM sales_v2 WHERE archived=0) AS won,
+        (SELECT COALESCE(SUM(sale_amount_minor),0) FROM sales_v2 WHERE archived=0) AS revenue_minor,
+        (SELECT COALESCE(SUM(sale_amount_minor-cost_minor),0) FROM sales_v2 WHERE archived=0) AS profit_minor,
+        (SELECT COALESCE(SUM(amount_minor),0) FROM payments_v2 WHERE archived=0 AND status='posted') AS paid_minor
+        FROM crm_deals WHERE archived=0`).first() : Promise.resolve(null),
       canTasks ? db.prepare(`SELECT COUNT(*) AS total,
         SUM(CASE WHEN done=0 THEN 1 ELSE 0 END) AS open,
         SUM(CASE WHEN done=0 AND due_at < datetime('now') THEN 1 ELSE 0 END) AS overdue
-        FROM crm_tasks`).first() : Promise.resolve(null),
+        FROM crm_tasks WHERE archived=0`).first() : Promise.resolve(null),
       canDeals ? db.prepare(`SELECT stage,COUNT(*) AS count,COALESCE(SUM(amount_minor),0) AS amount_minor FROM crm_deals WHERE archived=0 GROUP BY stage ORDER BY count DESC`).all() : Promise.resolve({ results: [] }),
       (canAnalytics || canLeads) ? db.prepare(`SELECT
         (SELECT COUNT(*) FROM interest_events WHERE created_at>=datetime('now','-30 days')) AS views_30,
@@ -92,43 +93,55 @@ export async function GET(request: Request) {
         (SELECT COUNT(*) FROM leads WHERE created_at>=datetime('now','-30 days')) AS leads_30`).first() : Promise.resolve(null),
       isDirector ? db.prepare("SELECT value FROM site_settings WHERE key='director_goals'").first<{value:string}>() : Promise.resolve(null),
       (isDirector || canInventory || canFinance) ? db.prepare(`SELECT
-        (SELECT COUNT(*) FROM admin_records WHERE kind='inventory_units' AND archived=0) AS stock_units,
-        (SELECT COUNT(*) FROM admin_records WHERE kind='shipments' AND archived=0 AND status NOT IN ('closed','archived')) AS active_shipments,
-        (SELECT COUNT(*) FROM admin_records WHERE kind='meetings' AND archived=0 AND created_at>=datetime('now','-30 days')) AS meetings_30,
-        (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='finance_entries' AND archived=0 AND json_extract(data_json,'$.type')='Доход') AS income_som,
-        (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='finance_entries' AND archived=0 AND json_extract(data_json,'$.type')='Расход') AS expenses_som,
-        (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='debts' AND archived=0 AND status NOT IN ('closed','archived')) AS debts_som,
-        (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.purchaseCost') AS INTEGER)+CAST(json_extract(data_json,'$.expenses') AS INTEGER)),0) FROM admin_records WHERE kind='inventory_units' AND archived=0 AND json_extract(data_json,'$.unitStatus') NOT IN ('Продан','Выдан')) AS stock_value_som`).first() : Promise.resolve(null),
+        (SELECT COUNT(*) FROM inventory_units_v2 WHERE archived=0 AND status IN ('stock','reserved')) AS stock_units,
+        (SELECT COUNT(*) FROM shipments_v2 WHERE archived=0 AND status NOT IN ('closed','arrived')) AS active_shipments,
+        (SELECT COUNT(*) FROM meetings_v2 WHERE archived=0 AND starts_at>=datetime('now','-30 days')) AS meetings_30,
+        (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='in' AND reversed_by IS NULL) AS income_som,
+        (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='out' AND reversed_by IS NULL) AS expenses_som,
+        (SELECT COALESCE(SUM(GREATEST(r.principal_minor-COALESCE(p.paid,0),0)),0)/100 FROM receivables_v2 r LEFT JOIN (SELECT deal_id,SUM(amount_minor) paid FROM payments_v2 WHERE status='posted' AND archived=0 GROUP BY deal_id) p ON p.deal_id=r.deal_id WHERE r.archived=0 AND r.status IN ('open','overdue')) AS debts_som,
+        (SELECT COALESCE(SUM(purchase_cost_minor+landed_cost_minor),0)/100 FROM inventory_units_v2 WHERE archived=0 AND status NOT IN ('sold','delivered')) AS stock_value_som,
+        (SELECT COALESCE(SUM(CASE WHEN direction='in' THEN amount_minor ELSE -amount_minor END),0)/100 FROM account_transactions WHERE reversed_by IS NULL)+(SELECT COALESCE(SUM(opening_balance_minor),0)/100 FROM financial_accounts WHERE active=1) AS cash_balance_som,
+        (SELECT COUNT(*) FROM crm_deals WHERE archived=0 AND stage NOT IN ('won','lost') AND next_step_at IS NULL) AS deals_without_next_step,
+        (SELECT COUNT(*) FROM shipments_v2 WHERE archived=0 AND eta<CURRENT_DATE AND status NOT IN ('arrived','closed')) AS delayed_shipments`).first() : Promise.resolve(null),
       isDirector ? db.prepare(`SELECT x.tractor_slug,
-        COALESCE(v.views,0) AS views,COALESCE(l.leads,0) AS leads,COALESCE(d.meetings,0) AS meetings,
-        COALESCE(d.sales,0) AS sales,COALESCE(d.revenue_minor,0) AS revenue_minor,COALESCE(d.profit_minor,0) AS profit_minor
+        COALESCE(v.views,0) AS views,COALESCE(l.leads,0) AS leads,COALESCE(q.qualified,0) AS qualified,COALESCE(m.meetings,0) AS meetings,COALESCE(p.proposals,0) AS proposals,
+        COALESCE(s.sales,0) AS sales,COALESCE(s.revenue_minor,0) AS revenue_minor,COALESCE(s.profit_minor,0) AS profit_minor
         FROM (SELECT tractor_slug FROM interest_events WHERE tractor_slug IS NOT NULL UNION SELECT tractor_slug FROM leads WHERE tractor_slug IS NOT NULL UNION SELECT tractor_slug FROM crm_deals WHERE tractor_slug IS NOT NULL) x
         LEFT JOIN (SELECT tractor_slug,COUNT(*) views FROM interest_events WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug) v ON v.tractor_slug=x.tractor_slug
-        LEFT JOIN (SELECT tractor_slug,COUNT(*) leads FROM leads WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug) l ON l.tractor_slug=x.tractor_slug
-        LEFT JOIN (SELECT tractor_slug,SUM(CASE WHEN stage IN ('meeting','negotiation','reserved','contract','awaiting_payment','won') THEN 1 ELSE 0 END) meetings,SUM(CASE WHEN stage='won' THEN 1 ELSE 0 END) sales,SUM(CASE WHEN stage='won' THEN amount_minor ELSE 0 END) revenue_minor,SUM(CASE WHEN stage='won' AND cost_minor IS NOT NULL THEN amount_minor-cost_minor ELSE 0 END) profit_minor FROM crm_deals WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug) d ON d.tractor_slug=x.tractor_slug
+        LEFT JOIN (SELECT tractor_slug,COUNT(*) leads FROM leads WHERE tractor_slug IS NOT NULL AND archived=0 GROUP BY tractor_slug) l ON l.tractor_slug=x.tractor_slug
+        LEFT JOIN (SELECT tractor_slug,COUNT(*) qualified FROM crm_deals WHERE archived=0 AND tractor_slug IS NOT NULL AND stage IN ('qualified','meeting','negotiation','reserved','contract','awaiting_payment','won') GROUP BY tractor_slug) q ON q.tractor_slug=x.tractor_slug
+        LEFT JOIN (SELECT d.tractor_slug,COUNT(*) meetings FROM meetings_v2 m JOIN crm_deals d ON d.id=m.deal_id AND d.archived=0 WHERE m.archived=0 AND d.tractor_slug IS NOT NULL GROUP BY d.tractor_slug) m ON m.tractor_slug=x.tractor_slug
+        LEFT JOIN (SELECT d.tractor_slug,COUNT(*) proposals FROM proposals_v2 p JOIN crm_deals d ON d.id=p.deal_id AND d.archived=0 WHERE p.archived=0 AND d.tractor_slug IS NOT NULL GROUP BY d.tractor_slug) p ON p.tractor_slug=x.tractor_slug
+        LEFT JOIN (SELECT d.tractor_slug,COUNT(*) sales,COALESCE(SUM(s.sale_amount_minor),0) revenue_minor,COALESCE(SUM(s.sale_amount_minor-s.cost_minor),0) profit_minor FROM sales_v2 s JOIN crm_deals d ON d.id=s.deal_id AND d.archived=0 WHERE s.archived=0 AND d.tractor_slug IS NOT NULL GROUP BY d.tractor_slug) s ON s.tractor_slug=x.tractor_slug
         ORDER BY views DESC LIMIT 100`).all() : Promise.resolve({ results: [] }),
       isDirector ? db.prepare(`SELECT COALESCE(NULLIF(source,''),'Не указан') source,COUNT(*) leads,
-        COALESCE(SUM(CASE WHEN d.stage='won' THEN 1 ELSE 0 END),0) sales,
-        COALESCE(SUM(CASE WHEN d.stage='won' THEN d.amount_minor ELSE 0 END),0) revenue_minor,
-        COALESCE(SUM(CASE WHEN d.stage='won' AND d.cost_minor IS NOT NULL THEN d.amount_minor-d.cost_minor ELSE 0 END),0) profit_minor
-        FROM leads l LEFT JOIN crm_deals d ON d.lead_id=l.id GROUP BY COALESCE(NULLIF(source,''),'Не указан') ORDER BY leads DESC`).all() : Promise.resolve({ results: [] }),
+        COUNT(DISTINCT s.id) sales,
+        COALESCE(SUM(s.sale_amount_minor),0) revenue_minor,
+        COALESCE(SUM(s.sale_amount_minor-s.cost_minor),0) profit_minor
+        FROM leads l LEFT JOIN crm_deals d ON d.lead_id=l.id LEFT JOIN sales_v2 s ON s.deal_id=d.id AND s.archived=0 GROUP BY COALESCE(NULLIF(source,''),'Не указан') ORDER BY leads DESC`).all() : Promise.resolve({ results: [] }),
       isDirector ? db.prepare(`SELECT s.id,s.display_name,COUNT(d.id) deals,
-        COALESCE(SUM(CASE WHEN d.stage='won' THEN 1 ELSE 0 END),0) sales,
-        COALESCE(SUM(CASE WHEN d.stage='won' THEN d.amount_minor ELSE 0 END),0) revenue_minor,
+        COUNT(DISTINCT sale.id) sales,
+        COALESCE(SUM(sale.sale_amount_minor),0) revenue_minor,
         COALESCE((SELECT COUNT(*) FROM crm_tasks t WHERE t.assigned_to=s.id AND t.done=0),0) open_tasks
-        FROM staff s LEFT JOIN crm_deals d ON d.assigned_to=s.id WHERE s.active=1 GROUP BY s.id,s.display_name ORDER BY sales DESC,deals DESC`).all() : Promise.resolve({ results: [] }),
+        FROM staff s LEFT JOIN crm_deals d ON d.assigned_to=s.id LEFT JOIN sales_v2 sale ON sale.deal_id=d.id AND sale.archived=0 WHERE s.active=1 GROUP BY s.id,s.display_name ORDER BY sales DESC,deals DESC`).all() : Promise.resolve({ results: [] }),
       isDirector ? db.prepare(`SELECT
         (SELECT COUNT(*) FROM leads WHERE created_at>=datetime('now','-30 days')) AS leads_current,
         (SELECT COUNT(*) FROM leads WHERE created_at>=datetime('now','-60 days') AND created_at<datetime('now','-30 days')) AS leads_previous,
-        (SELECT COUNT(*) FROM crm_deals WHERE stage='won' AND updated_at>=datetime('now','-30 days')) AS sales_current,
-        (SELECT COUNT(*) FROM crm_deals WHERE stage='won' AND updated_at>=datetime('now','-60 days') AND updated_at<datetime('now','-30 days')) AS sales_previous,
-        (SELECT COALESCE(SUM(amount_minor),0) FROM crm_deals WHERE stage='won' AND updated_at>=datetime('now','-30 days')) AS revenue_current_minor,
-        (SELECT COALESCE(SUM(amount_minor),0) FROM crm_deals WHERE stage='won' AND updated_at>=datetime('now','-60 days') AND updated_at<datetime('now','-30 days')) AS revenue_previous_minor,
-        (SELECT COALESCE(SUM(CASE WHEN cost_minor IS NOT NULL THEN amount_minor-cost_minor ELSE 0 END),0) FROM crm_deals WHERE stage='won' AND updated_at>=datetime('now','-30 days')) AS profit_current_minor,
-        (SELECT COALESCE(SUM(CASE WHEN cost_minor IS NOT NULL THEN amount_minor-cost_minor ELSE 0 END),0) FROM crm_deals WHERE stage='won' AND updated_at>=datetime('now','-60 days') AND updated_at<datetime('now','-30 days')) AS profit_previous_minor,
-        (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='finance_entries' AND archived=0 AND json_extract(data_json,'$.type')='Расход' AND created_at>=datetime('now','-30 days')) AS expenses_current_som,
-        (SELECT COALESCE(SUM(CAST(json_extract(data_json,'$.amount') AS INTEGER)),0) FROM admin_records WHERE kind='finance_entries' AND archived=0 AND json_extract(data_json,'$.type')='Расход' AND created_at>=datetime('now','-60 days') AND created_at<datetime('now','-30 days')) AS expenses_previous_som`).first() : Promise.resolve(null),
+        (SELECT COUNT(*) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-30 days')) AS sales_current,
+        (SELECT COUNT(*) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-60 days') AND sold_at<datetime('now','-30 days')) AS sales_previous,
+        (SELECT COALESCE(SUM(sale_amount_minor),0) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-30 days')) AS revenue_current_minor,
+        (SELECT COALESCE(SUM(sale_amount_minor),0) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-60 days') AND sold_at<datetime('now','-30 days')) AS revenue_previous_minor,
+        (SELECT COALESCE(SUM(sale_amount_minor-cost_minor),0) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-30 days')) AS profit_current_minor,
+        (SELECT COALESCE(SUM(sale_amount_minor-cost_minor),0) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-60 days') AND sold_at<datetime('now','-30 days')) AS profit_previous_minor,
+        (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='out' AND reversed_by IS NULL AND occurred_at>=datetime('now','-30 days')) AS expenses_current_som,
+        (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='out' AND reversed_by IS NULL AND occurred_at>=datetime('now','-60 days') AND occurred_at<datetime('now','-30 days')) AS expenses_previous_som`).first() : Promise.resolve(null),
     ]);
+    const forecast=isDirector?await db.prepare(`SELECT COUNT(*) active_deals,COALESCE(SUM(amount_minor*COALESCE(probability,CASE stage WHEN 'new' THEN 10 WHEN 'ai' THEN 15 WHEN 'qualified' THEN 30 WHEN 'meeting' THEN 45 WHEN 'negotiation' THEN 60 WHEN 'reserved' THEN 75 WHEN 'contract' THEN 85 WHEN 'awaiting_payment' THEN 95 ELSE 0 END)/100),0) weighted_minor,(SELECT COUNT(*) FROM crm_deals WHERE stage IN ('won','lost') AND updated_at>=datetime('now','-180 days')) closed_sample,(SELECT COUNT(*) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-180 days')) won_sample FROM crm_deals WHERE archived=0 AND stage NOT IN ('won','lost')`).first():null;
+    const regions=isDirector?await db.prepare(`SELECT COALESCE(NULLIF(c.region,''),'Не указан') region,COUNT(*) customers,COALESCE(SUM(l.leads),0) leads,COALESCE(SUM(s.sales),0) sales,COALESCE(AVG(NULLIF(c.budget_minor,0)),0) average_budget_minor,COALESCE(SUM(s.revenue_minor),0) revenue_minor,string_agg(DISTINCT c.tractor_slug,', ') FILTER(WHERE c.tractor_slug IS NOT NULL) models
+      FROM crm_customers c
+      LEFT JOIN (SELECT customer_id,COUNT(*) leads FROM leads WHERE archived=0 GROUP BY customer_id) l ON l.customer_id=c.id
+      LEFT JOIN (SELECT d.customer_id,COUNT(*) sales,SUM(s.sale_amount_minor) revenue_minor FROM sales_v2 s JOIN crm_deals d ON d.id=s.deal_id AND d.archived=0 WHERE s.archived=0 GROUP BY d.customer_id) s ON s.customer_id=c.id
+      WHERE c.archived=0 GROUP BY COALESCE(NULLIF(c.region,''),'Не указан') ORDER BY customers DESC`).all():{results:[]};
     const rawOperations = operations as Record<string, number> | null;
     const safeOperations = isDirector ? operations : rawOperations ? {
       stock_units: canInventory ? Number(rawOperations.stock_units ?? 0) : 0,
@@ -138,6 +151,9 @@ export async function GET(request: Request) {
       expenses_som: canFinance ? Number(rawOperations.expenses_som ?? 0) : 0,
       debts_som: canFinance ? Number(rawOperations.debts_som ?? 0) : 0,
       stock_value_som: canFinance ? Number(rawOperations.stock_value_som ?? 0) : 0,
+      cash_balance_som: canFinance ? Number(rawOperations.cash_balance_som ?? 0) : 0,
+      deals_without_next_step: canDeals ? Number(rawOperations.deals_without_next_step ?? 0) : 0,
+      delayed_shipments: canInventory ? Number(rawOperations.delayed_shipments ?? 0) : 0,
     } : null;
     const safeDeals = !dealTotals || isDirector || canFinance ? dealTotals : { ...dealTotals, profit_minor: 0 };
     return Response.json({
@@ -160,8 +176,10 @@ export async function GET(request: Request) {
         channels: channels.results,
         managers: managers.results,
         comparison,
+        forecast:{...forecast,insufficientData:!forecast||Number((forecast as {active_deals?:number}).active_deals??0)===0||Number((forecast as {closed_sample?:number}).closed_sample??0)<5},
+        regions:regions.results,
       },
-      profile: { display_name: actor.display_name, phone: actor.phone, email: actor.email, avatar: actor.avatar, theme: actor.theme,position:actor.position,department:actor.department,skills:actor.skills,bio:actor.bio },
+      profile: { display_name: actor.display_name, phone: actor.phone, email: actor.email, avatar: actor.avatar, theme: actor.theme,position:actor.position,department:actor.department,skills:actor.skills,bio:actor.bio,role:actor.role },
     }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (!(error instanceof HttpError) || error.status >= 500) console.error("admin dashboard load failed", error);
@@ -195,7 +213,8 @@ export async function PATCH(request: Request) {
       const post = body.post as Record<string, unknown> | undefined;
       const title = post?.title as Record<string, unknown> | undefined;
       const slug = cleanText(post?.slug, 100, true);
-      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || !title?.ru || !newsStatuses.has(String(post?.status)) || !newsCategories.has(String(post?.category))) {
+      const excerpt=post?.excerpt as Record<string,unknown>|undefined,content=post?.content as Record<string,unknown>|undefined;
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(slug) || !String(title?.ru??"").trim() || !String(excerpt?.ru??"").trim() || !String(content?.ru??"").trim() || !newsStatuses.has(String(post?.status)) || !newsCategories.has(String(post?.category))) {
         return Response.json({ error: "Проверьте заголовок, slug, категорию и статус публикации" }, { status: 400 });
       }
       const json = JSON.stringify(post);

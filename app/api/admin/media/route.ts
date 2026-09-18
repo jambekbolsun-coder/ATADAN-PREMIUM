@@ -7,21 +7,25 @@ const contentTypes = new Map([
   ["image/png", "png"],
   ["image/webp", "webp"],
   ["image/avif", "avif"],
+  ["application/pdf", "pdf"],
+  ["text/csv", "csv"],
+  ["application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"],
+  ["application/vnd.openxmlformats-officedocument.wordprocessingml.document", "docx"],
 ]);
 
 export async function POST(request: Request) {
   try {
     sameOrigin(request);
-    const actor = await requireActor(request, true);
+    const actor = await requireActor(request);
     const length = Number(request.headers.get("content-length") || 0);
-    if (length > 9_000_000) throw new HttpError(413, "Изображение должно быть меньше 8 МБ");
+    if (length > 21_000_000) throw new HttpError(413, "Файл должен быть меньше 20 МБ");
     const data = await request.formData();
     const file = data.get("file");
     if (!(file instanceof File)) throw new HttpError(400, "Выберите изображение");
     const extension = contentTypes.get(file.type);
-    if (!extension) throw new HttpError(415, "Поддерживаются JPG, PNG, WEBP и AVIF");
-    if (!file.size || file.size > 8_000_000) throw new HttpError(413, "Изображение должно быть меньше 8 МБ");
-    const key = `banners/${Date.now()}-${crypto.randomUUID()}.${extension}`;
+    if (!extension) throw new HttpError(415, "Поддерживаются изображения, PDF, CSV, XLSX и DOCX");
+    if (!file.size || file.size > 20_000_000) throw new HttpError(413, "Файл должен быть меньше 20 МБ");
+    const key = `admin/${actor.id}/${Date.now()}-${crypto.randomUUID()}.${extension}`;
     const blob = await put(key, file, {
       access: "public",
       addRandomSuffix: false,

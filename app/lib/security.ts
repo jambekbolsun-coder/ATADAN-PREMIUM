@@ -39,5 +39,9 @@ export async function rateLimit(key: string, max: number, windowSeconds: number)
   if ((row?.hits ?? 0) > max) throw new HttpError(429, "Слишком много попыток. Подождите несколько минут.");
 }
 export function fail(error: unknown) {
+  const code=typeof error==="object"&&error&&"code" in error?String((error as {code?:unknown}).code??""):"";
+  if(code==="23505")return Response.json({error:"Такая уникальная запись уже существует (VIN, номер или идентификатор)"},{status:409});
+  if(code==="23503")return Response.json({error:"Связанный объект не найден или уже недоступен"},{status:409});
+  if(code==="23514")return Response.json({error:"Значение нарушает бизнес-правила"},{status:400});
   return Response.json({ error: error instanceof HttpError ? error.message : "Не удалось выполнить действие. Попробуйте ещё раз." }, { status: error instanceof HttpError ? error.status : 500 });
 }

@@ -1,6 +1,7 @@
 import { attachDatabasePool } from "@vercel/functions";
 import { Pool, types, type PoolClient } from "pg";
 import { POSTGRES_SCHEMA_SQL } from "./postgres-schema";
+import { ADMIN_V2_SCHEMA_SQL } from "./admin-v2-schema";
 
 types.setTypeParser(types.builtins.INT8, Number);
 types.setTypeParser(types.builtins.NUMERIC, Number);
@@ -13,25 +14,38 @@ type DbResult<T = Record<string, unknown>> = {
 type Queryable = Pick<Pool, "query"> | Pick<PoolClient, "query">;
 const globalDb = globalThis as typeof globalThis & { __atadanPool?: Pool };
 
-function databaseUrl() {
+function databaseConfig() {
   const value = process.env.DATABASE_URL || process.env.POSTGRES_URL;
   if (!value) throw new Error("DATABASE_URL is unavailable. Connect the Neon database to this project.");
   try {
     const url = new URL(value);
-    if (url.searchParams.get("sslmode") === "require") url.searchParams.set("sslmode", "verify-full");
-    return url.toString();
+    const sslMode = url.searchParams.get("sslmode");
+    if (sslMode) url.searchParams.delete("sslmode");
+    return {
+      connectionString: url.toString(),
+      ssl: sslMode && sslMode !== "disable" ? { rejectUnauthorized: true } : undefined,
+    };
   } catch {
-    return value;
+    return { connectionString: value };
   }
 }
 
 function pool() {
   if (!globalDb.__atadanPool) {
     globalDb.__atadanPool = new Pool({
-      connectionString: databaseUrl(),
+      ...databaseConfig(),
       max: 8,
       connectionTimeoutMillis: 10_000,
       idleTimeoutMillis: 30_000,
+      keepAlive: true,
+      allowExitOnIdle: true,
+    });
+    globalDb.__atadanPool.on("error", (error) => {
+      // Neon can retire an idle pooled TLS connection during scale-to-zero or
+      // endpoint rotation. pg removes that client; keeping an error listener
+      // prevents the Node process from terminating while the next query opens
+      // a healthy connection.
+      console.error("database idle connection was retired", { message: error.message, code: (error as NodeJS.ErrnoException).code });
     });
     attachDatabasePool(globalDb.__atadanPool);
   }
@@ -95,6 +109,21 @@ class AtadanDatabase {
       client.release();
     }
   }
+
+  async transaction<T>(work: (client: PoolClient) => Promise<T>) {
+    const client = await pool().connect();
+    try {
+      await client.query("BEGIN");
+      const value = await work(client);
+      await client.query("COMMIT");
+      return value;
+    } catch (error) {
+      await client.query("ROLLBACK");
+      throw error;
+    } finally {
+      client.release();
+    }
+  }
 }
 
 const database = new AtadanDatabase();
@@ -113,12 +142,11 @@ export async function ensureDb() {
   initialized = (async () => {
     const client = await pool().connect();
     try {
-      const probe = await client.query("SELECT to_regclass('public.product_overrides') AS table_name");
-      if (probe.rows[0]?.table_name) return;
       await client.query("BEGIN");
-      await client.query("SELECT pg_advisory_xact_lock(hashtext('atadan-schema-v1'))");
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('atadan-schema-v2'))");
       const lockedProbe = await client.query("SELECT to_regclass('public.product_overrides') AS table_name");
       if (!lockedProbe.rows[0]?.table_name) await client.query(POSTGRES_SCHEMA_SQL);
+      await client.query(ADMIN_V2_SCHEMA_SQL);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
