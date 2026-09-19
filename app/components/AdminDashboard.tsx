@@ -10,6 +10,7 @@ import { AdminCRM, type CrmMode } from "./AdminCRM";
 import { AdminSiteSettings } from "./AdminSiteSettings";
 import type { AdminWorkspace } from "./AdminPortalHome";
 import { AdminWorkspaceOverview } from "./AdminWorkspaceOverview";
+import { AdminMediaUpload } from "./AdminMediaUpload";
 import { AdminRecordsManager, type RecordKind } from "./AdminRecordsManager";
 import { AdminCollaboration, type CollaborationMode } from "./AdminCollaboration";
 import { AtadanLoader } from "./AtadanLoader";
@@ -238,7 +239,7 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
         {renderedSection === "overview" ? <AdminWorkspaceOverview workspace={workspace} data={data} onNavigate={openSection} onSaveGoals={async goals=>action({action:"save_goals",goals})}/> : null}
         {crmMode ? <AdminCRM mode={crmMode} catalog={data?.catalog ?? []} /> : null}
         {renderedSection === "catalog" ? <Products data={data} edit={setProductEditor} remove={(slug) => action({ action: "delete_product", slug })} /> : null}
-        {renderedSection === "news" ? <AdminNewsManager posts={data?.posts ?? []} catalog={data?.catalog ?? []} popularPosts={data?.popularPosts ?? []} save={async (post, originalSlug) => { await action({ action: "save_news", post, originalSlug }); }} remove={async (slug) => { await action({ action: "delete_news", slug }); }} /> : null}
+        {renderedSection === "news" ? <AdminNewsManager posts={data?.posts ?? []} catalog={data?.catalog ?? []} popularPosts={data?.popularPosts ?? []} save={async (post, originalSlug) => action({ action: "save_news", post, originalSlug })} remove={async (slug) => { await action({ action: "delete_news", slug }); }} /> : null}
         {renderedSection === "site-leads" ? <Leads data={data} update={(id, status) => action({ action: "lead_status", id, status })} /> : null}
         {renderedSection === "site-analytics" ? <Analytics data={data} /> : null}
         {renderedSection === "profile" ? <Profile data={data} save={(profile) => action({ action: "save_profile", profile })} /> : null}
@@ -250,7 +251,7 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
         {workspace==="control"&&renderedSection.startsWith("control-")?<DirectorDetail section={renderedSection} data={data} onNavigate={openSection}/>:null}
       </section>
       {renderedSection === "catalog" ? <button type="button" className="admin-fab" onClick={() => setProductEditor(emptyProduct())}><Plus /> Добавить трактор</button> : null}
-      {productEditor ? <ProductEditor product={productEditor} close={() => setProductEditor(null)} save={async (product) => { if (await action({ action: "save_product", product })) setProductEditor(null); }} /> : null}
+      {productEditor ? <ProductEditor product={productEditor} close={() => setProductEditor(null)} save={async (product) => { const saved=await action({ action: "save_product", product });if(saved)setProductEditor(null);return saved; }} /> : null}
       {toast ? <div className="admin-toast"><Check size={16} />{toast}<button type="button" onClick={() => setToast("")}><X size={14} /></button></div> : null}
     </main>
   );
@@ -276,7 +277,37 @@ function FinanceCenter({data,navigate}:{data:DashboardData;navigate:(target:NavI
   return <div className="admin-content finance-center"><section className="admin-panel finance-summary"><header><div><span>Управленческий учёт</span><h2>Финансы компании</h2><p>Продажи, фактические деньги, долги и расходы считаются отдельно.</p></div><b>За всё время</b></header><div className="finance-summary-grid"><Metric label="Выручка" value={money(revenue)} icon={TrendingUp} note="оформленные продажи"/><Metric label="Фактически оплачено" value={money(payments)} icon={CreditCard} note="проведённые платежи"/><Metric label="Задолженность" value={money(debts)} icon={Landmark} note="договоры минус оплаты"/><Metric label="Расходы" value={money(expenses)} icon={Calculator} note="исходящие движения"/><Metric label="Валовая прибыль" value={money(grossProfit)} icon={BarChart3} note="продажа минус полная себестоимость"/><Metric label="Денежный остаток" value={money(balance)} icon={CreditCard} note="только движения по счетам"/></div><div className="finance-exports"><span>Экспорт:</span>{["clients","deals","sales","inventory","payments","debts","expenses"].map(type=><a key={type} href={`/api/admin/data?type=${type}`} download>{type}</a>)}</div></section><section className="admin-panel finance-journal-links"><div className="panel-head"><div><span>Финансовый журнал</span><h2>Операции и обязательства</h2></div></div>{links.map(([section,label,Icon])=><button type="button" key={section} onClick={()=>navigate({workspace:"company",section})}><Icon aria-hidden="true"/><span><strong>{label}</strong><small>Открыть записи, фильтры и добавление</small></span><ChevronRight aria-hidden="true"/></button>)}</section><DataExchange/></div>;
 }
 
-function DataExchange(){const [kind,setKind]=useState("customers"),[csv,setCsv]=useState(""),[result,setResult]=useState<{total?:number;valid?:number;errors?:Array<{row:number;error:string}>;canCommit?:boolean;message?:string}>({}),[busy,setBusy]=useState(false);async function run(action:"validate_import"|"commit_import"){setBusy(true);const response=await fetch("/api/admin/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action,kind,csv})});const body=await response.json().catch(()=>({})) as typeof result&{imported?:number;error?:string};setBusy(false);setResult(response.ok?{...body,message:body.imported?`Импортировано: ${body.imported}`:undefined}:{message:body.error||"Ошибка импорта"})}async function backup(){setBusy(true);const response=await fetch("/api/admin/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"backup_check"})});const body=await response.json().catch(()=>({})) as {status?:string;error?:string};setBusy(false);setResult({message:response.ok?"Целостность критичных таблиц проверена. Резервные копии и срок хранения нужно отдельно подтвердить в Neon.":body.error})}return <section className="admin-panel data-exchange"><div className="panel-head"><div><span>Перенос и сохранность данных</span><h2>Импорт CSV и контроль сохранности</h2><p>Перед импортом система показывает ошибки и дубликаты; некорректные строки не записываются.</p></div></div><label><span>Тип данных</span><select value={kind} onChange={event=>setKind(event.target.value)}><option value="customers">Клиенты</option><option value="inventory">Склад по VIN</option></select></label><input type="file" accept=".csv,text/csv" onChange={async event=>{const file=event.target.files?.[0];if(file){setCsv(await file.text());setResult({})}}}/><div><button type="button" disabled={busy||!csv} onClick={()=>void run("validate_import")}>Проверить файл</button><button type="button" disabled={busy||!result.canCommit} onClick={()=>void run("commit_import")}>Импортировать корректные строки</button><button type="button" disabled={busy} onClick={()=>void backup()}>Проверить целостность базы</button></div>{result.total!==undefined?<p>Строк: {result.total}; корректных: {result.valid}; ошибок: {result.errors?.length??0}</p>:null}{result.errors?.slice(0,20).map(item=><p className="form-error" key={`${item.row}-${item.error}`}>Строка {item.row}: {item.error}</p>)}{result.message?<p role="status">{result.message}</p>:null}</section>}
+function DataExchange(){
+  type ImportResult={filename?:string;total?:number;valid?:number;errors?:Array<{row:number;error:string}>;preview?:Array<Record<string,unknown>>;canCommit?:boolean;message?:string};
+  const [kind,setKind]=useState("customers"),[file,setFile]=useState<File|null>(null),[result,setResult]=useState<ImportResult>({}),[busy,setBusy]=useState(false);
+  async function run(action:"validate_import"|"commit_import"){
+    if(!file)return;
+    setBusy(true);
+    const payload=new FormData();payload.set("action",action);payload.set("kind",kind);payload.set("file",file);
+    const response=await fetch("/api/admin/data",{method:"POST",body:payload});
+    const body=await response.json().catch(()=>({})) as ImportResult&{imported?:number;error?:string};
+    setBusy(false);
+    setResult(response.ok?{...body,message:body.imported?`Импортировано: ${body.imported}`:undefined}:{message:body.error||"Ошибка импорта"});
+  }
+  async function backup(){
+    setBusy(true);
+    const response=await fetch("/api/admin/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({action:"backup_check"})});
+    const body=await response.json().catch(()=>({})) as {status?:string;error?:string};
+    setBusy(false);
+    setResult({message:response.ok?"Целостность критичных таблиц проверена. Резервные копии и срок хранения нужно отдельно подтвердить в Neon.":body.error});
+  }
+  const previewColumns=result.preview?.length?Object.keys(result.preview[0]).filter(key=>!key.endsWith("Minor")&&key!=="normalizedPhone"):[];
+  return <section className="admin-panel data-exchange">
+    <div className="panel-head"><div><span>Перенос и сохранность данных</span><h2>Импорт CSV/XLSX и контроль сохранности</h2><p>Файл сначала проходит серверную проверку обязательных колонок, строк и дублей. Запись доступна только после чистого предпросмотра.</p></div></div>
+    <label><span>Тип данных</span><select value={kind} onChange={event=>{setKind(event.target.value);setResult({})}}><option value="customers">Клиенты</option><option value="inventory">Склад по VIN</option></select></label>
+    <label><span>Файл до 5 МБ</span><input type="file" accept=".csv,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" onChange={event=>{setFile(event.target.files?.[0]??null);setResult({})}}/><small>{kind==="customers"?"Обязательные колонки: name, phone":"Обязательные колонки: vin, model, tractorSlug"}. Допускаются русские названия колонок.</small></label>
+    <div><button type="button" disabled={busy||!file} onClick={()=>void run("validate_import")}>{busy?<LoaderCircle className="spin"/>:null}Проверить файл</button><button type="button" disabled={busy||!result.canCommit} onClick={()=>void run("commit_import")}>Импортировать после проверки</button><button type="button" disabled={busy} onClick={()=>void backup()}>Проверить целостность базы</button></div>
+    {result.total!==undefined?<p><strong>{result.filename||file?.name}</strong>: строк {result.total}, корректных {result.valid}, ошибок {result.errors?.length??0}</p>:null}
+    {result.preview?.length?<div className="import-preview"><strong>Предпросмотр первых {result.preview.length} строк</strong><div><table><thead><tr>{previewColumns.map(column=><th key={column}>{column}</th>)}</tr></thead><tbody>{result.preview.map((row,index)=><tr key={String(row.row??index)}>{previewColumns.map(column=><td key={column}>{String(row[column]??"")}</td>)}</tr>)}</tbody></table></div></div>:null}
+    {result.errors?.slice(0,20).map(item=><p className="form-error" key={`${item.row}-${item.error}`}>Строка {item.row}: {item.error}</p>)}
+    {result.message?<p role="status">{result.message}</p>:null}
+  </section>
+}
 
 function Products({ data, edit, remove }: { data: DashboardData | null; edit: (product: TractorType) => void; remove: (slug: string) => void }) {
   const [query, setQuery] = useState("");
@@ -344,10 +375,11 @@ function SecurityPanel({role}:{role?:string}){const [sessions,setSessions]=useSt
 
 function emptyProduct(): TractorType { return { id: crypto.randomUUID(), slug: "", model: "", hp: 50, category: "Универсальные", farmArea: "до 30 га", price: null, discountPercent: null, promotionLabel: null, inStock: true, status:"draft", sortOrder:0, image: "/images/tractors-4k/cfb504-x.webp", images: ["/images/tractors-4k/cfb504-x.webp"], videoUrl: null, description: "", comfort: "", equipment: [], specs: {} }; }
 
-function ProductEditor({ product, close, save }: { product: TractorType; close: () => void; save: (product: TractorType) => void }) {
+function ProductEditor({ product, close, save }: { product: TractorType; close: () => void; save: (product: TractorType) => Promise<boolean>|boolean }) {
   const dialogRef = useRef<HTMLFormElement>(null);
-  const closeRef = useRef(close);
-  useEffect(() => { closeRef.current = close; }, [close]);
+  const [dirty,setDirty]=useState(false),[confirmClose,setConfirmClose]=useState(false);
+  const [image,setImage]=useState(product.image),[galleryText,setGalleryText]=useState((product.images?.length ? product.images : [product.image]).join("\n")),[videoUrl,setVideoUrl]=useState(product.videoUrl??"");
+  const requestClose=useCallback(()=>{if(dirty)setConfirmClose(true);else close()},[close,dirty]);
   useEffect(() => {
     const dialog = dialogRef.current;
     const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -355,7 +387,7 @@ function ProductEditor({ product, close, save }: { product: TractorType; close: 
     document.body.style.overflow = "hidden";
     dialog?.querySelector<HTMLElement>("input, select, textarea, button")?.focus();
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") { event.preventDefault(); closeRef.current(); return; }
+      if (event.key === "Escape") { event.preventDefault(); requestClose(); return; }
       if (event.key !== "Tab" || !dialog) return;
       const focusable = Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [href]'));
       if (!focusable.length) return;
@@ -364,26 +396,28 @@ function ProductEditor({ product, close, save }: { product: TractorType; close: 
       if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
     }
+    function handleUnload(event:BeforeUnloadEvent){if(dirty)event.preventDefault()}
     document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("beforeunload",handleUnload);
     return () => {
       document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("beforeunload",handleUnload);
       document.body.style.overflow = previousOverflow;
       previousFocus?.focus();
     };
-  }, []);
+  }, [dirty,requestClose]);
 
-  function submit(event: FormEvent<HTMLFormElement>) {
+  async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const f = new FormData(event.currentTarget);
     const model = String(f.get("model"));
-    const image = String(f.get("image")).trim();
-    const images = String(f.get("images") ?? "").split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
+    const images = galleryText.split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
     const equipment = String(f.get("equipment") ?? "").split(/\r?\n/).map((value) => value.trim()).filter(Boolean);
     const specs = Object.fromEntries(String(f.get("specs") ?? "").split(/\r?\n/).map((line) => {
       const separator = line.indexOf(":");
       return separator > 0 ? [line.slice(0, separator).trim(), line.slice(separator + 1).trim()] : null;
     }).filter((entry): entry is [string, string] => Boolean(entry?.[0] && entry?.[1])));
-    save({
+    const saved=await save({
       ...product,
       model,
       slug: String(f.get("slug")) || model.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
@@ -400,25 +434,26 @@ function ProductEditor({ product, close, save }: { product: TractorType; close: 
       sortOrder: Math.max(0, Number(f.get("sortOrder")) || 0),
       image,
       images: Array.from(new Set([image, ...images])),
-      videoUrl: String(f.get("videoUrl") ?? "").trim() || null,
+      videoUrl: videoUrl.trim() || null,
       description: String(f.get("description")),
       comfort: String(f.get("comfort")),
       equipment,
       specs,
     });
+    if(saved)setDirty(false);
   }
-  const gallery = (product.images?.length ? product.images : [product.image]).join("\n");
   const equipment = (product.equipment ?? []).join("\n");
   const specs = Object.entries(product.specs).map(([label, value]) => `${label}: ${value}`).join("\n");
-  return <div className="editor-overlay"><button className="editor-backdrop" type="button" onClick={close} aria-label="Закрыть редактор" /><form ref={dialogRef} className="product-editor" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="product-editor-title">
-    <header><div><span>Карточка товара</span><h2 id="product-editor-title">{product.model || "Новый трактор"}</h2></div><button type="button" onClick={close} aria-label="Закрыть"><X /></button></header>
+  return <div className="editor-overlay"><button className="editor-backdrop" type="button" onClick={requestClose} aria-label="Закрыть редактор" /><form ref={dialogRef} className="product-editor" onSubmit={submit} onChange={()=>setDirty(true)} role="dialog" aria-modal="true" aria-labelledby="product-editor-title">
+    <header><div><span>Карточка товара</span><h2 id="product-editor-title">{product.model || "Новый трактор"}</h2></div><button type="button" onClick={requestClose} aria-label="Закрыть"><X /></button></header>
     <div className="editor-sections">
       <fieldset><legend>Основные данные</legend><div className="editor-fields"><label><span>Модель</span><input name="model" defaultValue={product.model} required /></label><label><span>Slug</span><input name="slug" defaultValue={product.slug} placeholder="создастся автоматически" /></label><label><span>Мощность, л.с.</span><input name="hp" type="number" min="20" max="500" defaultValue={product.hp} required /></label><label><span>Категория</span><select name="category" defaultValue={product.category}><option>Универсальные</option><option>Средний класс</option><option>Тяжёлый класс</option></select></label><label><span>Площадь</span><input name="farmArea" defaultValue={product.farmArea} /></label><label className="editor-check"><input type="checkbox" name="inStock" defaultChecked={product.inStock} /><span>Есть в наличии</span></label></div></fieldset>
       <fieldset><legend>Цена и витрина</legend><div className="editor-fields"><label><span>Цена, сом</span><input name="price" type="number" min="0" defaultValue={product.price ?? ""} placeholder="Цена по запросу" /></label><label><span>Скидка, %</span><input name="discountPercent" type="number" min="0" max="90" defaultValue={product.discountPercent ?? ""} placeholder="Например, 10" /></label><label><span>Статус публикации</span><select name="status" defaultValue={product.status??"published"}><option value="draft">Черновик</option><option value="published">Опубликовано</option><option value="hidden">Скрыто</option><option value="archived">Архив</option></select></label><label><span>Порядок</span><input name="sortOrder" type="number" min="0" defaultValue={product.sortOrder??0}/></label><label className="full"><span>Название акции</span><input name="promotionLabel" defaultValue={product.promotionLabel ?? ""} placeholder="Например: Сезонная выгода" /></label><label className="editor-check"><input type="checkbox" name="popular" defaultChecked={product.popular}/><span>Популярная модель</span></label><label className="editor-check"><input type="checkbox" name="recommended" defaultChecked={product.recommended}/><span>Рекомендуем</span></label></div></fieldset>
       <fieldset><legend>Описание и комплектация</legend><div className="editor-fields"><label className="full"><span>Описание товара</span><textarea name="description" rows={6} defaultValue={product.description} placeholder="Что умеет трактор и для каких работ подходит" required /><small>Коротко и конкретно: назначение, сильные стороны и выгода для хозяйства.</small></label><label className="full"><span>Комфорт оператора</span><textarea name="comfort" rows={4} defaultValue={product.comfort} placeholder="Кабина, посадка, обзор, органы управления" /></label><label className="full"><span>Комплектация: одна позиция на строку</span><textarea name="equipment" rows={7} defaultValue={equipment} placeholder="Кабина с отопителем&#10;Передние противовесы&#10;Гидравлические выходы" /><small>Эти пункты появятся на странице трактора отдельным понятным списком.</small></label></div></fieldset>
-      <fieldset><legend>Фото и видео</legend><div className="editor-fields"><label className="full"><span>Основное изображение</span><input name="image" defaultValue={product.image} required /><small>Путь /images/... или публичная ссылка из хранилища.</small></label><label className="full"><span>Галерея: одно фото на строку</span><textarea name="images" rows={7} defaultValue={gallery} /><small>Первым будет основное изображение. Добавьте фото с разных сторон, кабины и двигателя.</small></label><label className="full"><span>Видео товара</span><input name="videoUrl" type="url" defaultValue={product.videoUrl ?? ""} placeholder="https://.../video.mp4" /><small>Видео сохранится в карточке и будет готово для будущего показа.</small></label></div></fieldset>
+      <fieldset><legend>Фото и видео</legend><div className="editor-fields"><label className="full"><span>Основное изображение</span><input name="image" value={image} onChange={event=>setImage(event.target.value)} required /><AdminMediaUpload label="Загрузить основное фото" onUploaded={urls=>{setImage(urls[0]);setDirty(true)}}/><small>Путь /images/... или публичная ссылка из хранилища.</small></label><label className="full"><span>Галерея: одно фото на строку</span><textarea name="images" rows={7} value={galleryText} onChange={event=>setGalleryText(event.target.value)} /><AdminMediaUpload multiple label="Добавить фото в галерею" onUploaded={urls=>{setGalleryText(current=>[current,...urls].filter(Boolean).join("\n"));setDirty(true)}}/><small>Первым будет основное изображение. Добавьте фото с разных сторон, кабины и двигателя.</small></label><label className="full"><span>Видео товара</span><input name="videoUrl" type="url" value={videoUrl} onChange={event=>setVideoUrl(event.target.value)} placeholder="https://.../video.mp4" /><small>Для больших видео используйте публичную ссылку CDN, чтобы не превышать лимит серверной загрузки.</small></label></div></fieldset>
       <fieldset><legend>Технические характеристики</legend><div className="editor-fields"><label className="full"><span>Название: значение: одна характеристика на строку</span><textarea name="specs" rows={10} defaultValue={specs} placeholder="Модель двигателя: CF...&#10;Колёсная база: 2200 мм" /></label></div></fieldset>
     </div>
-    <footer><button type="button" onClick={close}>Отмена</button><button className="admin-primary" type="submit"><Check size={17} aria-hidden="true" />Сохранить товар</button></footer>
+    <footer><button type="button" onClick={requestClose}>Отмена</button><button className="admin-primary" type="submit"><Check size={17} aria-hidden="true" />Сохранить товар</button></footer>
+    {confirmClose?<div className="unsaved-confirm" role="alert"><strong>Есть несохранённые изменения</strong><span>Закрыть карточку и потерять изменения?</span><button type="button" onClick={()=>setConfirmClose(false)}>Продолжить</button><button type="button" className="record-delete" onClick={close}>Закрыть без сохранения</button></div>:null}
   </form></div>;
 }

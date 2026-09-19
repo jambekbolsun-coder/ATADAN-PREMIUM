@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import nextEnv from "@next/env";
 import pg from "pg";
+import { strToU8, zipSync } from "fflate";
 
 const { loadEnvConfig } = nextEnv;
 const { Pool } = pg;
@@ -29,7 +30,7 @@ async function request(path, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set("Origin", base);
   if (options.auth !== false) headers.set("Cookie", `atadan_staff=${options.authToken || token}`);
-  if (options.body && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
+  if (typeof options.body === "string" && !headers.has("Content-Type")) headers.set("Content-Type", "application/json");
   const response = await fetch(`${base}${path}`, { ...options, headers });
   const contentType = response.headers.get("content-type") || "";
   const body = contentType.includes("json") ? await response.json() : await response.text();
@@ -46,6 +47,19 @@ async function createRecord(kind, title, data, status = "active") {
   const body = await post("/api/admin/records", { action: "create", kind, title, subtitle: marker, category: "E2E", status, sortOrder: 0, data }, 201);
   ids.records.push(body.id);
   return body.id;
+}
+
+function xlsxFile(rows) {
+  const escape=(value)=>String(value).replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;");
+  const sheetRows=rows.map((row,rowIndex)=>`<row r="${rowIndex+1}">${row.map((cell,columnIndex)=>{let column="",value=columnIndex+1;while(value){value-=1;column=String.fromCharCode(65+value%26)+column;value=Math.floor(value/26)}return `<c r="${column}${rowIndex+1}" t="inlineStr"><is><t>${escape(cell)}</t></is></c>`}).join("")}</row>`).join("");
+  const files={
+    "[Content_Types].xml":strToU8('<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>'),
+    "_rels/.rels":strToU8('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>'),
+    "xl/workbook.xml":strToU8('<?xml version="1.0" encoding="UTF-8"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Import" sheetId="1" r:id="rId1"/></sheets></workbook>'),
+    "xl/_rels/workbook.xml.rels":strToU8('<?xml version="1.0" encoding="UTF-8"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>'),
+    "xl/worksheets/sheet1.xml":strToU8(`<?xml version="1.0" encoding="UTF-8"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>${sheetRows}</sheetData></worksheet>`),
+  };
+  return new Blob([zipSync(files)],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
 }
 
 async function crmData(mode) {
@@ -80,6 +94,7 @@ async function cleanup() {
     await client.query("DELETE FROM payments_v2 WHERE deal_id = ANY($1)", [ids.deals]);
     await client.query("DELETE FROM receivables_v2 WHERE deal_id = ANY($1)", [ids.deals]);
     await client.query("DELETE FROM documents_v2 WHERE deal_id = ANY($1) OR id = ANY($2)", [ids.deals, ids.records]);
+    await client.query("DELETE FROM leasing_cases_v2 WHERE deal_id = ANY($1) OR id = ANY($2)", [ids.deals, ids.records]);
     await client.query("DELETE FROM contracts_v2 WHERE deal_id = ANY($1)", [ids.deals]);
     await client.query("DELETE FROM proposals_v2 WHERE deal_id = ANY($1)", [ids.deals]);
     await client.query("DELETE FROM meetings_v2 WHERE deal_id = ANY($1)", [ids.deals]);
@@ -128,6 +143,9 @@ try {
   await pool.query("INSERT INTO staff_sessions(token_hash,staff_id,expires_at,id,user_agent) VALUES($1,$2,$3,$4,'ATADAN E2E restricted RBAC')", [restrictedTokenHash, restrictedStaffId, Math.floor(Date.now() / 1000) + 1800, crypto.randomUUID()]);
   const forbidden = await request("/api/admin/records?kind=sales", { authToken: restrictedToken });
   assert.equal(forbidden.response.status, 403, "A manager without Finance permission must be rejected by the API");
+  const privateDocumentForbidden=await request("/api/admin/media?key=admin-private/test/missing.pdf",{authToken:restrictedToken});assert.equal(privateDocumentForbidden.response.status,403,"Private documents must enforce server-side Documents permission");
+  const unsafePublicDocument=new FormData();unsafePublicDocument.set("file",new Blob(["private"],{type:"application/pdf"}),"private.pdf");
+  const unsafeUpload=await request("/api/admin/media",{method:"POST",body:unsafePublicDocument});assert.equal(unsafeUpload.response.status,400,"Documents must not be uploaded as public blobs");
   step("authentication and server-side RBAC denial");
 
   const phone = `+996700${String(Date.now()).slice(-6)}`;
@@ -143,6 +161,16 @@ try {
   assert.equal(customerRows.rowCount, 1, "Repeated phone must reuse one customer");const customerId = customerRows.rows[0].id;ids.customers.push(customerId);
   step("lead idempotency and customer deduplication");
 
+  const importPhone=`+996555${String(Date.now()).slice(-6)}`,workbook=xlsxFile([["Имя","Телефон","Регион","Источник"],[`XLSX ${marker}`,importPhone,"Бишкек","import-e2e"]]);
+  const importForm=(action)=>{const form=new FormData();form.set("action",action);form.set("kind","customers");form.set("file",workbook,`${marker}.xlsx`);return form};
+  const importPreview=await request("/api/admin/data",{method:"POST",body:importForm("validate_import")});assert.equal(importPreview.response.status,200,JSON.stringify(importPreview.body));assert.equal(importPreview.body.canCommit,true);assert.equal(importPreview.body.valid,1);assert.equal(importPreview.body.preview[0].name,`XLSX ${marker}`);
+  const importCommit=await request("/api/admin/data",{method:"POST",body:importForm("commit_import")});assert.equal(importCommit.response.status,200,JSON.stringify(importCommit.body));assert.equal(importCommit.body.imported,1);
+  const importedCustomer=await pool.query("SELECT id FROM crm_customers WHERE normalized_phone=regexp_replace($1,'\\D','','g')",[importPhone]);assert.equal(importedCustomer.rowCount,1);ids.customers.push(importedCustomer.rows[0].id);
+  const importDuplicate=await request("/api/admin/data",{method:"POST",body:importForm("validate_import")});assert.equal(importDuplicate.response.status,200);assert.equal(importDuplicate.body.canCommit,false);assert.match(importDuplicate.body.errors[0].error,/уже есть/i);
+  const semicolonForm=new FormData();semicolonForm.set("action","validate_import");semicolonForm.set("kind","customers");semicolonForm.set("file",new Blob([`Имя;Телефон;Регион\nCSV ${marker};+996700123456;Ош`],{type:"text/csv"}),`${marker}.csv`);
+  const semicolonPreview=await request("/api/admin/data",{method:"POST",body:semicolonForm});assert.equal(semicolonPreview.response.status,200,JSON.stringify(semicolonPreview.body));assert.equal(semicolonPreview.body.valid,1);assert.equal(semicolonPreview.body.preview[0].name,`CSV ${marker}`);
+  step("XLSX preview, import and duplicate protection");
+
   const accountId = await createRecord("financial_accounts", `${marker}-касса`, { name: `${marker}-касса`, accountType: "bank", currency: "KGS", openingBalance: "1000" });
   const supplierId = await createRecord("suppliers", `${marker}-поставщик`, { company: `${marker}-поставщик`, contact: "E2E", phone, email: "e2e@example.invalid", country: "Китай", terms: "E2E" });
   const purchaseId = await createRecord("purchases", `${marker}-PO`, { supplierId, orderNumber: `${marker}-PO`, amount: "1000000", orderDate: "2026-09-01", expectedAt: "2026-09-10" });
@@ -154,6 +182,23 @@ try {
   step("supplier, purchase, shipment, VIN and uniqueness");
 
   const dealId = leadOne.body.dealId;
+  await post("/api/admin/records",{action:"create",kind:"leasing_applications",title:`${marker}-invalid-lease`,status:"approved",data:{customerId,dealId:second.body.dealId,phone,partnerDecision:"approved",requiredDocuments:"passport,income"}},409);
+  const leasingId=await createRecord("leasing_applications",`${marker}-лизинг`,{customerId,dealId,phone,city:"Бишкек",tractorModel:"Changfa CFB504-X",tractorSlug:"cfb504-x",price:"1500000",downPayment:"500000",termMonths:"24",monthlyPayment:"50000",total:"1700000",partnerName:"E2E Банк",partnerDecision:"pending",requiredDocuments:"passport,income",managerComment:"E2E"},"new");
+  const secondLeasingId=await createRecord("leasing_applications",`${marker}-лизинг-2`,{customerId,dealId:second.body.dealId,phone,city:"Ош",tractorModel:"Changfa CFB504-X",tractorSlug:"cfb504-x",price:"1500000",downPayment:"500000",termMonths:"24",monthlyPayment:"50000",total:"1700000",partnerName:"E2E Банк",partnerDecision:"pending",requiredDocuments:"passport",managerComment:"E2E"},"new");
+  const passportDocumentId=await createRecord("documents",`${marker}-паспорт`,{documentType:"Лизинг: паспорт",leasingApplicationId:leasingId,checklistKey:"passport",documentStatus:"verified",fileUrl:"/api/media/e2e-passport.pdf"});
+  await createRecord("documents",`${marker}-доход`,{documentType:"Лизинг: справка о доходах",leasingApplicationId:leasingId,checklistKey:"income",documentStatus:"verified",fileUrl:"/api/media/e2e-income.pdf"});
+  const leasingState=await pool.query("SELECT document_status FROM leasing_cases_v2 WHERE id=$1",[leasingId]);assert.equal(leasingState.rows[0].document_status,"verified");
+  let documentList=await request("/api/admin/records?kind=documents&q="+encodeURIComponent(marker));let passportRecord=documentList.body.records.find(item=>item.id===passportDocumentId);assert.ok(passportRecord);
+  await post("/api/admin/records",{action:"update",kind:"documents",id:passportDocumentId,version:passportRecord.version,title:passportRecord.title,subtitle:passportRecord.subtitle,category:passportRecord.category,status:passportRecord.status,sortOrder:passportRecord.sort_order,data:{...JSON.parse(passportRecord.data_json),leasingApplicationId:secondLeasingId}});
+  let movedCases=await pool.query("SELECT id,document_status FROM leasing_cases_v2 WHERE id=ANY($1)",[[leasingId,secondLeasingId]]);let movedStatuses=Object.fromEntries(movedCases.rows.map(row=>[row.id,row.document_status]));assert.equal(movedStatuses[leasingId],"incomplete");assert.equal(movedStatuses[secondLeasingId],"verified");
+  documentList=await request("/api/admin/records?kind=documents&q="+encodeURIComponent(marker));passportRecord=documentList.body.records.find(item=>item.id===passportDocumentId);assert.ok(passportRecord);
+  await post("/api/admin/records",{action:"update",kind:"documents",id:passportDocumentId,version:passportRecord.version,title:passportRecord.title,subtitle:passportRecord.subtitle,category:passportRecord.category,status:passportRecord.status,sortOrder:passportRecord.sort_order,data:{...JSON.parse(passportRecord.data_json),leasingApplicationId:leasingId}});
+  movedCases=await pool.query("SELECT id,document_status FROM leasing_cases_v2 WHERE id=ANY($1)",[[leasingId,secondLeasingId]]);movedStatuses=Object.fromEntries(movedCases.rows.map(row=>[row.id,row.document_status]));assert.equal(movedStatuses[leasingId],"verified");assert.equal(movedStatuses[secondLeasingId],"incomplete");
+  const leasingList=await request("/api/admin/records?kind=leasing_applications&q="+encodeURIComponent(marker));assert.equal(leasingList.response.status,200,JSON.stringify(leasingList.body));const leasingRecord=leasingList.body.records.find(item=>item.id===leasingId);assert.ok(leasingRecord);const leasingData={...JSON.parse(leasingRecord.data_json),partnerDecision:"approved"};
+  await post("/api/admin/records",{action:"update",kind:"leasing_applications",id:leasingId,version:leasingRecord.version,title:leasingRecord.title,subtitle:leasingRecord.subtitle,category:leasingRecord.category,status:"approved",sortOrder:leasingRecord.sort_order,data:leasingData});
+  const approvedLease=await pool.query("SELECT status,partner_decision,document_status FROM leasing_cases_v2 WHERE id=$1",[leasingId]);assert.deepEqual(approvedLease.rows[0],{status:"approved",partner_decision:"approved",document_status:"verified"});
+  step("leasing checklist, partner decision and stage guard");
+
   await updateDeal(dealId, "qualified", { probability: 30, amount: 1500000 });
   await createRecord("meetings", `${marker}-meeting`, { customerId, dealId, responsibleId: owner.id, date: new Date(Date.now() + 3_600_000).toISOString(), location: "ATADAN", result: "Клиент квалифицирован", nextStep: "КП" });
   await updateDeal(dealId, "meeting", { probability: 45 });
@@ -197,7 +242,7 @@ try {
   const backup = await post("/api/admin/data",{action:"backup_check"});ids.backups.push(backup.id);assert.equal(backup.providerBackupVerified,false);
   step("timeline, dashboard, export and backup integrity");
 
-  console.log(JSON.stringify({ ok:true, marker, checks: { phoneDedup:true, vinUnique:true, partialDebt:true, fullPaymentSale:true, oneSalePerDeal:true, timeline:true, optimisticLock:true, rbac:true, dashboard:true, export:true, backupIntegrity:true } }, null, 2));
+  console.log(JSON.stringify({ ok:true, marker, checks: { phoneDedup:true, xlsxImport:true, vinUnique:true, leasingChecklist:true, partialDebt:true, fullPaymentSale:true, oneSalePerDeal:true, timeline:true, optimisticLock:true, rbac:true, dashboard:true, export:true, backupIntegrity:true } }, null, 2));
 } finally {
   await cleanup().catch((error)=>console.error("E2E cleanup failed", error));
   await pool.end();

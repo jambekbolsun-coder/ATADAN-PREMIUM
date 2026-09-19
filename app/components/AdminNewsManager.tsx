@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import { CalendarDays, CheckCircle2, ChevronRight, Clock3, Eye, FileText, Languages, Pencil, Plus, Search, Star, Trash2, X } from "lucide-react";
-import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Locale, NewsCategory, NewsPost, Tractor } from "../types";
 import { Link } from "./SiteLink";
+import { AdminMediaUpload } from "./AdminMediaUpload";
 
 const categories: Array<[NewsCategory, string]> = [["selection", "Выбор трактора"], ["technology", "Комфорт и технологии"], ["field", "Техника в поле"], ["service", "Сервис и запчасти"], ["company", "Новости ATADAN"]];
 const locales: Array<[Locale, string]> = [["ru", "Русский"], ["ky", "Кыргызча"], ["en", "English"]];
@@ -26,7 +27,7 @@ function slugify(value: string) {
   return value.toLowerCase().split("").map((char) => map[char] ?? char).join("").replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 90);
 }
 
-export function AdminNewsManager({ posts, catalog, popularPosts, save, remove }: { posts: NewsPost[]; catalog: Tractor[]; popularPosts: Array<{ path: string; views: number }>; save: (post: NewsPost, originalSlug: string | null) => Promise<void>; remove: (slug: string) => Promise<void> }) {
+export function AdminNewsManager({ posts, catalog, popularPosts, save, remove }: { posts: NewsPost[]; catalog: Tractor[]; popularPosts: Array<{ path: string; views: number }>; save: (post: NewsPost, originalSlug: string | null) => Promise<boolean>; remove: (slug: string) => Promise<void> }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [editor, setEditor] = useState<EditorState | null>(null);
@@ -45,22 +46,27 @@ export function AdminNewsManager({ posts, catalog, popularPosts, save, remove }:
         <div className="admin-news-actions">{post.status === "published" ? <Link href={`/news/${post.slug}`} target="_blank" aria-label={`Открыть ${post.title.ru}`}><Eye size={17} /></Link> : null}<button type="button" onClick={() => setEditor({ post: structuredClone(post), originalSlug: post.slug })} aria-label={`Изменить ${post.title.ru}`}><Pencil size={16} /></button><button type="button" className="danger" onClick={() => setPendingDelete(post)} aria-label={`Архивировать ${post.title.ru}`}><Trash2 size={16} /></button><ChevronRight size={17} /></div>
       </article>)}</div>
     </div>
-    {editor ? <NewsEditor state={editor} catalog={catalog} close={() => setEditor(null)} save={async (post) => { await save(post, editor.originalSlug); setEditor(null); }} /> : null}{pendingDelete?<div className="news-editor-overlay"><div className="news-editor-backdrop"/><section className="news-editor compact-confirm" role="dialog" aria-modal="true" aria-labelledby="archive-news-title"><header><h2 id="archive-news-title">Архивировать публикацию?</h2></header><p>«{pendingDelete.title.ru}» будет скрыта, но сохранится в базе.</p><footer><button type="button" onClick={()=>setPendingDelete(null)}>Отмена</button><button type="button" className="danger" onClick={async()=>{const slug=pendingDelete.slug;setPendingDelete(null);await remove(slug)}}>Архивировать</button></footer></section></div>:null}
+    {editor ? <NewsEditor state={editor} catalog={catalog} close={() => setEditor(null)} save={async (post) => { const saved = await save(post, editor.originalSlug); if (saved) setEditor(null); return saved; }} /> : null}{pendingDelete?<div className="news-editor-overlay"><div className="news-editor-backdrop"/><section className="news-editor compact-confirm" role="dialog" aria-modal="true" aria-labelledby="archive-news-title"><header><h2 id="archive-news-title">Архивировать публикацию?</h2></header><p>«{pendingDelete.title.ru}» будет скрыта, но сохранится в базе.</p><footer><button type="button" onClick={()=>setPendingDelete(null)}>Отмена</button><button type="button" className="danger" onClick={async()=>{const slug=pendingDelete.slug;setPendingDelete(null);await remove(slug)}}>Архивировать</button></footer></section></div>:null}
   </div>;
 }
 
-function NewsEditor({ state, catalog, close, save }: { state: EditorState; catalog: Tractor[]; close: () => void; save: (post: NewsPost) => Promise<void> }) {
+function NewsEditor({ state, catalog, close, save }: { state: EditorState; catalog: Tractor[]; close: () => void; save: (post: NewsPost) => Promise<boolean> }) {
   const [post, setPost] = useState(state.post);
   const [locale, setLocale] = useState<Locale>("ru");
   const [saving, setSaving] = useState(false);
+  const [dirty,setDirty]=useState(false),[confirmClose,setConfirmClose]=useState(false);
+  const [validationError,setValidationError]=useState("");
   const dialog = useRef<HTMLFormElement>(null);
+  const requestClose=useCallback(()=>{if(dirty)setConfirmClose(true);else close()},[close,dirty]);
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") close(); };
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") requestClose(); };
+    const onUnload=(event:BeforeUnloadEvent)=>{if(dirty)event.preventDefault()};
     window.addEventListener("keydown", onKey);
+    window.addEventListener("beforeunload",onUnload);
     dialog.current?.querySelector<HTMLElement>("input,button,textarea,select")?.focus();
-    return () => window.removeEventListener("keydown", onKey);
-  }, [close]);
+    return () => {window.removeEventListener("keydown", onKey);window.removeEventListener("beforeunload",onUnload)};
+  }, [dirty,requestClose]);
 
   function setLocalized(field: "title" | "excerpt" | "content", value: string) {
     setPost((current) => ({ ...current, [field]: { ...current[field], [locale]: value }, ...(field === "title" && locale === "ru" && !state.originalSlug ? { slug: slugify(value) } : {}) }));
@@ -68,19 +74,22 @@ function NewsEditor({ state, catalog, close, save }: { state: EditorState; catal
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (!post.slug || !post.title.ru.trim() || !post.excerpt.ru.trim() || !post.content.ru.trim() || !post.coverImage) return;
+    const missing=[!post.slug&&"slug",!post.title.ru.trim()&&"заголовок RU",!post.excerpt.ru.trim()&&"краткое описание RU",!post.content.ru.trim()&&"полный текст RU",!post.coverImage&&"обложка"].filter(Boolean);
+    if(missing.length){setValidationError(`Заполните обязательные поля: ${missing.join(", ")}`);setLocale("ru");return}
+    setValidationError("");
     setSaving(true);
-    await save(post);
-    setSaving(false);
+    try{const saved=await save(post);if(saved)setDirty(false)}finally{setSaving(false)}
   }
 
-  return <div className="news-editor-overlay"><button type="button" className="news-editor-backdrop" onClick={close} aria-label="Закрыть редактор" /><form ref={dialog} className="news-editor" onSubmit={submit} role="dialog" aria-modal="true" aria-labelledby="news-editor-title">
-    <header><div><span>{state.originalSlug ? "Редактирование" : "Новый материал"}</span><h2 id="news-editor-title">{post.title.ru || "Публикация без названия"}</h2></div><button type="button" onClick={close} aria-label="Закрыть"><X /></button></header>
+  return <div className="news-editor-overlay"><button type="button" className="news-editor-backdrop" onClick={requestClose} aria-label="Закрыть редактор" /><form ref={dialog} className="news-editor" onSubmit={submit} onChange={()=>setDirty(true)} noValidate role="dialog" aria-modal="true" aria-labelledby="news-editor-title">
+    <header><div><span>{state.originalSlug ? "Редактирование" : "Новый материал"}</span><h2 id="news-editor-title">{post.title.ru || "Публикация без названия"}</h2></div><button type="button" onClick={requestClose} aria-label="Закрыть"><X /></button></header>
     <div className="news-editor-body">
+      {validationError?<p className="form-error" role="alert">{validationError}</p>:null}
       <fieldset><legend>Публикация</legend><div className="news-editor-grid"><label><span>Статус</span><select value={post.status} onChange={(event) => setPost({ ...post, status: event.target.value as NewsPost["status"] })}><option value="draft">Черновик</option><option value="published">Опубликовано</option><option value="archived">Архив</option></select></label><label><span>Категория</span><select value={post.category} onChange={(event) => setPost({ ...post, category: event.target.value as NewsCategory })}>{categories.map(([id, label]) => <option value={id} key={id}>{label}</option>)}</select></label><label><span>Дата</span><input type="date" value={post.publishedAt} onChange={(event) => setPost({ ...post, publishedAt: event.target.value })} required /></label><label><span>Время чтения</span><input type="number" min="1" max="60" value={post.readingMinutes} onChange={(event) => setPost({ ...post, readingMinutes: Number(event.target.value) })} /></label><label className="full"><span>Slug страницы</span><input value={post.slug} onChange={(event) => setPost({ ...post, slug: slugify(event.target.value) })} required /></label><label className="news-feature-check"><input type="checkbox" checked={post.featured} onChange={(event) => setPost({ ...post, featured: event.target.checked })} /><Star size={16} /><span>Показывать как главную публикацию</span></label></div></fieldset>
       <fieldset><legend>Текст</legend><div className="news-locale-tabs" role="tablist" aria-label="Язык публикации">{locales.map(([id, label]) => <button type="button" role="tab" aria-selected={locale === id} className={locale === id ? "active" : ""} onClick={() => setLocale(id)} key={id}><Languages size={14} />{label}</button>)}</div><div className="news-copy-fields"><label><span>Заголовок</span><input value={post.title[locale]} onChange={(event) => setLocalized("title", event.target.value)} required={locale === "ru"} /></label><label><span>Краткое описание</span><textarea rows={3} value={post.excerpt[locale]} onChange={(event) => setLocalized("excerpt", event.target.value)} required={locale === "ru"} /></label><label><span>Полный текст</span><textarea rows={14} value={post.content[locale]} onChange={(event) => setLocalized("content", event.target.value)} placeholder={'## Подзаголовок\nТекст абзаца'} required={locale === "ru"} /></label><small>Для подзаголовка начните строку с «## ». Разделяйте абзацы пустой строкой.</small></div></fieldset>
-      <fieldset><legend>Медиа и связи</legend><div className="news-editor-grid"><label className="full"><span>Обложка</span><input value={post.coverImage} onChange={(event) => setPost({ ...post, coverImage: event.target.value })} required /></label><label className="full"><span>Галерея: ссылки через запятую</span><textarea rows={3} value={(post.gallery ?? []).join(", ")} onChange={(event) => setPost({ ...post, gallery: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} /></label><label><span>Автор</span><input value={post.author} onChange={(event) => setPost({ ...post, author: event.target.value })} /></label><label><span>Связанный трактор</span><select value={post.relatedTractorSlug ?? ""} onChange={(event) => setPost({ ...post, relatedTractorSlug: event.target.value || null })}><option value="">Без модели</option>{catalog.map((tractor) => <option value={tractor.slug} key={tractor.slug}>{tractor.model} · {tractor.hp} л.с.</option>)}</select></label><label className="full"><span>Теги: через запятую</span><input value={post.tags.join(", ")} onChange={(event) => setPost({ ...post, tags: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} /></label><label className="full"><span>Ссылка на официальный источник</span><input type="url" value={post.sourceUrl ?? ""} onChange={(event) => setPost({ ...post, sourceUrl: event.target.value || null })} /></label></div></fieldset>
+      <fieldset><legend>Медиа и связи</legend><div className="news-editor-grid"><label className="full"><span>Обложка</span><input value={post.coverImage} onChange={(event) => setPost({ ...post, coverImage: event.target.value })} required /><AdminMediaUpload label="Загрузить обложку" onUploaded={urls=>{setPost(current=>({...current,coverImage:urls[0]}));setDirty(true)}}/></label><label className="full"><span>Галерея: ссылки через запятую</span><textarea rows={3} value={(post.gallery ?? []).join(", ")} onChange={(event) => setPost({ ...post, gallery: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} /><AdminMediaUpload multiple label="Добавить изображения" onUploaded={urls=>{setPost(current=>({...current,gallery:Array.from(new Set([...(current.gallery??[]),...urls]))}));setDirty(true)}}/></label><label><span>Автор</span><input value={post.author} onChange={(event) => setPost({ ...post, author: event.target.value })} /></label><label><span>Связанный трактор</span><select value={post.relatedTractorSlug ?? ""} onChange={(event) => setPost({ ...post, relatedTractorSlug: event.target.value || null })}><option value="">Без модели</option>{catalog.map((tractor) => <option value={tractor.slug} key={tractor.slug}>{tractor.model} · {tractor.hp} л.с.</option>)}</select></label><label className="full"><span>Теги: через запятую</span><input value={post.tags.join(", ")} onChange={(event) => setPost({ ...post, tags: event.target.value.split(",").map((item) => item.trim()).filter(Boolean) })} /></label><label className="full"><span>Ссылка на официальный источник</span><input type="url" value={post.sourceUrl ?? ""} onChange={(event) => setPost({ ...post, sourceUrl: event.target.value || null })} /></label></div></fieldset>
     </div>
-    <footer><button type="button" onClick={close}>Отмена</button><button type="submit" className="admin-primary" disabled={saving}>{saving ? "Сохраняем…" : post.status === "published" ? "Опубликовать" : "Сохранить черновик"}</button></footer>
+    <footer><button type="button" onClick={requestClose}>Отмена</button><button type="submit" className="admin-primary" disabled={saving}>{saving ? "Сохраняем…" : post.status === "published" ? "Опубликовать" : "Сохранить черновик"}</button></footer>
+    {confirmClose?<div className="unsaved-confirm" role="alert"><strong>Есть несохранённые изменения</strong><span>Закрыть редактор и потерять изменения?</span><button type="button" onClick={()=>setConfirmClose(false)}>Продолжить</button><button type="button" className="danger" onClick={close}>Закрыть без сохранения</button></div>:null}
   </form></div>;
 }

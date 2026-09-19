@@ -103,11 +103,39 @@ export async function normalizedRecordStatements(args: {
     statements.push(db.prepare("INSERT INTO receivables_v2(id,customer_id,deal_id,principal_minor,due_at,status) VALUES(?,?,?,?,?,'open') ON CONFLICT(deal_id) WHERE archived=0 AND status<>'written_off' DO UPDATE SET principal_minor=excluded.principal_minor,due_at=COALESCE(excluded.due_at,receivables_v2.due_at),status=CASE WHEN (SELECT COALESCE(SUM(amount_minor),0) FROM payments_v2 WHERE deal_id=excluded.deal_id AND status='posted' AND archived=0) >= excluded.principal_minor THEN 'paid' WHEN COALESCE(excluded.due_at,receivables_v2.due_at)<CURRENT_TIMESTAMP THEN 'overdue' ELSE 'open' END,updated_at=CURRENT_TIMESTAMP,version=receivables_v2.version+1").bind(crypto.randomUUID(),customerId,dealId,deal.amount_minor,text(data,"dueAt")||null));
   }
 
+  if(kind==="leasing_applications"){
+    const customerId=text(data,"customerId"),dealId=text(data,"dealId"),partnerName=text(data,"partnerName"),partnerDecision=text(data,"partnerDecision")||"pending",contractNumber=text(data,"contractNumber");
+    if(!new Set(["pending","approved","rejected","revision"]).has(partnerDecision))throw new HttpError(400,"Выберите корректное решение лизингового партнёра");
+    if(customerId)await exists("SELECT id FROM crm_customers WHERE id=? AND archived=0",customerId,"Клиент не найден");
+    if(dealId){const deal=await db.prepare("SELECT customer_id FROM crm_deals WHERE id=? AND archived=0").bind(dealId).first<{customer_id:string}>();if(!deal||customerId&&deal.customer_id!==customerId)throw new HttpError(400,"Сделка не принадлежит выбранному клиенту");}
+    const requiredDocuments=Array.from(new Set((text(data,"requiredDocuments")||"passport,income").split(",").map(value=>value.trim()).filter(Boolean))).slice(0,20);
+    if(!requiredDocuments.length)throw new HttpError(400,"Укажите обязательные документы лизинга");
+    const existingCase=await db.prepare("SELECT document_status FROM leasing_cases_v2 WHERE id=?").bind(id).first<{document_status:string}>();
+    const documentStatus=existingCase?.document_status??"incomplete";
+    if(new Set(["approved","contract","issued"]).has(status)&&(partnerDecision!=="approved"||documentStatus!=="verified"))throw new HttpError(409,"Для этого этапа нужно одобрение партнёра и проверенный комплект документов");
+    if(status==="issued"&&!contractNumber)throw new HttpError(409,"Перед выдачей укажите номер договора лизинга");
+    const calculation=JSON.stringify(data);
+    statements.push(db.prepare("INSERT INTO leasing_cases_v2(id,customer_id,deal_id,status,partner_name,partner_decision,document_status,required_documents_json,calculation_json,contract_number,issued_at,archived,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?,CASE WHEN ?='issued' THEN CURRENT_TIMESTAMP ELSE NULL END,?,?,?) ON CONFLICT(id) DO UPDATE SET customer_id=excluded.customer_id,deal_id=excluded.deal_id,status=excluded.status,partner_name=excluded.partner_name,partner_decision=excluded.partner_decision,required_documents_json=excluded.required_documents_json,calculation_json=excluded.calculation_json,contract_number=excluded.contract_number,issued_at=CASE WHEN excluded.status='issued' THEN COALESCE(leasing_cases_v2.issued_at,CURRENT_TIMESTAMP) ELSE leasing_cases_v2.issued_at END,archived=excluded.archived,updated_by=excluded.updated_by,updated_at=CURRENT_TIMESTAMP,version=leasing_cases_v2.version+1").bind(id,customerId||null,dealId||null,status,partnerName,partnerDecision,documentStatus,JSON.stringify(requiredDocuments),calculation,contractNumber,status,archived?1:0,actor.id,actor.id));
+  }
+
   if(kind==="documents"){
-    const customerId=text(data,"customerId"),dealId=text(data,"dealId"),inventoryUnitId=text(data,"inventoryUnitId"),fileUrl=text(data,"fileUrl",true),documentType=text(data,"documentType",true);
+    let customerId=text(data,"customerId"),dealId=text(data,"dealId"),leasingApplicationId=text(data,"leasingApplicationId"),checklistKey=text(data,"checklistKey");const inventoryUnitId=text(data,"inventoryUnitId"),fileUrl=text(data,"fileUrl",true),documentType=text(data,"documentType",true),documentStatus=text(data,"documentStatus")||"uploaded";
+    const previousDocument=action==="update"?await db.prepare("SELECT leasing_application_id FROM documents_v2 WHERE id=?").bind(id).first<{leasing_application_id:string|null}>():null;
+    if(!new Set(["requested","uploaded","verified","rejected"]).has(documentStatus))throw new HttpError(400,"Выберите корректный статус документа");
+    if(documentType.startsWith("Лизинг:")){
+      if(!leasingApplicationId||!checklistKey)throw new HttpError(400,"Для лизингового документа выберите заявку и пункт пакета");
+      const leasingCase=await db.prepare("SELECT customer_id,deal_id FROM leasing_cases_v2 WHERE id=? AND archived=0").bind(leasingApplicationId).first<{customer_id:string|null;deal_id:string|null}>();
+      if(!leasingCase)throw new HttpError(400,"Заявка на лизинг не найдена");
+      customerId=leasingCase.customer_id??customerId;dealId=leasingCase.deal_id??dealId;
+    }else{leasingApplicationId="";checklistKey=""}
     if(customerId)await exists("SELECT id FROM crm_customers WHERE id=? AND archived=0",customerId,"Клиент не найден");if(dealId)await exists("SELECT id FROM crm_deals WHERE id=? AND archived=0",dealId,"Сделка не найдена");
-    if(action==="create")statements.push(db.prepare("INSERT INTO documents_v2(id,customer_id,deal_id,document_type,title,file_url,status,checklist_key,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,customerId||null,dealId||null,documentType,title,fileUrl,status,text(data,"checklistKey"),actor.id));
-    else statements.push(db.prepare("UPDATE documents_v2 SET customer_id=?,deal_id=?,document_type=?,title=?,file_url=?,status=?,checklist_key=?,archived=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?").bind(customerId||null,dealId||null,documentType,title,fileUrl,status,text(data,"checklistKey"),archived?1:0,id));
+    if(action==="create")statements.push(db.prepare("INSERT INTO documents_v2(id,customer_id,deal_id,leasing_application_id,document_type,title,file_url,status,checklist_key,uploaded_by) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(id,customerId||null,dealId||null,leasingApplicationId||null,documentType,title,fileUrl,documentStatus,checklistKey,actor.id));
+    else statements.push(db.prepare("UPDATE documents_v2 SET customer_id=?,deal_id=?,leasing_application_id=?,document_type=?,title=?,file_url=?,status=?,checklist_key=?,archived=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?").bind(customerId||null,dealId||null,leasingApplicationId||null,documentType,title,fileUrl,documentStatus,checklistKey,archived?1:0,id));
+    for(const applicationId of new Set([previousDocument?.leasing_application_id,leasingApplicationId].filter((value):value is string=>Boolean(value))))statements.push(db.prepare(`UPDATE leasing_cases_v2 lc SET document_status=CASE
+      WHEN EXISTS(SELECT 1 FROM documents_v2 d WHERE d.leasing_application_id=lc.id AND d.archived=0 AND d.status='rejected') THEN 'rejected'
+      WHEN NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(lc.required_documents_json::jsonb) required(key) WHERE NOT EXISTS(SELECT 1 FROM documents_v2 d WHERE d.leasing_application_id=lc.id AND d.archived=0 AND d.checklist_key=required.key AND d.status='verified')) THEN 'verified'
+      WHEN NOT EXISTS(SELECT 1 FROM jsonb_array_elements_text(lc.required_documents_json::jsonb) required(key) WHERE NOT EXISTS(SELECT 1 FROM documents_v2 d WHERE d.leasing_application_id=lc.id AND d.archived=0 AND d.checklist_key=required.key AND d.status IN ('uploaded','verified'))) THEN 'ready'
+      ELSE 'incomplete' END,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE lc.id=?`).bind(applicationId));
     if(documentType==="Договор"&&!archived){
       if(!customerId||!dealId||!inventoryUnitId)throw new HttpError(400,"Для договора выберите клиента, сделку и VIN");
       await exists("SELECT id FROM inventory_units_v2 WHERE id=? AND archived=0",inventoryUnitId,"VIN не найден");const amount=somToMinor(data.amount,"Сумма договора"),number=text(data,"number",true);
@@ -129,7 +157,7 @@ export async function normalizedRecordStatements(args: {
 }
 
 export async function recordLookups() {
-  const db=getRawDb();const [customers,deals,inventory,accounts,suppliers,purchases,shipments,staff,sales]=await Promise.all([
+  const db=getRawDb();const [customers,deals,inventory,accounts,suppliers,purchases,shipments,staff,sales,leasing]=await Promise.all([
     db.prepare("SELECT id,name AS label FROM crm_customers WHERE archived=0 ORDER BY name LIMIT 1000").all(),
     db.prepare("SELECT id,title AS label,customer_id FROM crm_deals WHERE archived=0 ORDER BY updated_at DESC LIMIT 1000").all(),
     db.prepare("SELECT id,vin||' · '||model AS label,status FROM inventory_units_v2 WHERE archived=0 ORDER BY vin LIMIT 1000").all(),
@@ -139,5 +167,6 @@ export async function recordLookups() {
     db.prepare("SELECT id,COALESCE(tracking_number,id) AS label,purchase_order_id FROM shipments_v2 WHERE archived=0 ORDER BY created_at DESC LIMIT 1000").all(),
     db.prepare("SELECT id,display_name AS label FROM staff WHERE active=1 ORDER BY display_name").all(),
     db.prepare("SELECT id,'Продажа · '||id AS label,customer_id,inventory_unit_id FROM sales_v2 WHERE archived=0 ORDER BY sold_at DESC LIMIT 1000").all(),
-  ]);return {customers:customers.results,deals:deals.results,inventory:inventory.results,accounts:accounts.results,suppliers:suppliers.results,purchases:purchases.results,shipments:shipments.results,staff:staff.results,sales:sales.results};
+    db.prepare("SELECT id,title AS label FROM admin_records WHERE kind='leasing_applications' AND archived=0 ORDER BY updated_at DESC LIMIT 1000").all(),
+  ]);return {customers:customers.results,deals:deals.results,inventory:inventory.results,accounts:accounts.results,suppliers:suppliers.results,purchases:purchases.results,shipments:shipments.results,staff:staff.results,sales:sales.results,leasing:leasing.results};
 }

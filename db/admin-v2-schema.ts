@@ -304,6 +304,27 @@ CREATE TABLE IF NOT EXISTS sales_v2 (
 CREATE UNIQUE INDEX IF NOT EXISTS uq_sale_deal ON sales_v2(deal_id) WHERE archived=0;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_sale_inventory ON sales_v2(inventory_unit_id) WHERE archived=0;
 
+CREATE TABLE IF NOT EXISTS leasing_cases_v2 (
+  id TEXT PRIMARY KEY REFERENCES admin_records(id),
+  customer_id TEXT REFERENCES crm_customers(id),
+  deal_id TEXT REFERENCES crm_deals(id),
+  status TEXT NOT NULL DEFAULT 'new',
+  partner_name TEXT NOT NULL DEFAULT '',
+  partner_decision TEXT NOT NULL DEFAULT 'pending' CHECK(partner_decision IN ('pending','approved','rejected','revision')),
+  document_status TEXT NOT NULL DEFAULT 'incomplete' CHECK(document_status IN ('incomplete','ready','submitted','verified','rejected')),
+  required_documents_json TEXT NOT NULL DEFAULT '["passport","income"]',
+  calculation_json TEXT NOT NULL DEFAULT '{}',
+  contract_number TEXT NOT NULL DEFAULT '',
+  issued_at TIMESTAMPTZ,
+  archived INTEGER NOT NULL DEFAULT 0,
+  version INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT REFERENCES staff(id),
+  updated_by TEXT REFERENCES staff(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_leasing_case_deal ON leasing_cases_v2(deal_id) WHERE deal_id IS NOT NULL AND archived=0;
+
 CREATE TABLE IF NOT EXISTS documents_v2 (
   id TEXT PRIMARY KEY,
   customer_id TEXT REFERENCES crm_customers(id),
@@ -320,6 +341,7 @@ CREATE TABLE IF NOT EXISTS documents_v2 (
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE documents_v2 ADD COLUMN IF NOT EXISTS leasing_application_id TEXT REFERENCES leasing_cases_v2(id);
 
 CREATE TABLE IF NOT EXISTS service_cases_v2 (
   id TEXT PRIMARY KEY,
@@ -407,6 +429,7 @@ CREATE INDEX IF NOT EXISTS idx_sales_customer ON sales_v2(customer_id, sold_at D
 CREATE INDEX IF NOT EXISTS idx_sales_contract ON sales_v2(contract_id);
 CREATE INDEX IF NOT EXISTS idx_documents_customer ON documents_v2(customer_id, created_at DESC) WHERE customer_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_documents_deal ON documents_v2(deal_id, created_at DESC) WHERE deal_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_documents_leasing ON documents_v2(leasing_application_id, checklist_key, status) WHERE leasing_application_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_service_customer ON service_cases_v2(customer_id, opened_at DESC);
 CREATE INDEX IF NOT EXISTS idx_service_sale ON service_cases_v2(sale_id);
 CREATE INDEX IF NOT EXISTS idx_conversation_members_staff ON conversation_members_v2(staff_id, archived_at);
@@ -432,6 +455,10 @@ CREATE TABLE IF NOT EXISTS backup_runs (
   verified_at TIMESTAMPTZ,
   detail TEXT NOT NULL DEFAULT ''
 );
+
+INSERT INTO leasing_cases_v2(id,status,calculation_json)
+SELECT id,status,data_json FROM admin_records WHERE kind='leasing_applications'
+ON CONFLICT(id) DO NOTHING;
 
 INSERT INTO financial_accounts(id,name,account_type,currency,opening_balance_minor,active)
 VALUES ('account-atadan-cash','Основная касса','cash','KGS',0,1)

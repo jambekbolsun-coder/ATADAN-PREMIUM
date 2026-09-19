@@ -95,7 +95,12 @@ export async function GET(request: Request) {
       db.prepare(`SELECT * FROM admin_records WHERE ${clause} ORDER BY ${sort} LIMIT ? OFFSET ?`).bind(...bindings, pageSize, (page - 1) * pageSize).all(),
       db.prepare(`SELECT COUNT(*) AS total FROM admin_records WHERE ${clause}`).bind(...bindings).first<{total:number}>(),
     ]);
-    return Response.json({ actor, records: rows.results, total: Number(count?.total ?? 0), page, pageSize, lookups: await recordLookups() }, { headers: { "Cache-Control": "no-store" } });
+    let records=rows.results as Array<Record<string,unknown>&{id:string;data_json:string}>;
+    if(kind==="leasing_applications"&&records.length){
+      const ids=records.map(row=>row.id),cases=await db.prepare(`SELECT lc.*,jsonb_array_length(lc.required_documents_json::jsonb) required_count,(SELECT COUNT(DISTINCT d.checklist_key) FROM documents_v2 d WHERE d.leasing_application_id=lc.id AND d.archived=0 AND d.status='verified') verified_count FROM leasing_cases_v2 lc WHERE lc.id IN (${ids.map(()=>"?").join(",")})`).bind(...ids).all<Record<string,unknown>&{id:string}>(),byId=new Map(cases.results.map(row=>[row.id,row]));
+      records=records.map(record=>{const row=byId.get(record.id);if(!row)return record;const data=storedData(record.data_json),required=JSON.parse(String(row.required_documents_json||"[]")) as string[];return {...record,data_json:JSON.stringify({...data,customerId:row.customer_id??data.customerId,dealId:row.deal_id??data.dealId,partnerName:row.partner_name,partnerDecision:row.partner_decision,documentStatus:row.document_status,requiredDocuments:required.join(", "),contractNumber:row.contract_number,documentsVerified:Number(row.verified_count||0),documentsRequired:Number(row.required_count||0)})}});
+    }
+    return Response.json({ actor, records, total: Number(count?.total ?? 0), page, pageSize, lookups: await recordLookups() }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { if(!(error instanceof HttpError))console.error("admin records GET failed",error);return fail(error); }
 }
 

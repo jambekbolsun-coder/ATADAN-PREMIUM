@@ -2597,6 +2597,20 @@ html.lenis,html.lenis body{height:auto}
 @keyframes atadan-loader-spin{to{transform:rotate(360deg)}}
 @keyframes atadan-loader-in{from{opacity:0}to{opacity:1}}
 
+.admin-media-upload{display:flex;flex-direction:column;align-items:flex-start;gap:6px;margin-top:8px}
+.admin-media-upload>label{display:inline-flex!important;flex-direction:row!important;align-items:center;gap:8px;width:auto!important;min-height:38px;padding:8px 13px;border:1px solid rgba(20,87,48,.22);border-radius:10px;background:#f3f8f3;color:#145730;font-weight:750;cursor:pointer}
+.admin-media-upload>label:hover{background:#e8f3e9;border-color:#79c94b}
+.admin-media-upload>label.is-busy{cursor:wait;opacity:.72}
+.admin-media-upload svg{width:17px;height:17px}
+.admin-media-upload input[type=file]{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.admin-media-upload small{color:#b3261e}
+.file-upload-field{display:flex;flex-direction:column;align-items:stretch;gap:6px;width:100%}
+.import-preview{margin-top:16px;display:grid;gap:8px}
+.import-preview>div{max-width:100%;overflow:auto;border:1px solid rgba(23,53,36,.12);border-radius:12px}
+.import-preview table{width:100%;border-collapse:collapse;font-size:.84rem;background:#fff}
+.import-preview th,.import-preview td{padding:9px 11px;text-align:left;white-space:nowrap;border-bottom:1px solid rgba(23,53,36,.09)}
+.import-preview th{position:sticky;top:0;background:#edf5ee;color:#173524}
+
 @media(max-width:1060px){
   .brand{width:154px;height:55px}
   .brand img{width:154px}
