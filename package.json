@@ -10,6 +10,7 @@
     "build": "next build",
     "start": "next start",
     "test": "npm run build && node --experimental-strip-types --test tests/*.test.mjs",
+    "verify:admin": "node scripts/verify-admin-e2e.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next --ignore-pattern .vercel",
     "db:generate": "drizzle-kit generate"
   },
