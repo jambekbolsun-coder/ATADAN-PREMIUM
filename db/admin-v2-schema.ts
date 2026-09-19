@@ -378,6 +378,7 @@ CREATE TABLE IF NOT EXISTS conversations_v2 (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL CHECK(kind IN ('direct','group')),
   title TEXT NOT NULL DEFAULT '',
+  direct_key TEXT,
   linked_entity_type TEXT,
   linked_entity_id TEXT,
   archived INTEGER NOT NULL DEFAULT 0,
@@ -386,6 +387,8 @@ CREATE TABLE IF NOT EXISTS conversations_v2 (
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+ALTER TABLE conversations_v2 ADD COLUMN IF NOT EXISTS direct_key TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_active_direct_conversation ON conversations_v2(direct_key) WHERE kind='direct' AND direct_key IS NOT NULL AND archived=0;
 CREATE TABLE IF NOT EXISTS conversation_members_v2 (
   conversation_id TEXT NOT NULL REFERENCES conversations_v2(id),
   staff_id TEXT NOT NULL REFERENCES staff(id),

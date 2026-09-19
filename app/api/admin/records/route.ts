@@ -139,6 +139,25 @@ export async function POST(request: Request) {
     const expected = Number(body.version);
     if (!Number.isInteger(expected) || expected !== Number(current.version)) throw new HttpError(409, "Запись уже изменена. Обновите список.");
 
+    if (action === "void_payment") {
+      if (kind !== "payments") throw new HttpError(400, "Сторно доступно только для платежей");
+      const payment = await db.prepare("SELECT id,deal_id,account_id,amount_minor,status,archived FROM payments_v2 WHERE id=? FOR UPDATE").bind(id).first<{id:string;deal_id:string;account_id:string;amount_minor:number;status:string;archived:number}>();
+      if (!payment || payment.status !== "posted" || Number(payment.archived) !== 0) throw new HttpError(409, "Платёж уже сторнирован или недоступен");
+      const original = await db.prepare("SELECT id FROM account_transactions WHERE payment_id=? AND direction='in' AND reversed_by IS NULL ORDER BY created_at DESC LIMIT 1").bind(id).first<{id:string}>();
+      if (!original) throw new HttpError(409, "Для платежа не найдено исходное движение по счёту");
+      const reversalId = crypto.randomUUID();
+      await db.transaction(async client => {
+        const changed = await db.prepare("UPDATE payments_v2 SET status='void',archived=1,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND status='posted' AND archived=0").bind(id).execute(client);
+        if (!changed.meta.changes) throw new HttpError(409, "Платёж уже изменён");
+        await db.prepare("INSERT INTO account_transactions(id,account_id,direction,amount_minor,category,payment_id,occurred_at,description,created_by) VALUES(?,?, 'out', ?, 'Сторно оплаты', ?, CURRENT_TIMESTAMP, ?, ?)").bind(reversalId,payment.account_id,payment.amount_minor,id,`Сторно платежа ${id}`,actor.id).execute(client);
+        await db.prepare("UPDATE account_transactions SET reversed_by=? WHERE id=? AND reversed_by IS NULL").bind(reversalId,original.id).execute(client);
+        await db.prepare("UPDATE admin_records SET archived=1,status='archived',updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1,data_json=? WHERE id=? AND version=? AND archived=0").bind(actor.id,JSON.stringify({...storedData(current.data_json),voidedAt:new Date().toISOString(),voidedBy:actor.id}),id,expected).execute(client);
+        await db.prepare("UPDATE receivables_v2 r SET status=CASE WHEN COALESCE((SELECT SUM(amount_minor) FROM payments_v2 WHERE deal_id=r.deal_id AND status='posted' AND archived=0),0)>=r.principal_minor THEN 'paid' WHEN r.due_at<CURRENT_TIMESTAMP THEN 'overdue' ELSE 'open' END,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE r.deal_id=? AND r.archived=0").bind(payment.deal_id).execute(client);
+        await db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),actor.id,"Сторнирован платёж",id,`Создано обратное движение ${reversalId}`).execute(client);
+      });
+      return Response.json({ok:true,reversalId});
+    }
+
     if (action === "update") {
       const title = cleanText(body.title, 180, true);
       const subtitle = cleanText(body.subtitle ?? "", 600);
