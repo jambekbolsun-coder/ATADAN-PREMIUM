@@ -60,3 +60,13 @@ test("staff login uses a PostgreSQL-safe rate-limit upsert", async () => {
   assert.match(session, /authenticateStaff\(username, password, request\)/);
   assert.match(session, /createStaffSession\(actor, request\)/);
 });
+
+test("plan versus actual uses one consistent thirty-day period", async () => {
+  const dashboard = await source("../app/components/AdminDashboard.tsx");
+  assert.match(dashboard, /periodSales=director\.comparison\?\.sales_current/);
+  assert.match(dashboard, /revenue_current_minor/);
+  assert.match(dashboard, /profit_current_minor/);
+  assert.match(dashboard, /periodLeads=director\.period\?\.leads_30/);
+  assert.match(dashboard, /Встречи · 30 дней/);
+  assert.doesNotMatch(dashboard, /label="Продажи" fact=\{deals\?\.won/);
+});
