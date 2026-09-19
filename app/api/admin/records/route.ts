@@ -159,6 +159,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "update") {
+      if (kind === "payments") throw new HttpError(409, "Проведённый платёж нельзя редактировать; используйте сторно");
       const title = cleanText(body.title, 180, true);
       const subtitle = cleanText(body.subtitle ?? "", 600);
       const category = cleanText(body.category ?? "", 100);
