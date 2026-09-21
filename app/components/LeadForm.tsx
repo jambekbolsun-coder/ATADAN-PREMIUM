@@ -2,6 +2,9 @@
 
 import { CheckCircle2, LoaderCircle, MessageCircle } from "lucide-react";
 import { FormEvent, useState } from "react";
+import { PhoneInput } from "./PhoneInput";
+import { useSiteSettings } from "./SiteSettings";
+import { successMessage } from "../lib/customer-input";
 import { useI18n } from "./I18n";
 import { Link } from "./SiteLink";
 
@@ -9,12 +12,15 @@ const consentCopy={ru:{start:"Я согласен(на) на обработку 
 
 export function LeadForm({ tractorSlug, tractorModel, compact = false, defaultMessage = "" }: { tractorSlug?: string; tractorModel?: string; compact?: boolean; defaultMessage?: string }) {
   const [state, setState] = useState<"idle" | "loading" | "success" | "error">("idle");
+  const settings = useSiteSettings();
+  const [sentName, setSentName] = useState("");
   const [error, setError] = useState("");
   const [requestKey] = useState(() => crypto.randomUUID());
   const { t, locale } = useI18n();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (state === "loading") return;
     setState("loading");
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
@@ -31,11 +37,13 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false, defaultMe
       consentVersion: "2026-09-09",
       consentedAt: new Date().toISOString(),
       sourcePath: window.location.pathname,
+      region: sessionStorage.getItem("atadan-region") || "",
     };
     try {
       const response = await fetch("/api/leads", { method: "POST", headers: { "Content-Type": "application/json", "Idempotency-Key": requestKey }, body: JSON.stringify(payload) });
       const data = await response.json() as { error?: string };
       if (!response.ok) throw new Error(data.error ?? "Не удалось отправить заявку");
+      setSentName(payload.name);
       setState("success");
       formElement.reset();
     } catch (cause) {
@@ -45,14 +53,14 @@ export function LeadForm({ tractorSlug, tractorModel, compact = false, defaultMe
   }
 
   if (state === "success") {
-    return <div className="form-success" role="status"><CheckCircle2 /><div><strong>{t("lead.success")}</strong><p>{t("lead.successText")}</p></div></div>;
+    return <div className="form-success" role="status"><CheckCircle2 /><div><strong>{successMessage}</strong><a className="lead-whatsapp" href={`https://wa.me/${settings.phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Здравствуйте! Я ${sentName}. Оставил(а) заявку${tractorModel ? ` на Changfa ${tractorModel}` : ""}.`)}`} target="_blank" rel="noreferrer">Продолжить в WhatsApp</a></div></div>;
   }
 
   return (
     <form className={`lead-form ${compact ? "compact" : ""} ${state === "loading" ? "is-sending" : ""}`} onSubmit={submit} aria-busy={state === "loading"}>
       <label className="honeypot" aria-hidden="true"><span>Website</span><input name="website" tabIndex={-1} autoComplete="off" aria-hidden="true" /></label>
       <label><span>{t("lead.name")}</span><input name="name" minLength={2} maxLength={120} required placeholder={t("lead.namePlaceholder")} autoComplete="name" /></label>
-      <label><span>{t("lead.phone")}</span><input name="phone" required placeholder="+996 ___ ___ ___" autoComplete="tel" inputMode="tel" /></label>
+      <PhoneInput/>
       {!compact ? <label className="wide"><span>{t("lead.message")}</span><textarea name="message" maxLength={1000} rows={3} placeholder={t("lead.messagePlaceholder")} defaultValue={defaultMessage} /></label> : null}
       <label className="consent wide"><input type="checkbox" name="consent" required /><span>{consentCopy[locale].start} <Link href="/privacy" target="_blank">{consentCopy[locale].link}</Link>.</span></label>
       {state === "error" ? <p className="form-error wide" role="alert">{error}</p> : null}

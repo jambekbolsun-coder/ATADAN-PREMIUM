@@ -47,7 +47,8 @@ test("leasing applications support calculation variants, history and protected p
 
 test("lead submission stays inside CRM without WhatsApp automation", async () => {
   const form = await source("../app/components/LeadForm.tsx");
-  assert.doesNotMatch(form, /wa\.me|window\.open/);
+  assert.doesNotMatch(form, /window\.open|window\.location\.(href|assign)/);
+  assert.match(form, /Продолжить в WhatsApp/);
   assert.match(form, /\/api\/leads/);
 });
 

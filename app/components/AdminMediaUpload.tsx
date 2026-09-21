@@ -9,12 +9,14 @@ export function AdminMediaUpload({
   multiple = false,
   label = "Загрузить файл",
   visibility = "public",
+  scope = "documents",
 }: {
   onUploaded: (urls: string[]) => void;
   accept?: string;
   multiple?: boolean;
   label?: string;
   visibility?: "public" | "private";
+  scope?:string;
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -31,6 +33,8 @@ export function AdminMediaUpload({
         const payload = new FormData();
         payload.set("file", file);
         payload.set("visibility", visibility);
+        payload.set("scope",scope);
+        if(file.size>4_000_000)throw new Error("Размер файла · до 4 МБ");
         const response = await fetch("/api/admin/media", { method: "POST", body: payload });
         const result = await response.json().catch(() => ({})) as { url?: string; error?: string };
         if (!response.ok || !result.url) throw new Error(result.error || `Не удалось загрузить «${file.name}»`);

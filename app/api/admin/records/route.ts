@@ -1,3 +1,4 @@
+import { revalidatePath } from "next/cache";
 import { getRawDb } from "../../../../db";
 import { canUseSection, requireActor, type Actor } from "../../../lib/admin-auth";
 import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
@@ -89,6 +90,7 @@ export async function GET(request: Request) {
     const bindings: unknown[] = [kind];
     if (q) { where.push("(lower(title) LIKE ? OR lower(subtitle) LIKE ? OR lower(category) LIKE ? OR lower(data_json) LIKE ?)"); bindings.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
     if (status !== "all") { if (!statuses.has(status)) throw new HttpError(400, "Неизвестный статус"); where.push("status=?"); bindings.push(status); }
+    if(kind==="documents"&&url.searchParams.get("folder")){where.push("COALESCE(NULLIF(data_json::jsonb->>'folderId',''),'folder-1')=?");bindings.push(cleanText(url.searchParams.get("folder"),30,true))}
     const db = getRawDb();
     const clause = where.join(" AND ");
     const [rows, count] = await Promise.all([
@@ -123,6 +125,7 @@ export async function POST(request: Request) {
       if (!statuses.has(status)) throw new HttpError(400, "Неизвестный статус");
       const sortOrder = Math.max(0, Math.min(100_000, Math.round(Number(body.sortOrder) || 0)));
       const data = normalizeData(kind,body.data);
+      if(kind==="finance_entries")data.notes=subtitle;
       const normalized = await normalizedRecordStatements({action:"create",id,kind,title,status,data,actor});
       const statements = [
         db.prepare("INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(id,kind,title,subtitle,status,category,sortOrder,JSON.stringify(data),actor.id,actor.id),
@@ -130,6 +133,7 @@ export async function POST(request: Request) {
         db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),actor.id,"Создано",id,`Создано ${moduleName(kind)} «${title}»`),
       ];
       await db.batch(statements);
+      if(marketingKinds.has(kind))revalidatePath("/","layout");
       return Response.json({ id }, { status: 201 });
     }
 
@@ -179,6 +183,7 @@ export async function POST(request: Request) {
       const archiveData=storedData(current.data_json);const related=await normalizedRecordStatements({action:"archive",id,kind,title:current.title,status:"archived",data:archiveData,actor});
       await db.transaction(async client=>{const result=await db.prepare("UPDATE admin_records SET archived=1,status='archived',updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?").bind(actor.id,id,expected).execute(client);if(!result.meta.changes)throw new HttpError(409,"Запись уже изменена. Обновите список.");for(const statement of related)await statement.execute(client);await db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),actor.id,"Перенесено в архив",id,`Архивировано ${moduleName(kind)} «${current.title}»`).execute(client);});
     } else throw new HttpError(400, "Неизвестное действие");
+    if(marketingKinds.has(kind))revalidatePath("/","layout");
     return Response.json({ ok: true });
   } catch (error) { if(!(error instanceof HttpError))console.error("admin records POST failed",error);return fail(error); }
 }

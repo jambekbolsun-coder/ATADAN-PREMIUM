@@ -140,7 +140,8 @@ test("admin navigation exposes connected marketing and company modules", async (
   const marketing = dashboard.match(/marketing:\[(.*?)\],\s*company:/s)?.[1] ?? "";
   const company = dashboard.match(/company:\[(.*?)\],\s*control:/s)?.[1] ?? "";
   for (const id of ["catalog", "news", "public-service", "faq", "leasing"]) assert.match(marketing, new RegExp(`id:"${id}"`));
-  for (const id of ["deals", "client-base", "inventory-units", "sales", "suppliers", "purchases", "shipments", "financial-accounts", "documents", "meetings", "service-cases", "finance", "team"]) assert.match(company, new RegExp(`id:"${id}"`));
+  assert.doesNotMatch(company, /id:"financial-accounts"/);
+  for (const id of ["deals", "client-base", "inventory-units", "sales", "suppliers", "purchases", "shipments", "documents", "meetings", "service-cases", "finance", "team"]) assert.match(company, new RegExp(`id:"${id}"`));
 });
 
 test("deal movement creates one normalized sale and locks the linked VIN", async () => {

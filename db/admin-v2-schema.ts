@@ -388,6 +388,8 @@ CREATE TABLE IF NOT EXISTS conversations_v2 (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 ALTER TABLE conversations_v2 ADD COLUMN IF NOT EXISTS direct_key TEXT;
+ALTER TABLE conversations_v2 ADD COLUMN IF NOT EXISTS description TEXT NOT NULL DEFAULT '';
+ALTER TABLE conversations_v2 ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 CREATE UNIQUE INDEX IF NOT EXISTS uq_active_direct_conversation ON conversations_v2(direct_key) WHERE kind='direct' AND direct_key IS NOT NULL AND archived=0;
 CREATE TABLE IF NOT EXISTS conversation_members_v2 (
   conversation_id TEXT NOT NULL REFERENCES conversations_v2(id),
@@ -468,4 +470,49 @@ VALUES ('account-atadan-cash','Основная касса','cash','KGS',0,1)
 ON CONFLICT(id) DO NOTHING;
 
 INSERT INTO schema_migrations(id) VALUES ('admin-v2-normalized-core') ON CONFLICT(id) DO NOTHING;
+
+-- Additive migration: preserve all existing records and relationships.
+ALTER TABLE shipments_v2 ALTER COLUMN purchase_order_id DROP NOT NULL;
+ALTER TABLE service_cases_v2 ALTER COLUMN sale_id DROP NOT NULL;
+ALTER TABLE interest_events ADD COLUMN IF NOT EXISTS region TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_model_region_views ON interest_events(tractor_slug,region);
+CREATE TABLE IF NOT EXISTS document_folders_v3(id TEXT PRIMARY KEY,name TEXT NOT NULL,version INTEGER NOT NULL DEFAULT 1);
+INSERT INTO document_folders_v3(id,name) VALUES('folder-1','Папка 1'),('folder-2','Папка 2'),('folder-3','Папка 3') ON CONFLICT DO NOTHING;
+CREATE TABLE IF NOT EXISTS record_options_v3(kind TEXT NOT NULL,field TEXT NOT NULL,value TEXT NOT NULL,PRIMARY KEY(kind,field,value));
+INSERT INTO financial_accounts(id,name,account_type,currency,opening_balance_minor,active) VALUES('atadan-operating-expenses','Операционные расходы','clearing','KGS',0,1) ON CONFLICT DO NOTHING;
+ALTER TABLE messages_v2 ADD COLUMN IF NOT EXISTS attachments_json TEXT NOT NULL DEFAULT '[]';
+CREATE TABLE IF NOT EXISTS uploads_v3(key TEXT PRIMARY KEY,uploaded_by TEXT NOT NULL REFERENCES staff(id),scope TEXT NOT NULL,content_type TEXT NOT NULL,size INTEGER NOT NULL,created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP);
+INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json)
+SELECT seed.id,'faq',seed.question,seed.answer,'published','Частые вопросы',seed.ordering,jsonb_build_object('question',seed.question,'answer',seed.answer)::text
+FROM (VALUES
+  ('faq-base-warranty','Есть гарантия?','Да, условия гарантии фиксируются для выбранной модели и комплектации.',1),
+  ('faq-base-leasing','Можно оформить лизинг?','Да. ATADAN оформляет лизинг на 7 лет. Расчёт предварительный, окончательные условия подтверждаются перед подписанием договора.',2),
+  ('faq-base-service','Есть сервис и запчасти?','Да. ATADAN помогает с обслуживанием техники и подбором запасных частей.',3)
+) seed(id,question,answer,ordering)
+WHERE NOT EXISTS(SELECT 1 FROM admin_records r WHERE r.kind='faq' AND (r.title=seed.question OR r.data_json::jsonb->>'question'=seed.question))
+ON CONFLICT(id) DO NOTHING;
+INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json) VALUES('faq-workflow-20260922-0','faq','Как выбрать мощность трактора?','Начните с мощности и региона в подборе на сайте. Затем менеджер уточнит площадь, почву и навесное оборудование и поможет выбрать модель.','published','Частые вопросы',10,'{"question": "Как выбрать мощность трактора?", "answer": "Начните с мощности и региона в подборе на сайте. Затем менеджер уточнит площадь, почву и навесное оборудование и поможет выбрать модель.", "buttonLabel": "Смотреть каталог", "buttonUrl": "/catalog"}') ON CONFLICT(id) DO NOTHING;
+INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json) VALUES('faq-workflow-20260922-1','faq','На какой срок оформляется лизинг?','В ATADAN можно оформить лизинг на 7 лет. Выберите модель и первоначальный взнос в калькуляторе. Окончательные условия подтверждаются перед подписанием договора.','published','Частые вопросы',11,'{"question": "На какой срок оформляется лизинг?", "answer": "В ATADAN можно оформить лизинг на 7 лет. Выберите модель и первоначальный взнос в калькуляторе. Окончательные условия подтверждаются перед подписанием договора.", "buttonLabel": "Рассчитать лизинг", "buttonUrl": "/finance"}') ON CONFLICT(id) DO NOTHING;
+INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json) VALUES('faq-workflow-20260922-2','faq','Можно ли оставить заявку на конкретный трактор?','Да. Нажмите «Оставить заявку» в карточке трактора: выбранная модель автоматически передаётся менеджеру.','published','Частые вопросы',12,'{"question": "Можно ли оставить заявку на конкретный трактор?", "answer": "Да. Нажмите «Оставить заявку» в карточке трактора: выбранная модель автоматически передаётся менеджеру.", "buttonLabel": "", "buttonUrl": ""}') ON CONFLICT(id) DO NOTHING;
+INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json) VALUES('faq-workflow-20260922-3','faq','Как узнать наличие и срок поставки?','В карточке указано, находится модель в наличии или доступна под заказ. Точную комплектацию и срок доставки подтвердит менеджер после заявки.','published','Частые вопросы',13,'{"question": "Как узнать наличие и срок поставки?", "answer": "В карточке указано, находится модель в наличии или доступна под заказ. Точную комплектацию и срок доставки подтвердит менеджер после заявки.", "buttonLabel": "Открыть каталог", "buttonUrl": "/catalog"}') ON CONFLICT(id) DO NOTHING;
+INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json) VALUES('faq-workflow-20260922-4','faq','Можно ли обратиться с иностранным номером?','Да. В форме заявки доступны номера Кыргызстана, России, Казахстана, Узбекистана и Таджикистана. Выберите страну и введите свой номер.','published','Частые вопросы',14,'{"question": "Можно ли обратиться с иностранным номером?", "answer": "Да. В форме заявки доступны номера Кыргызстана, России, Казахстана, Узбекистана и Таджикистана. Выберите страну и введите свой номер.", "buttonLabel": "", "buttonUrl": ""}') ON CONFLICT(id) DO NOTHING;
+INSERT INTO schema_migrations(id) VALUES('workflows-20260922') ON CONFLICT DO NOTHING;
+
+-- Carry existing work groups forward without losing their message history.
+DO $$ BEGIN
+  IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE id='legacy-chat-groups-20260922') THEN
+    INSERT INTO conversations_v2(id,kind,title,description,created_by,created_at,updated_at)
+      SELECT r.id,'group',r.title,COALESCE(r.data_json::jsonb->>'description',r.subtitle,''),r.created_by,r.created_at,r.updated_at
+      FROM admin_records r JOIN staff s ON s.id=r.created_by
+      WHERE r.kind='employee_group' AND r.archived=0 ON CONFLICT(id) DO NOTHING;
+    INSERT INTO conversation_members_v2(conversation_id,staff_id)
+      SELECT c.id,c.created_by FROM conversations_v2 c JOIN admin_records r ON r.id=c.id AND r.kind='employee_group'
+      WHERE r.archived=0 ON CONFLICT DO NOTHING;
+    INSERT INTO conversation_members_v2(conversation_id,staff_id)
+      SELECT c.id,s.id FROM admin_records r JOIN conversations_v2 c ON c.id=r.id
+      CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(r.data_json::jsonb->'members')='array' THEN r.data_json::jsonb->'members' ELSE '[]'::jsonb END) member(id)
+      JOIN staff s ON s.id=member.id WHERE r.kind='employee_group' AND r.archived=0 ON CONFLICT DO NOTHING;
+    INSERT INTO schema_migrations(id) VALUES('legacy-chat-groups-20260922');
+  END IF;
+END $$;
 `;

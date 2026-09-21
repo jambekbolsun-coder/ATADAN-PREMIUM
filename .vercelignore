@@ -9,3 +9,9 @@ work
 *.tar.gz
 .agents
 skills-lock.json
+
+.env*
+scripts/setup-workflow-test.mjs
+scripts/workflow-e2e.mjs
+scripts/*workflows.mjs
+scripts/upload-e2e.mjs

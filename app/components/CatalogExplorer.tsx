@@ -1,5 +1,6 @@
 "use client";
 
+import { powerRanges } from "../lib/customer-input";
 import Image from "next/image";
 import { PackageSearch, Search, SlidersHorizontal, Tractor as TractorIcon, X } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
@@ -10,10 +11,7 @@ import type { PublicRecord } from "../lib/public-records";
 
 const ranges = [
   { label: "Все мощности", min: 0, max: 999 },
-  { label: "50–80 л.с.", min: 50, max: 80 },
-  { label: "90–120 л.с.", min: 90, max: 120 },
-  { label: "140–180 л.с.", min: 140, max: 180 },
-  { label: "200–240 л.с.", min: 200, max: 240 },
+  ...powerRanges,
 ];
 
 export function CatalogExplorer({ tractors, parts=[], initialPower, initialQuery = "", initialPopular = false }: { tractors: Tractor[]; parts?:PublicRecord[]; initialPower?: number; initialQuery?: string; initialPopular?: boolean }) {

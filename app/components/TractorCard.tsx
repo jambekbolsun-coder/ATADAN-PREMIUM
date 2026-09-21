@@ -1,5 +1,6 @@
 "use client";
 
+import { LeadModalButton } from "./LeadModalButton";
 import Image from "next/image";
 import { Link } from "./SiteLink";
 import { ArrowUpRight, Gauge, Sprout } from "lucide-react";
@@ -25,7 +26,7 @@ export function TractorCard({ tractor, featured = false }: { tractor: Tractor; f
         <div className="tractor-meta"><span><Gauge size={17} aria-hidden="true" />{tractor.hp} {t("common.hp")}</span><span><Sprout size={17} aria-hidden="true" />{tractor.farmArea}</span></div>
         <p className="tractor-card-description">{tractor.description}</p>
         <div className="tractor-finance"><small>{t("product.installment")}</small><strong><Link href={`/catalog/${tractor.slug}#leasing`}>{t("finance.calcCta")}</Link></strong></div>
-        <Link className="details-link" href={`/catalog/${tractor.slug}`}>{t("product.details")} <ArrowUpRight size={17} aria-hidden="true" /></Link>
+        <LeadModalButton tractorSlug={tractor.slug} tractorModel={tractor.model}/><Link className="details-link" href={`/catalog/${tractor.slug}`}>{t("product.details")} <ArrowUpRight size={17} aria-hidden="true" /></Link>
       </div>
     </article>
   );

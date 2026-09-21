@@ -21,7 +21,7 @@ export function AnalyticsTracker() {
       void fetch("/api/events", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ path: pathname, tractorSlug, eventType: "page_view", visitorId }),
+        body: JSON.stringify({ path: pathname, tractorSlug, eventType: "page_view", visitorId, region:sessionStorage.getItem("atadan-region")||"" }),
         keepalive: true,
       });
     }

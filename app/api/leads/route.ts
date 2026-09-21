@@ -1,3 +1,4 @@
+import { regions, validPublicPhone } from "../../lib/customer-input";
 import { ensureDb, getRawDb } from "../../../db";
 import { getCatalog } from "../../lib/catalog";
 import { cleanText, digest, fail, HttpError, jsonBody, rateLimit, sameOrigin } from "../../lib/security";
@@ -12,12 +13,14 @@ export async function POST(request: Request) {
     const phone = cleanText(body.phone, 40, true);
     const normalizedPhone = normalizePhone(phone);
     const message = cleanText(body.message ?? "", 1000);
+    const region=cleanText(body.region??"",80);
+    if(region&&!regions.some(item=>item===region))throw new HttpError(400,"Выберите регион Кыргызстана");
     if (body.consent !== true) throw new HttpError(400, "Необходимо согласие на обработку персональных данных");
     const consentVersion = cleanText(body.consentVersion ?? "", 40, true);
     const consentAt = cleanText(body.consentedAt ?? "", 40, true);
     const sourcePath = cleanText(body.sourcePath ?? "/", 300, true);
     if (!/^\d{4}-\d{2}-\d{2}T/.test(consentAt)) throw new HttpError(400, "Некорректная отметка согласия");
-    if (name.length < 2 || phone.replace(/\D/g, "").length < 8) throw new HttpError(400, "Укажите имя и корректный номер телефона");
+    if (name.length < 2 || !validPublicPhone(phone)) throw new HttpError(400, "Укажите имя и корректный номер телефона");
     await ensureDb();
     const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0] ?? "local";
     await rateLimit(`lead:${forwarded}`, 8, 900);
@@ -43,10 +46,10 @@ export async function POST(request: Request) {
     const assignee = await db.prepare("SELECT id FROM staff WHERE role='owner' AND active=1 ORDER BY created_at LIMIT 1").first<{id:string}>();
     const priceMinor = tractor?.price ? Math.round(tractor.price * (1 - (tractor.discountPercent ?? 0) / 100) * 100) : 0;
     const cost = tractor ? await db.prepare("SELECT cost_minor FROM product_costs WHERE slug=?").bind(tractor.slug).first<{cost_minor:number}>() : null;
-    const customer = await db.prepare(`INSERT INTO crm_customers(id,name,phone,normalized_phone,notes,source,tractor_slug,assigned_to)
-      VALUES(?,?,?,?,?,'website',?,?) ON CONFLICT(normalized_phone) WHERE normalized_phone IS NOT NULL AND normalized_phone<>'' AND archived=0
-      DO UPDATE SET name=CASE WHEN crm_customers.name='' THEN excluded.name ELSE crm_customers.name END,phone=excluded.phone,updated_at=CURRENT_TIMESTAMP,version=crm_customers.version+1
-      RETURNING id`).bind(proposedCustomerId,name,phone,normalizedPhone,message,tractor?.slug??null,assignee?.id??null).first<{id:string}>();
+    const customer = await db.prepare(`INSERT INTO crm_customers(id,name,phone,normalized_phone,notes,region,source,tractor_slug,assigned_to)
+      VALUES(?,?,?,?,?,?,'website',?,?) ON CONFLICT(normalized_phone) WHERE normalized_phone IS NOT NULL AND normalized_phone<>'' AND archived=0
+      DO UPDATE SET name=CASE WHEN crm_customers.name='' THEN excluded.name ELSE crm_customers.name END,phone=excluded.phone,region=CASE WHEN excluded.region<>'' THEN excluded.region ELSE crm_customers.region END,updated_at=CURRENT_TIMESTAMP,version=crm_customers.version+1
+      RETURNING id`).bind(proposedCustomerId,name,phone,normalizedPhone,message,region,tractor?.slug??null,assignee?.id??null).first<{id:string}>();
     if(!customer)throw new HttpError(500,"Не удалось связать клиента");
     const customerId=customer.id;
     try {
