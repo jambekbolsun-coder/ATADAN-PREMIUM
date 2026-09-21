@@ -15,4 +15,3 @@ try{
  await page.unroute('**/api/admin/records');await dialog.getByRole('button',{name:'Сохранить',exact:true}).click();await dialog.waitFor({state:'hidden',timeout:30000});console.log('PASS: interrupted save preserves form values and successful retry saves expense');
  await page.goto(base+'/admin/company/notifications');await page.getByRole('heading',{name:'Уведомления',exact:true}).first().waitFor();await page.waitForFunction(()=>document.querySelector('.admin-sidebar').getBoundingClientRect().right<0);await page.screenshot({path:'../notifications-mobile.png'});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1));console.log('PASS: mobile navigation stays closed and notifications fit the screen');
 }finally{await browser.close();await pool.end()}
-

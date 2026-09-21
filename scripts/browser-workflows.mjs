@@ -37,7 +37,3 @@ try{
  await page.setViewportSize({width:390,height:844});await page.waitForFunction(()=>document.querySelector('.admin-sidebar').getBoundingClientRect().right<0);await noOverflow('chat mobile');await page.screenshot({path:'../chat-mobile.png',fullPage:true});pass('Mobile chat fits viewport');
  assert.deepEqual(errors,[]);pass('No browser JavaScript exceptions');console.log(`BROWSER CHECKS PASSED: ${checks}`);
 }catch(error){await page.screenshot({path:'../browser-failure.png',fullPage:true});console.error('Browser failed at',page.url());throw error}finally{await browser.close()}
-
-
-
-

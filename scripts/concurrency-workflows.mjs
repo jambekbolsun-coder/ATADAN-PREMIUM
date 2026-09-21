@@ -22,4 +22,3 @@ try{
  const invalid=await post('/api/admin/record-options',{kind:'unknown',action:'add_choice',field:'expenseCategory',value:'x'});assert.equal(invalid.status,400);console.log('PASS: oversized and unsupported files, foreign origin and unknown category scope rejected');
  console.log('CONCURRENCY AND FAILURE CHECKS PASSED');
 }finally{await pool.end()}
-
