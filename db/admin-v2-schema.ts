@@ -474,6 +474,8 @@ INSERT INTO schema_migrations(id) VALUES ('admin-v2-normalized-core') ON CONFLIC
 -- Additive migration: preserve all existing records and relationships.
 ALTER TABLE shipments_v2 ALTER COLUMN purchase_order_id DROP NOT NULL;
 ALTER TABLE service_cases_v2 ALTER COLUMN sale_id DROP NOT NULL;
+ALTER TABLE service_cases_v2 ALTER COLUMN inventory_unit_id DROP NOT NULL;
+ALTER TABLE service_cases_v2 ADD COLUMN IF NOT EXISTS tractor_slug TEXT;
 ALTER TABLE interest_events ADD COLUMN IF NOT EXISTS region TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_model_region_views ON interest_events(tractor_slug,region);
 CREATE TABLE IF NOT EXISTS document_folders_v3(id TEXT PRIMARY KEY,name TEXT NOT NULL,version INTEGER NOT NULL DEFAULT 1);

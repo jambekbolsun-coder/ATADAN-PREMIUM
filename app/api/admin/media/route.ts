@@ -23,9 +23,9 @@ export async function POST(request: Request) {
     if (length > 4_100_000) throw new HttpError(413, "Файл должен быть не больше 4 МБ");
     const data = await request.formData();
     const file = data.get("file");
-    if (!(file instanceof File)) throw new HttpError(400, "Выберите изображение");
+    if (!(file instanceof File)) throw new HttpError(400, "Выберите файл");
     const extension = contentTypes.get(file.type.split(";")[0]);
-    if (!extension) throw new HttpError(415, "Поддерживаются изображения, PDF, CSV, XLSX и DOCX");
+    if (!extension) throw new HttpError(415, "Поддерживаются изображения, аудио, PDF, CSV, XLSX и DOCX");
     if (!file.size || file.size > 4_000_000) throw new HttpError(413, "Файл должен быть не больше 4 МБ");
     const visibility = data.get("visibility") === "private" ? "private" : "public";
     const scope=String(data.get("scope")||"documents");

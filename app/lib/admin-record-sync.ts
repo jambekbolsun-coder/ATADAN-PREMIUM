@@ -157,12 +157,22 @@ export async function normalizedRecordStatements(args: {
 
   if(kind==="service_cases"){
     if(archived){statements.push(db.prepare("UPDATE service_cases_v2 SET archived=1,version=version+1 WHERE id=?").bind(id));return statements;}
-    let customerId=text(data,"customerId");const saleId=text(data,"saleId"),inventoryUnitId=text(data,"inventoryUnitId",true);
-    await exists("SELECT id FROM inventory_units_v2 WHERE id=? AND archived=0",inventoryUnitId,"Выберите трактор со склада");
+    let customerId=text(data,"customerId");const saleId=text(data,"saleId"),selection=text(data,"inventoryUnitId",true);
+    let inventoryUnitId:string|null=selection,tractorSlug="";
+    if(selection.startsWith("model:")){
+      const model=(await getCatalog()).find(item=>item.slug===selection.slice(6));
+      if(!model)throw new HttpError(400,"Выберите действующую модель трактора");
+      inventoryUnitId=null;tractorSlug=model.slug;data.tractorModel=model.model;
+    }else{
+      const unit=await db.prepare("SELECT tractor_slug,model FROM inventory_units_v2 WHERE id=? AND archived=0").bind(selection).first<{tractor_slug:string;model:string}>();
+      if(!unit)throw new HttpError(400,"Выберите трактор со склада");
+      tractorSlug=unit.tractor_slug;data.tractorModel=unit.model;
+    }
+    data.tractorSlug=tractorSlug;
     if(!customerId){const name=text(data,"clientName",true),phone=text(data,"clientPhone",true),normalized=normalizePhone(phone);const existing=await db.prepare("SELECT id FROM crm_customers WHERE normalized_phone=? AND archived=0").bind(normalized).first<{id:string}>();customerId=existing?.id??crypto.randomUUID();if(!existing)statements.push(db.prepare("INSERT INTO crm_customers(id,name,phone,normalized_phone,source) VALUES(?,?,?,?,'service')").bind(customerId,name,phone,normalized));data.customerId=customerId;}
     if(saleId){const sale=await db.prepare("SELECT customer_id,inventory_unit_id FROM sales_v2 WHERE id=? AND archived=0").bind(saleId).first<{customer_id:string;inventory_unit_id:string}>();if(!sale||sale.customer_id!==customerId||sale.inventory_unit_id!==inventoryUnitId)throw new HttpError(400,"Проверьте связь с продажей клиента");}
     if(data.motoHours!==undefined&&(!Number.isFinite(Number(data.motoHours))||Number(data.motoHours)<0))throw new HttpError(400,"Проверьте моточасы");
-    statements.push(db.prepare("INSERT INTO service_cases_v2(id,customer_id,sale_id,inventory_unit_id,responsible_id,status,issue,resolution,opened_at) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET inventory_unit_id=excluded.inventory_unit_id,status=excluded.status,issue=excluded.issue,resolution=excluded.resolution,opened_at=excluded.opened_at,archived=0,closed_at=CASE WHEN excluded.status='closed' THEN CURRENT_TIMESTAMP ELSE NULL END,version=service_cases_v2.version+1").bind(id,customerId,saleId||null,inventoryUnitId,text(data,"responsibleId")||actor.id,status,text(data,"issue",true),text(data,"resolution"),isoDate(data.date)));
+    statements.push(db.prepare("INSERT INTO service_cases_v2(id,customer_id,sale_id,inventory_unit_id,tractor_slug,responsible_id,status,issue,resolution,opened_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET inventory_unit_id=excluded.inventory_unit_id,tractor_slug=excluded.tractor_slug,status=excluded.status,issue=excluded.issue,resolution=excluded.resolution,opened_at=excluded.opened_at,archived=0,closed_at=CASE WHEN excluded.status='closed' THEN CURRENT_TIMESTAMP ELSE NULL END,version=service_cases_v2.version+1").bind(id,customerId,saleId||null,inventoryUnitId,tractorSlug,text(data,"responsibleId")||actor.id,status,text(data,"issue",true),text(data,"resolution"),isoDate(data.date)));
   }
 
   return statements;
@@ -181,5 +191,5 @@ export async function recordLookups() {
     db.prepare("SELECT id,display_name AS label FROM staff WHERE active=1 ORDER BY display_name").all(),
     db.prepare("SELECT id,'Продажа · '||id AS label,customer_id,inventory_unit_id FROM sales_v2 WHERE archived=0 ORDER BY sold_at DESC LIMIT 1000").all(),
     db.prepare("SELECT id,title AS label FROM admin_records WHERE kind='leasing_applications' AND archived=0 ORDER BY updated_at DESC LIMIT 1000").all(),
-  ]);return {customers:customers.results,deals:deals.results,inventory:inventory.results.map(row=>({...row,category:categories.get(String(row.tractor_slug))||"Другие модели"})),accounts:accounts.results,suppliers:suppliers.results,purchases:purchases.results,shipments:shipments.results,staff:staff.results,sales:sales.results,leasing:leasing.results};
+  ]);return {models:catalog.map(model=>({id:`model:${model.slug}`,label:`Changfa ${model.model} · без VIN`,category:model.category})),customers:customers.results,deals:deals.results,inventory:inventory.results.map(row=>({...row,category:categories.get(String(row.tractor_slug))||"Другие модели"})),accounts:accounts.results,suppliers:suppliers.results,purchases:purchases.results,shipments:shipments.results,staff:staff.results,sales:sales.results,leasing:leasing.results};
 }
