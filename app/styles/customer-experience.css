@@ -782,6 +782,9 @@
   }
 }
 @media (max-width: 760px) {
+  .site-header-shell.is-home {
+    margin-bottom: 0;
+  }
   .parts-public-grid {
     grid-template-columns: 1fr;
   }
