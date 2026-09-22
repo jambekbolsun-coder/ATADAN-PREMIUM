@@ -114,22 +114,21 @@ test("every 160-240 hp product clip is a real ten-second local MP4", async () =>
   for (const name of names) {
     const [hd, sd] = await Promise.all([
       readFile(new URL(`public/videos/models/hd/${name}-10s.mp4`, project)),
-      readFile(new URL(`public/videos/models/sd/${name}-10s.mp4`, project)),
+      readFile(new URL(`public/videos/models/720/${name}-10s.mp4`, project)),
     ]);
     assert.ok(mp4Duration(hd) >= 9.95 && mp4Duration(hd) <= 10.05, `${name} HD duration is exactly ten seconds`);
-    assert.ok(mp4Duration(sd) >= 9.95 && mp4Duration(sd) <= 10.05, `${name} data-saver duration is exactly ten seconds`);
-    assert.ok(hd.byteLength > sd.byteLength, `${name} serves a lighter file on slow connections`);
+    assert.ok(mp4Duration(sd) >= 9.95 && mp4Duration(sd) <= 10.05, `${name} 720p duration is exactly ten seconds`);
+    assert.ok(sd.byteLength > 10000, `${name} 720p is a real encoded video`);
   }
   const component = await source("app/components/ProductVideo.tsx");
   assert.match(component, /new IntersectionObserver/);
   assert.match(component, /void video\.play\(\)/);
   assert.match(component, /else video\.pause\(\)/);
-  assert.match(component, /connection\.saveData/);
-  assert.match(component, /connection\.effectiveType/);
-  assert.match(component, /connection\.downlink < 3/);
+  assert.doesNotMatch(component, /connection\.saveData|connection\.effectiveType/);
   assert.match(component, /videos\/models\/\$\{quality\}/);
-  assert.match(component, /AUTO · FULL HD/);
-  assert.match(component, /AUTO · DATA/);
+  assert.match(component, /HD · 720p/);
+  assert.match(component, /FULL HD · 1080p/);
+  assert.match(component, /Качество видео/);
   assert.doesNotMatch(component, /<video[^>]* controls/);
   assert.doesNotMatch(component, /10 секунд официальной динамики модели/);
   assert.match(component, /В интерактивном видео крупным планом показаны кабина/);
@@ -168,7 +167,7 @@ test("published service and FAQ records reach their public surfaces", async () =
     source("app/components/SiteAssist.tsx"),
   ]);
   assert.match(layout, /getPublishedRecords\("faq"\)/);
-  assert.match(assist, /faqs\.length\?faqs/);
+  assert.match(assist, /faqs\.length\s*\?\s*faqs/);
   assert.match(service, /getPublishedRecords\("service_pages"\)/);
   assert.match(service, /service-material-image/);
 });

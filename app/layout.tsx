@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import "./styles/customer-experience.css";
 import { AppChrome } from "./components/AppChrome";
 import { getSiteSettings } from "./lib/site-settings";
 import { SiteSettingsProvider } from "./components/SiteSettings";

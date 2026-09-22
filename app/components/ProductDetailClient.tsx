@@ -1,8 +1,7 @@
 "use client";
 
-import { LeadModalButton } from "./LeadModalButton";
 import Image from "next/image";
-import { ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, Banknote, ChevronDown, Gauge, ShieldCheck, Sprout, Wrench } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, Banknote, ChevronDown, Gauge, MessageCircle, ShieldCheck, Sprout, Wrench } from "lucide-react";
 import { FinanceCalculator } from "./FinanceCalculator";
 import { ProductVideo } from "./ProductVideo";
 import { useState } from "react";
@@ -58,7 +57,7 @@ export function ProductDetailClient({ tractor, related, leasingConfig }: { tract
           </div>
           <div className={`buy-price ${discount ? "has-discount" : ""}`}><span>{t("product.cost")}</span>{discount && tractor.price ? <del>{formatPrice(tractor.price)}</del> : null}<strong>{salePrice ? formatPrice(salePrice) : t("product.priceOnRequest")}</strong><small>{t("product.costNote")}</small></div>
           <div className="installment-panel"><Banknote /><div><span>{t("product.installment")}</span><strong><a href="#leasing">{t("finance.calcCta")}</a></strong></div></div>
-          <div className="buy-actions"><LeadModalButton tractorSlug={tractor.slug} tractorModel={tractor.model}/><a className="call-action" href="tel:+996706131404">{t("product.phone")}</a></div>
+          <div className="buy-actions"><a className="primary-btn" href="#request"><MessageCircle size={19}/>Написать менеджеру</a><a className="call-action" href="tel:+996706131404">{t("product.phone")}</a></div>
           <div className="buy-assurance"><ShieldCheck size={18} /><span>{t("product.assurance")}</span></div>
         </aside>
       </div>
@@ -91,7 +90,7 @@ export function ProductDetailClient({ tractor, related, leasingConfig }: { tract
     </section>
 
     <div className="section-shell product-lease"><FinanceCalculator tractor={tractor} config={leasingConfig}/></div>
-    <section className="product-request-v3" id="request"><div className="section-shell product-request-inner"><div><span className="section-label light">{t("product.requestLabel")}</span><h2>{t("product.requestTitle", { model: tractor.model })}</h2><p>{t("product.requestText")}</p></div><LeadForm tractorSlug={tractor.slug} tractorModel={tractor.model} /></div></section>
+    <section className="product-request-v3" id="request"><div className="section-shell product-request-inner"><div><span className="section-label light">Changfa {tractor.model}</span><h2>Обсудите модель с менеджером</h2><p>Укажите ваши контакты и задачу. Подготовим предложение по выбранному трактору и продолжим разговор в WhatsApp.</p></div><LeadForm tractorSlug={tractor.slug} tractorModel={tractor.model} manager /></div></section>
 
     <section className="related-v3 section-shell"><div className="editorial-heading"><div><span className="section-label">{t("product.relatedLabel")}</span><h2>{t("product.relatedTitle")}</h2></div><Link className="text-link" href="/catalog">{t("product.allCatalog")}<ArrowUpRight size={17} /></Link></div><div className="catalog-grid related-grid">{related.map((item) => <TractorCard tractor={item} key={item.slug} />)}</div></section>
   </main>;

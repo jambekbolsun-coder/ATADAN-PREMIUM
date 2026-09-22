@@ -15,3 +15,5 @@ scripts/setup-workflow-test.mjs
 scripts/workflow-e2e.mjs
 scripts/*workflows.mjs
 scripts/upload-e2e.mjs
+scripts/inspect-polish.mjs
+scripts/publish-sample-parts.mjs

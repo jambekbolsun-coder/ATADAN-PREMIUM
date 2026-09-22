@@ -40,7 +40,7 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
       <section className="hero-stage hero-carousel" aria-roledescription="carousel" aria-label="Changfa ATADAN" onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)} onFocusCapture={() => setInteracting(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setInteracting(false); }}>
         <div className="hero-media hero-slides" aria-hidden="true">
           {heroSlides.map((item, index) => <div className={`hero-slide ${activeSlide === index ? "active" : ""}`} key={item.key}>
-            <ResponsiveHeroMedia image={item.image} mobileFallback={"mobile" in item ? item.mobile : undefined} priority={index === 0} />
+            <ResponsiveHeroMedia image={item.image} mobileFallback={item.image} priority={index === 0} />
           </div>)}
         </div>
         <div className="hero-shade" />

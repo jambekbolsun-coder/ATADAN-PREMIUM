@@ -15,6 +15,7 @@ export function SmoothScroll() {
       wheelMultiplier: 0.82,
       syncTouch: false,
       anchors: { offset: -96 },
+      prevent: (node) => Boolean(node.closest('[data-lenis-prevent], [role="dialog"], .admin-shell, .admin-shell-unified')),
     });
     const syncVisibility = () => document.hidden ? lenis.stop() : lenis.start();
     document.addEventListener("visibilitychange", syncVisibility);

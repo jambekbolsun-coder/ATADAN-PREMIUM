@@ -121,27 +121,28 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
   const [dashboardError,setDashboardError]=useState("");
   const [showPassword, setShowPassword] = useState(false);
 
-  const load = useCallback(async () => {
-    const response = await fetch("/api/admin/dashboard", { cache: "no-store" });
+  const load = useCallback(async (signal?:AbortSignal) => {
+    try {
+    const timeout=AbortSignal.timeout(20_000);
+    const response = await fetch("/api/admin/dashboard", { cache: "no-store",signal:signal?AbortSignal.any([signal,timeout]):timeout });
+    if(signal?.aborted)return;
     if (response.status === 401) { setAuthenticated(false); return; }
     const result=await response.json().catch(()=>({})) as DashboardData&{error?:string};
     if(!response.ok){setDashboardError(result.error||"Не удалось загрузить кабинет");setAuthenticated(true);return}
     setDashboardError("");setData(result);
     setAuthenticated(true);
+    } catch {
+      if(signal?.aborted)return;
+      setDashboardError("Не удалось загрузить кабинет. Проверьте соединение и повторите попытку.");
+      setAuthenticated(true);
+    }
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/admin/dashboard", { cache: "no-store" }).then(async (response) => {
-      if (cancelled) return;
-      if (response.status === 401) { setAuthenticated(false); return; }
-      const result=await response.json().catch(()=>({})) as DashboardData&{error?:string};
-      if(!response.ok){setDashboardError(result.error||"Не удалось загрузить кабинет");setAuthenticated(true);return}
-      setDashboardError("");setData(result);
-      setAuthenticated(true);
-    });
-    return () => { cancelled = true; };
-  }, []);
+    const controller=new AbortController();
+    const timer=window.setTimeout(()=>void load(controller.signal),0);
+    return () => { window.clearTimeout(timer);controller.abort(); };
+  }, [load]);
 
   useEffect(() => {
     const handlePopState=()=>{
