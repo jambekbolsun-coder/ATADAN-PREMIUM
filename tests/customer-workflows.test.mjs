@@ -6,6 +6,10 @@ test('customer phones accept all supported prefixes and reject incomplete number
  for(const phone of ['+996 700 123 456','+7 999 123 45 67','+7 701 123 45 67','+998 90 123 45 67','+992 90 123 45 67'])assert.equal(validPublicPhone(phone),true,phone);
  for(const phone of ['+996','700123456','+99670012345','+9967001234567','+441234567890','+996abc700123456'])assert.equal(validPublicPhone(phone),false,phone);
  assert.equal(phoneCountries.length,5);
+ const russian=phoneCountries.find(country=>country.id==='RU'),kazakh=phoneCountries.find(country=>country.id==='KZ');
+ assert.equal(russian.code,'+7');
+ assert.equal(kazakh.code,'+7');
+ assert.notEqual(russian.example,kazakh.example);
 });
 test('quiz ranges include both boundary models and all nine Kyrgyz regions/cities',()=>{
  assert.equal(regions.length,9);assert.equal(new Set(regions).size,9);

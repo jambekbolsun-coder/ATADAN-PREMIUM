@@ -23,6 +23,8 @@ import {
 import type { Tractor } from "../types";
 import { useSiteSettings } from "./SiteSettings";
 import { useI18n } from "./I18n";
+import { approximateSomPrice, type UsdKgsRate } from "../lib/exchange-rate";
+import { formatApproximateUsdPrice } from "../lib/format";
 
 const emptyConfig: LeasePublicConfig = {
   programs: [],
@@ -36,10 +38,12 @@ export function FinanceCalculator({
   tractors = [],
   tractor,
   config = emptyConfig,
+  usdKgsRate = null,
 }: {
   tractors?: Tractor[];
   tractor?: Tractor;
   config?: LeasePublicConfig;
+  usdKgsRate?: UsdKgsRate | null;
 }) {
   const settings = useSiteSettings(),
     headingId = useId(),
@@ -62,7 +66,7 @@ export function FinanceCalculator({
   const selected = tractor ?? tractors.find((item) => item.slug === slug),
     fallback: LeaseProgram = {
       id: "default",
-      name: "Стандартные условия",
+      name: "Предварительный расчёт",
       programType: "Лизинг",
       currency: "KGS",
       termsMonths: [LEASE_MONTHS],
@@ -82,7 +86,7 @@ export function FinanceCalculator({
       includeCommission: true,
       discountOrder: "before",
       rounding: 1,
-      zeroPercent: (settings.annualRate ?? 0) === 0,
+      zeroPercent: false,
       options: [],
       notes: "",
     };
@@ -99,7 +103,9 @@ export function FinanceCalculator({
   const publishedPrice =
       model?.price ??
       salePrice(selected?.price ?? null, selected?.discountPercent ?? 0),
-    basePrice = publishedPrice ?? estimatedPrice,
+    convertedEstimate = approximateSomPrice(selected?.approximatePriceUsd, usdKgsRate),
+    basePrice = publishedPrice ?? convertedEstimate ?? estimatedPrice,
+    termsUnconfirmed = !config.programs.length && settings.annualRate === null,
     options = model?.options?.length ? model.options : program.options,
     selectedOptions = options.filter((item) => chosen.includes(item.name));
   const discount =
@@ -183,7 +189,10 @@ export function FinanceCalculator({
           downMode,
           downValue,
           months,
-          estimatedPrice: publishedPrice ? undefined : estimatedPrice,
+          estimatedPrice: publishedPrice ? undefined : basePrice,
+          priceBasis: publishedPrice ? "confirmed_som" : convertedEstimate ? "official_usd" : "manual_som",
+          exchangeRate: convertedEstimate ? usdKgsRate?.value : undefined,
+          exchangeRateDate: convertedEstimate ? usdKgsRate?.date : undefined,
           options: chosen,
           sourcePath: window.location.pathname,
         }),
@@ -196,7 +205,7 @@ export function FinanceCalculator({
       requestKey.current = crypto.randomUUID();
       window.location.assign(managerWhatsAppUrl(settings.phone, {
         name: String(form.get("name") || ""), phone: String(form.get("phone") || ""), model: selected.model,
-        message: [`Лизинг на 7 лет. Первый взнос: ${money(result.downPayment)}.`, String(form.get("city") || ""), String(form.get("comment") || "")].filter(Boolean).join("\n"),
+        message: [`Лизинг на 7 лет. Предварительная стоимость: ${money(basePrice)}. Первый взнос: ${money(result.downPayment)}.`, termsUnconfirmed ? "Ставку и комиссии требуется уточнить." : "", String(form.get("city") || ""), String(form.get("comment") || "")].filter(Boolean).join("\n"),
         path: window.location.href,
       }));
     } catch (cause) {
@@ -285,13 +294,22 @@ export function FinanceCalculator({
                 <small>Выбранная модель</small>
                 <strong>Changfa {selected.model}</strong>
                 <span>
-                  {basePrice ? money(basePrice) : "Цена по запросу"} ·{" "}
+                  {publishedPrice
+                    ? money(publishedPrice)
+                    : selected.approximatePriceUsd
+                      ? `${formatApproximateUsdPrice(selected.approximatePriceUsd)} · ${basePrice ? `≈ ${money(basePrice)}` : "укажите стоимость в сомах"}`
+                      : basePrice ? `≈ ${money(basePrice)}` : "Цена по запросу"} ·{" "}
                   {selected.inStock ? "в наличии" : "под заказ"}
                 </span>
               </div>
             </div>
           ) : null}
-          {!publishedPrice ? (
+          {!publishedPrice && convertedEstimate && usdKgsRate ? (
+            <p className="lease-rate-note">
+              Ориентировочная цена пересчитана по <a href="https://www.nbkr.kg/index1.jsp?item=1562&lang=RUS" target="_blank" rel="noreferrer">официальному курсу НБКР</a> на {usdKgsRate.date}: 1 $ = {new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 4 }).format(usdKgsRate.value)} сом. Курс и итоговая цена могут измениться.
+            </p>
+          ) : null}
+          {!publishedPrice && !convertedEstimate ? (
             <label className="lease-estimate">
               <span>Ориентировочная стоимость, сом</span>
               <input
@@ -311,8 +329,7 @@ export function FinanceCalculator({
                 placeholder="Введите стоимость для расчёта"
               />
               <small>
-                Цена модели по запросу. Введённая сумма используется только для
-                предварительного расчёта.
+                {selected?.approximatePriceUsd ? `${formatApproximateUsdPrice(selected.approximatePriceUsd)}. Курс сейчас недоступен: введите стоимость в сомах для предварительного расчёта.` : "Введите ориентировочную стоимость для предварительного расчёта."}
               </small>
             </label>
           ) : null}
@@ -330,8 +347,8 @@ export function FinanceCalculator({
           ) : null}
           {!basePrice ? (
             <p className="lease-help">
-              Цена этой модели пока не опубликована. Получите предложение
-              менеджера.
+              Укажите стоимость в сомах, чтобы увидеть предварительный платёж,
+              или запросите предложение менеджера.
             </p>
           ) : null}
           {model?.enabled === false ? (
@@ -440,10 +457,10 @@ export function FinanceCalculator({
           ) : null}
         </div>
         <aside className="lease-summary" aria-live="polite">
-          <span>Платёж в месяц</span>
+          <span>{termsUnconfirmed ? "Базовый платёж в месяц" : "Платёж в месяц"}</span>
           <strong>
             {result ? money(result.monthly) : "Н/Д"}
-            <small>ежемесячно</small>
+            <small>{termsUnconfirmed ? "без ставки и комиссий" : "ежемесячно"}</small>
           </strong>
           <dl>
             <div>
@@ -458,12 +475,12 @@ export function FinanceCalculator({
               <dt>К финансированию</dt>
               <dd>{result ? money(result.financed) : "Н/Д"}</dd>
             </div>
-            <div>
+            {!termsUnconfirmed ? <div>
               <dt>Общая переплата</dt>
               <dd>{result ? money(result.overpayment) : "Н/Д"}</dd>
-            </div>
+            </div> : null}
             <div>
-              <dt>Всего по договору</dt>
+              <dt>{termsUnconfirmed ? "Базовая стоимость" : "Всего по договору"}</dt>
               <dd>
                 {result
                   ? money(result.contractTotal + result.downPayment)
@@ -472,9 +489,9 @@ export function FinanceCalculator({
             </div>
           </dl>
           <p>
-            {!publishedPrice ? "Расчёт по указанной вами стоимости. " : ""}
-            Расчёт является предварительным. Финальные условия, одобрение и
-            договор подтверждаются менеджером.
+            {termsUnconfirmed
+              ? "Это деление ориентировочной стоимости на 84 месяца после первого взноса. Ставка, комиссии, график и итоговая сумма будут согласованы с менеджером."
+              : `${!publishedPrice ? "Расчёт по ориентировочной стоимости. " : ""}Расчёт предварительный. Финальные условия, одобрение и договор подтверждаются менеджером.`}
           </p>
           <button
             className="primary-btn"

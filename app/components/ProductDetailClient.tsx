@@ -6,14 +6,15 @@ import { FinanceCalculator } from "./FinanceCalculator";
 import { ProductVideo } from "./ProductVideo";
 import { useState } from "react";
 import type { Tractor } from "../types";
-import { formatPrice } from "../lib/format";
+import { formatApproximateUsdPrice, formatPrice } from "../lib/format";
 import { LeadForm } from "./LeadForm";
 import { Link } from "./SiteLink";
 import { TractorCard } from "./TractorCard";
 import { useI18n } from "./I18n";
 import type { LeasePublicConfig } from "../lib/leasing";
+import type { UsdKgsRate } from "../lib/exchange-rate";
 
-export function ProductDetailClient({ tractor, related, leasingConfig }: { tractor: Tractor; related: Tractor[]; leasingConfig:LeasePublicConfig }) {
+export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRate }: { tractor: Tractor; related: Tractor[]; leasingConfig:LeasePublicConfig; usdKgsRate: UsdKgsRate | null }) {
   const { t } = useI18n();
   const rawGallery = (tractor.images?.length ? tractor.images : [tractor.image]).slice(0, 7);
   const preferredIndex = rawGallery.findIndex((image) => !image.includes("/images/tractors"));
@@ -55,7 +56,7 @@ export function ProductDetailClient({ tractor, related, leasingConfig }: { tract
             <div><Sprout /><span>{t("product.area")}<strong>{tractor.farmArea}</strong></span></div>
             <div><BadgeCheck /><span>{t("product.drive")}<strong>4×4</strong></span></div>
           </div>
-          <div className={`buy-price ${discount ? "has-discount" : ""}`}><span>{t("product.cost")}</span>{discount && tractor.price ? <del>{formatPrice(tractor.price)}</del> : null}<strong>{salePrice ? formatPrice(salePrice) : t("product.priceOnRequest")}</strong><small>{t("product.costNote")}</small></div>
+          <div className={`buy-price ${discount && tractor.price ? "has-discount" : ""}`}><span>{t("product.cost")}</span>{discount && tractor.price ? <del>{formatPrice(tractor.price)}</del> : null}<strong>{salePrice ? formatPrice(salePrice) : formatApproximateUsdPrice(tractor.approximatePriceUsd)}</strong><small>{!salePrice && tractor.approximatePriceUsd ? "Ориентировочная цена в долларах. Точную стоимость подтвердит менеджер." : t("product.costNote")}</small></div>
           <div className="installment-panel"><Banknote /><div><span>{t("product.installment")}</span><strong><a href="#leasing">{t("finance.calcCta")}</a></strong></div></div>
           <div className="buy-actions"><a className="primary-btn" href="#request"><MessageCircle size={19}/>Написать менеджеру</a><a className="call-action" href="tel:+996706131404">{t("product.phone")}</a></div>
           <div className="buy-assurance"><ShieldCheck size={18} /><span>{t("product.assurance")}</span></div>
@@ -89,7 +90,7 @@ export function ProductDetailClient({ tractor, related, leasingConfig }: { tract
       </div>
     </section>
 
-    <div className="section-shell product-lease"><FinanceCalculator tractor={tractor} config={leasingConfig}/></div>
+    <div className="section-shell product-lease"><FinanceCalculator tractor={tractor} config={leasingConfig} usdKgsRate={usdKgsRate}/></div>
     <section className="product-request-v3" id="request"><div className="section-shell product-request-inner"><div><span className="section-label light">Changfa {tractor.model}</span><h2>Обсудите модель с менеджером</h2><p>Укажите ваши контакты и задачу. Подготовим предложение по выбранному трактору и продолжим разговор в WhatsApp.</p></div><LeadForm tractorSlug={tractor.slug} tractorModel={tractor.model} manager /></div></section>
 
     <section className="related-v3 section-shell"><div className="editorial-heading"><div><span className="section-label">{t("product.relatedLabel")}</span><h2>{t("product.relatedTitle")}</h2></div><Link className="text-link" href="/catalog">{t("product.allCatalog")}<ArrowUpRight size={17} /></Link></div><div className="catalog-grid related-grid">{related.map((item) => <TractorCard tractor={item} key={item.slug} />)}</div></section>

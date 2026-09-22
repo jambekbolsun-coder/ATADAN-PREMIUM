@@ -6,11 +6,11 @@ export const powerRanges = [
   { label: "180+ л.с.", min: 180, max: 999, query: 200 },
 ] as const;
 export const phoneCountries = [
-  { id: "KG", name: "Кыргызстан", code: "+996", length: 9 },
-  { id: "RU", name: "Россия", code: "+7", length: 10 },
-  { id: "KZ", name: "Казахстан", code: "+7", length: 10 },
-  { id: "UZ", name: "Узбекистан", code: "+998", length: 9 },
-  { id: "TJ", name: "Таджикистан", code: "+992", length: 9 },
+  { id: "KG", name: "Кыргызстан", code: "+996", length: 9, example: "700 123 456" },
+  { id: "RU", name: "Россия", code: "+7", length: 10, example: "999 123 45 67" },
+  { id: "KZ", name: "Казахстан", code: "+7", length: 10, example: "701 123 45 67" },
+  { id: "UZ", name: "Узбекистан", code: "+998", length: 9, example: "90 123 45 67" },
+  { id: "TJ", name: "Таджикистан", code: "+992", length: 9, example: "90 123 45 67" },
 ] as const;
 export function validPublicPhone(value: string) {
   if (!/^[+\d\s()-]+$/.test(value)) return false;

@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { ProductDetailClient } from "../../components/ProductDetailClient";
 import { getCatalog, getTractor } from "../../lib/catalog";
 import { getLeasingPublicConfig } from "../../lib/leasing-public";
+import { getUsdKgsRate } from "../../lib/exchange-rate";
+
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
@@ -17,7 +20,7 @@ export default async function TractorDetail({ params }: { params: Promise<{ slug
   const { slug } = await params;
   const tractor = await getTractor(slug);
   if (!tractor) notFound();
-  const [catalog,leasingConfig] = await Promise.all([getCatalog(),getLeasingPublicConfig()]);
+  const [catalog,leasingConfig,usdKgsRate] = await Promise.all([getCatalog(),getLeasingPublicConfig(),getUsdKgsRate()]);
   const related = catalog.filter((item) => item.slug !== tractor.slug).sort((a, b) => Math.abs(a.hp - tractor.hp) - Math.abs(b.hp - tractor.hp)).slice(0, 3);
-  return <ProductDetailClient tractor={tractor} related={related} leasingConfig={leasingConfig} />;
+  return <ProductDetailClient tractor={tractor} related={related} leasingConfig={leasingConfig} usdKgsRate={usdKgsRate} />;
 }

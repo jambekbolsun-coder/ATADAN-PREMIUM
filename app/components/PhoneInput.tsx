@@ -38,7 +38,7 @@ export function PhoneInput() {
         >
           {phoneCountries.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.name}
+              {item.name} ({item.code})
             </option>
           ))}
         </select>
@@ -51,14 +51,16 @@ export function PhoneInput() {
           inputMode="tel"
           autoComplete="tel-national"
           aria-label="Номер телефона без кода страны"
+          aria-describedby={`${id}-example`}
           required
           value={number}
           onChange={(event) => update(event.target.value)}
           pattern={`[0-9]{${country.length}}`}
-          title={`Введите ${country.length} цифр номера`}
-          placeholder={country.length === 9 ? "700 123 456" : "900 123 45 67"}
+          title={`Введите ${country.length} цифр. Пример: ${country.code} ${country.example}`}
+          placeholder={country.example}
         />
       </div>
+      <small className="phone-example" id={`${id}-example`}>Например: {country.code} {country.example}</small>
       <input type="hidden" name="phone" value={`${country.code}${number}`} />
     </div>
   );
