@@ -29,10 +29,11 @@ async function context(actor) {
     await ctx.addCookies([
       { name: "atadan_staff", value: actor.token, url: base },
     ]);
-  await ctx.addInitScript(() => {
+  await ctx.addInitScript((origin) => {
+    if (location.origin !== origin) return;
     localStorage.setItem("atadan_privacy_choice", "necessary");
     sessionStorage.setItem("atadan-quiz-seen", "1");
-  });
+  }, base);
   ctx.on("page", (p) => {
     p.on("pageerror", (e) => errors.push(e.message));
     p.on("response", (r) => {
