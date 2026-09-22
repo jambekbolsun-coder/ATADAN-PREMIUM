@@ -3,6 +3,10 @@ import type { Tractor } from "../types";
 
 export const baseTractors = tractorsData as Tractor[];
 
+export function suggestedPriceUsd(hp: number) {
+  return Math.max(10_000, Math.round((10_000 + Math.max(0, hp - 50) * 130) / 500) * 500);
+}
+
 const seriesGalleries: Record<string, string[]> = {
   b: ["/images/series/b-01.jpg", "/images/series/b-02.jpg", "/images/series/b-03.jpg"],
   c: ["/images/series/c-01.jpg", "/images/series/c-02.jpg", "/images/series/c-03.jpg"],
@@ -49,7 +53,7 @@ function withGallery(tractor: Tractor): Tractor {
     "/images/series/changfa-rear.webp",
     "/images/series/changfa-side.webp",
   ];
-  return { ...tractor, image: primaryImage, images: Array.from(new Set(detailedViews)).slice(0, 7) };
+  return { ...tractor, approximatePriceUsd: tractor.approximatePriceUsd ?? suggestedPriceUsd(tractor.hp), image: primaryImage, images: Array.from(new Set(detailedViews)).slice(0, 7) };
 }
 
 export async function getCatalog(includeUnpublished = false): Promise<Tractor[]> {

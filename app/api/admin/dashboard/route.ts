@@ -1,5 +1,5 @@
 import { canUseSection, requireActor } from "../../../lib/admin-auth";
-import { getCatalog } from "../../../lib/catalog";
+import { getCatalog, suggestedPriceUsd } from "../../../lib/catalog";
 import { getNewsPosts } from "../../../lib/news";
 import { cleanText, fail, HttpError, jsonBody, safeMedia, sameOrigin } from "../../../lib/security";
 import type { Tractor } from "../../../types";
@@ -22,6 +22,8 @@ function normalizedProduct(value: unknown): Tractor {
   if (!Number.isInteger(hp) || hp < 20 || hp > 500) throw new Error("hp");
   const price = raw.price === null || raw.price === "" ? null : Number(raw.price);
   if (price !== null && (!Number.isFinite(price) || price < 0 || price > 1_000_000_000)) throw new Error("price");
+  const approximatePriceUsd = raw.approximatePriceUsd === null || raw.approximatePriceUsd === "" || raw.approximatePriceUsd === undefined ? suggestedPriceUsd(hp) : Number(raw.approximatePriceUsd);
+  if (!Number.isInteger(approximatePriceUsd) || approximatePriceUsd < 10_000 || approximatePriceUsd > 200_000) throw new Error("approximatePriceUsd");
   const discountPercent = raw.discountPercent === null || raw.discountPercent === "" ? null : Number(raw.discountPercent);
   if (discountPercent !== null && (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 90)) throw new Error("discount");
   const image = safeMedia(raw.image);
@@ -37,6 +39,7 @@ function normalizedProduct(value: unknown): Tractor {
     category: cleanText(raw.category, 100, true),
     farmArea: cleanText(raw.farmArea ?? "", 100),
     price,
+    approximatePriceUsd,
     discountPercent,
     promotionLabel: raw.promotionLabel ? cleanText(raw.promotionLabel, 120) : null,
     inStock: Boolean(raw.inStock),

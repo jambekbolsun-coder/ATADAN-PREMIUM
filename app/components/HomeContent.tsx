@@ -24,19 +24,15 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
   const settings = useSiteSettings();
   const whatsappHref = "https://wa.me/" + settings.phone.replace(/\D/g, "");
   const [activeSlide, setActiveSlide] = useState(0);
-  const [loadedSlides, setLoadedSlides] = useState<number[]>([]);
   const [paused, setPaused] = useState(false);
   const [interacting, setInteracting] = useState(false);
   const featured = [...tractors].sort((a,b)=>b.hp-a.hp).slice(0, 4);
   const recommended = tractors.filter(p => p.recommended).slice(0, 6);
   useEffect(() => {
     if (paused || interacting || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    const timer = window.setInterval(() => setActiveSlide((current) => {
-      const next = (current + 1) % heroSlides.length;
-      return loadedSlides.includes(next) ? next : current;
-    }), 3000);
+    const timer = window.setInterval(() => setActiveSlide((current) => (current + 1) % heroSlides.length), 3000);
     return () => window.clearInterval(timer);
-  }, [interacting, paused, loadedSlides]);
+  }, [interacting, paused]);
 
   const slide = heroSlides[activeSlide];
   return <main className="home-v3">
@@ -44,7 +40,7 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
       <section className="hero-stage hero-carousel" aria-roledescription="carousel" aria-label="Changfa ATADAN" onMouseEnter={() => setInteracting(true)} onMouseLeave={() => setInteracting(false)} onFocusCapture={() => setInteracting(true)} onBlurCapture={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setInteracting(false); }}>
         <div className="hero-media hero-slides" aria-hidden="true">
           {heroSlides.map((item, index) => <div className={`hero-slide ${activeSlide === index ? "active" : ""}`} key={item.key}>
-            <ResponsiveHeroMedia image={item.image} mobileFallback={item.image} priority={index === 0} eager onLoad={() => setLoadedSlides(current => current.includes(index) ? current : [...current, index])} />
+            <ResponsiveHeroMedia image={item.image} mobileFallback={"mobile" in item ? item.mobile : undefined} priority={index === 0} />
           </div>)}
         </div>
         <div className="hero-shade" />
@@ -65,7 +61,7 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
           </div>
         </div>
         <div className="hero-carousel-controls">
-          <div className="hero-dots">{heroSlides.map((item, index) => <button type="button" className={activeSlide === index ? "active" : ""} aria-label={t("home.carouselSlide", { current: index + 1 })} aria-current={activeSlide === index ? "true" : undefined} disabled={!loadedSlides.includes(index)} onClick={() => setActiveSlide(index)} key={item.key}><span /></button>)}</div>
+          <div className="hero-dots">{heroSlides.map((item, index) => <button type="button" className={activeSlide === index ? "active" : ""} aria-label={t("home.carouselSlide", { current: index + 1 })} aria-current={activeSlide === index ? "true" : undefined} onClick={() => setActiveSlide(index)} key={item.key}><span /></button>)}</div>
           <button type="button" className="hero-pause" aria-label={paused ? t("home.carouselPlay") : t("home.carouselPause")} aria-pressed={paused} onClick={() => setPaused((value) => !value)}>{paused ? <Play size={16} aria-hidden="true" /> : <Pause size={16} aria-hidden="true" />}</button>
         </div>
         <a className="hero-scroll" href="#lineup"><ArrowDown size={17} />{t("home.scroll")}</a>

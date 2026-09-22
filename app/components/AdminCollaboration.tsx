@@ -6,8 +6,10 @@ import {
   CheckSquare,
   FolderKanban,
   MessageCircleMore,
+  Search,
   ShieldCheck,
   UserRound,
+  UsersRound,
 } from "lucide-react";
 import {
   FormEvent,
@@ -60,6 +62,7 @@ export function AdminCollaboration({ mode }: { mode: CollaborationMode }) {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [target, setTarget] = useState(""),
+    [chatSearch, setChatSearch] = useState(""),
     [notificationFilter, setNotificationFilter] = useState("Все");
   const requestVersion = useRef(0);
   const feed = useRef<HTMLDivElement>(null);
@@ -373,93 +376,133 @@ export function AdminCollaboration({ mode }: { mode: CollaborationMode }) {
         ((message.created_by === data.actor.id && message.data.to === target) ||
           (message.created_by === target && message.data.to === data.actor.id)),
   );
+  const directChats = data.staff.filter(
+    (person) =>
+      person.id !== data.actor.id &&
+      person.display_name.toLocaleLowerCase("ru").includes(chatSearch.toLocaleLowerCase("ru")),
+  );
+  const groupChats = data.groups.filter((group) =>
+    group.title.toLocaleLowerCase("ru").includes(chatSearch.toLocaleLowerCase("ru")),
+  );
+  const selectedGroup = target.startsWith("group:")
+    ? data.groups.find((group) => group.id === target.slice(6))
+    : null;
+  const selectedPerson = data.staff.find((person) => person.id === target);
+  const selectedTitle = selectedGroup?.title || selectedPerson?.display_name || "Выберите диалог";
   return (
-    <div className="admin-content">
+    <div className="admin-content chat-content">
       <section className="admin-panel collaboration-panel chat-panel">
         <div className="panel-head">
           <div>
             <span>Команда ATADAN</span>
             <h2>Чат сотрудников</h2>
-            <p>
-              Личные диалоги и группы разделены. В ленте только выбранный
-              разговор.
-            </p>
+            <p>Личные сообщения и рабочие группы в одном месте.</p>
           </div>
-          <Bell />
+          <MessageCircleMore aria-hidden="true" />
         </div>
-        <label className="chat-target">
-          <span>Диалог</span>
-          <select
-            disabled={busy}
-            value={target}
-            onChange={(event) => setTarget(event.target.value)}
-            required
-          >
-            <option value="">Выберите диалог</option>
-            <optgroup label="Личные диалоги">
-              {data.staff
-                .filter((person) => person.id !== data.actor.id)
-                .map((person) => (
-                  <option value={person.id} key={person.id}>
-                    {person.display_name} · {person.role}
-                  </option>
-                ))}
-            </optgroup>
-            <optgroup label="Групповые диалоги">
-              {data.groups.map((group) => (
-                <option value={`group:${group.id}`} key={group.id}>
-                  {group.title}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-        </label>
-        <div
-          className="chat-feed"
-          data-lenis-prevent
-          ref={feed}
-          role="log"
-          aria-label="История диалога"
-          onScroll={(event) => {
-            const node = event.currentTarget;
-            followLatest.current =
-              node.scrollHeight - node.scrollTop - node.clientHeight < 80;
-          }}
-        >
-          {[...selectedMessages]
-            .sort(
-              (a, b) =>
-                new Date(a.created_at).getTime() -
-                new Date(b.created_at).getTime(),
-            )
-            .map((message) => (
-              <article
-                className={message.created_by === data.actor.id ? "mine" : ""}
-                key={message.id}
+        <div className="chat-workspace">
+          <aside className="chat-sidebar" aria-label="Диалоги">
+            <div className="chat-sidebar-heading">
+              <strong>Диалоги</strong>
+              <span>{data.staff.length - 1 + data.groups.length}</span>
+            </div>
+            <label className="chat-search">
+              <Search aria-hidden="true" />
+              <span className="sr-only">Поиск диалога</span>
+              <input
+                type="search"
+                value={chatSearch}
+                onChange={(event) => setChatSearch(event.target.value)}
+                placeholder="Найти сотрудника или группу"
+              />
+            </label>
+            <label className="chat-target">
+              <span>Выберите диалог</span>
+              <select
+                disabled={busy}
+                value={target}
+                onChange={(event) => setTarget(event.target.value)}
               >
-                <small>
-                  {String(
-                    message.data.fromName ||
-                      staffById.get(message.created_by) ||
-                      "Сотрудник",
-                  )}
-                </small>
-                <p>{String(message.data.text || message.subtitle)}</p>
-                <ChatFiles files={message.data.attachments} />
-                <time>{date(message.created_at)}</time>
-              </article>
-            ))}
-          {target && !selectedMessages.length ? (
-            <p>В этом диалоге пока нет сообщений.</p>
-          ) : null}
-          {!target ? <p>Выберите личный или групповой диалог.</p> : null}
+                <option value="">Выберите диалог</option>
+                <optgroup label="Сотрудники">
+                  {data.staff.filter((person) => person.id !== data.actor.id).map((person) => (
+                    <option value={person.id} key={person.id}>{person.display_name}</option>
+                  ))}
+                </optgroup>
+                <optgroup label="Группы">
+                  {data.groups.map((group) => (
+                    <option value={`group:${group.id}`} key={group.id}>{group.title}</option>
+                  ))}
+                </optgroup>
+              </select>
+            </label>
+            <div className="chat-sidebar-list" data-lenis-prevent>
+              <small>Сотрудники</small>
+              {directChats.map((person) => (
+                <button
+                  type="button"
+                  key={person.id}
+                  className={target === person.id ? "active" : ""}
+                  aria-current={target === person.id ? "true" : undefined}
+                  onClick={() => setTarget(person.id)}
+                >
+                  <span className="chat-avatar" aria-hidden="true">{person.display_name.slice(0, 1).toLocaleUpperCase("ru")}</span>
+                  <span><strong>{person.display_name}</strong><small>Личный диалог</small></span>
+                </button>
+              ))}
+              <small>Группы</small>
+              {groupChats.map((group) => (
+                <button
+                  type="button"
+                  key={group.id}
+                  className={target === `group:${group.id}` ? "active" : ""}
+                  aria-current={target === `group:${group.id}` ? "true" : undefined}
+                  onClick={() => setTarget(`group:${group.id}`)}
+                >
+                  <span className="chat-avatar is-group" aria-hidden="true"><UsersRound /></span>
+                  <span><strong>{group.title}</strong><small>Рабочая группа</small></span>
+                </button>
+              ))}
+              {!directChats.length && !groupChats.length ? <p>Диалог не найден.</p> : null}
+            </div>
+          </aside>
+          <div className="chat-conversation">
+            <header className="chat-conversation-heading">
+              <span className={`chat-avatar ${selectedGroup ? "is-group" : ""}`} aria-hidden="true">
+                {selectedGroup ? <UsersRound /> : selectedTitle.slice(0, 1).toLocaleUpperCase("ru")}
+              </span>
+              <div><strong>{selectedTitle}</strong><small>{selectedGroup ? "Рабочая группа" : selectedPerson ? "Личный диалог" : "Начните общение"}</small></div>
+            </header>
+            <div
+              className="chat-feed"
+              data-lenis-prevent
+              ref={feed}
+              role="log"
+              aria-label={`История: ${selectedTitle}`}
+              onScroll={(event) => {
+                const node = event.currentTarget;
+                followLatest.current = node.scrollHeight - node.scrollTop - node.clientHeight < 80;
+              }}
+            >
+              {[...selectedMessages]
+                .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+                .map((message) => (
+                  <article className={message.created_by === data.actor.id ? "mine" : ""} key={message.id}>
+                    <small>{String(message.data.fromName || staffById.get(message.created_by) || "Сотрудник")}</small>
+                    <p>{String(message.data.text || message.subtitle)}</p>
+                    <ChatFiles files={message.data.attachments} />
+                    <time>{date(message.created_at)}</time>
+                  </article>
+                ))}
+              {target && !selectedMessages.length ? (
+                <div className="chat-empty"><MessageCircleMore aria-hidden="true" /><strong>Здесь пока тихо</strong><span>Напишите первое сообщение в этот диалог.</span></div>
+              ) : null}
+              {!target ? <div className="chat-empty"><MessageCircleMore aria-hidden="true" /><strong>Выберите диалог</strong><span>Сотрудники и рабочие группы находятся слева.</span></div> : null}
+            </div>
+            <ChatComposer key={target} target={target} busy={busy} send={send} />
+            {error ? <p className="form-error chat-error" role="alert">{error}</p> : null}
+          </div>
         </div>
-        <ChatComposer key={target} target={target} busy={busy} send={send} />
-        {error ? (
-          <p className="form-error" role="alert">
-            {error}
-          </p>
-        ) : null}
       </section>
     </div>
   );

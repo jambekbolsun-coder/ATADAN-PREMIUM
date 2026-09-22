@@ -141,7 +141,7 @@ export function ChatComposer({
         aria-label="Сообщение"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        rows={3}
+        rows={2}
         maxLength={4000}
         placeholder="Напишите сообщение…"
         disabled={!target || busy}
@@ -226,10 +226,7 @@ export function ChatComposer({
           Идёт запись · до 3 минут. Остановите, прослушайте и отправьте.
         </p>
       ) : (
-        <small>
-          Enter · отправить, Shift+Enter · новая строка. Фото, документы и аудио
-          · до 4 МБ каждый · до 8 файлов.
-        </small>
+        <small>Enter: отправить · Shift+Enter: новая строка · файл до 4 МБ</small>
       )}
       {files
         .filter((f) => f.type.startsWith("audio/"))
