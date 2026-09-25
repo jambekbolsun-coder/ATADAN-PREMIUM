@@ -19,6 +19,11 @@ export async function POST(request: Request) {
     const consentVersion = cleanText(body.consentVersion ?? "", 40, true);
     const consentAt = cleanText(body.consentedAt ?? "", 40, true);
     const sourcePath = cleanText(body.sourcePath ?? "/", 300, true);
+    const utmSource = cleanText(body.utmSource ?? "", 120);
+    const utmMedium = cleanText(body.utmMedium ?? "", 120);
+    const utmCampaign = cleanText(body.utmCampaign ?? "", 120);
+    const utmContent = cleanText(body.utmContent ?? "", 120);
+    const utmTerm = cleanText(body.utmTerm ?? "", 120);
     if (!/^\d{4}-\d{2}-\d{2}T/.test(consentAt)) throw new HttpError(400, "Некорректная отметка согласия");
     if (name.length < 2 || !validPublicPhone(phone)) throw new HttpError(400, "Укажите имя и корректный номер телефона");
     await ensureDb();
@@ -54,7 +59,7 @@ export async function POST(request: Request) {
     const customerId=customer.id;
     try {
       const statements = [
-        db.prepare("INSERT INTO leads(id,tractor_slug,tractor_model,name,phone,normalized_phone,customer_id,message,source,consent_version,consent_at,source_path) VALUES(?,?,?,?,?,?,?,?,'website',?,?,?)").bind(leadId, tractor?.slug ?? null, tractor?.model ?? null, name, phone, normalizedPhone, customerId, message, consentVersion, consentAt, sourcePath),
+        db.prepare("INSERT INTO leads(id,tractor_slug,tractor_model,name,phone,normalized_phone,customer_id,message,source,consent_version,consent_at,source_path,utm_source,utm_medium,utm_campaign,utm_content,utm_term) VALUES(?,?,?,?,?,?,?,?,'website',?,?,?,?,?,?,?,?,?)").bind(leadId, tractor?.slug ?? null, tractor?.model ?? null, name, phone, normalizedPhone, customerId, message, consentVersion, consentAt, sourcePath, utmSource, utmMedium, utmCampaign, utmContent, utmTerm),
         db.prepare("INSERT INTO crm_deals(id,lead_id,customer_id,title,tractor_slug,amount_minor,cost_minor,assigned_to) VALUES(?,?,?,?,?,?,?,?)").bind(dealId, leadId, customerId, tractor ? `Заявка: Changfa ${tractor.model}` : "Подбор трактора Changfa", tractor?.slug ?? null, priceMinor, cost?.cost_minor ?? null, assignee?.id ?? null),
         db.prepare("INSERT INTO lead_requests(id,payload_hash,lead_id) VALUES(?,?,?)").bind(requestId, payloadHash, leadId),
       ];

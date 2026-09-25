@@ -60,6 +60,7 @@ export function LeadForm({
       setState("error");
       return;
     }
+    const query = new URLSearchParams(window.location.search);
     const payload = {
       name: String(form.get("name") ?? ""),
       phone: String(form.get("phone") ?? ""),
@@ -72,6 +73,11 @@ export function LeadForm({
       consentVersion: "2026-09-09",
       consentedAt: new Date().toISOString(),
       sourcePath: window.location.pathname,
+      utmSource: query.get("utm_source") || "",
+      utmMedium: query.get("utm_medium") || "",
+      utmCampaign: query.get("utm_campaign") || "",
+      utmContent: query.get("utm_content") || "",
+      utmTerm: query.get("utm_term") || "",
       region: sessionStorage.getItem("atadan-region") || "",
     };
     try {
