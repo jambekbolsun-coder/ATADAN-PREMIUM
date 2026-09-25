@@ -183,11 +183,19 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
   }
 
   async function logout() {
-    await fetch("/api/admin/session", { method: "DELETE" });
+    setLoading(true);
+    const response = await fetch("/api/admin/session", { method: "DELETE", cache: "no-store" });
+    if (!response.ok) {
+      const result = await response.json().catch(() => ({})) as { error?: string };
+      setLoading(false);
+      setToast(result.error ?? "Не удалось завершить сессию");
+      return;
+    }
     setAuthenticated(false);
     setData(null);
     setWorkspace("control");
     setSection("overview");
+    window.location.replace("/admin");
   }
 
   if (authenticated === null) return <AtadanLoader label="Загружаем кабинет…" detail="Проверяем доступ и готовим рабочий стол" className="atadan-loader-admin" />;

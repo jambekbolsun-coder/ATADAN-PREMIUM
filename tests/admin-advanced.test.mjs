@@ -63,6 +63,16 @@ test("staff login uses a PostgreSQL-safe rate-limit upsert", async () => {
   assert.match(session, /createStaffSession\(actor, request\)/);
 });
 
+test("logout expires both staff and legacy admin cookies before reloading the login screen", async () => {
+  const route = await source("../app/api/admin/session/route.ts");
+  const dashboard = await source("../app/components/AdminDashboard.tsx");
+  assert.match(route, /response\.cookies\.set\("atadan_staff"/);
+  assert.match(route, /response\.cookies\.set\("atadan_admin"/);
+  assert.match(route, /expires:new Date\(0\)/);
+  assert.match(dashboard, /if \(!response\.ok\)/);
+  assert.match(dashboard, /window\.location\.replace\("\/admin"\)/);
+});
+
 test("plan versus actual uses one consistent thirty-day period", async () => {
   const dashboard = await source("../app/components/AdminDashboard.tsx");
   assert.match(dashboard, /periodSales=director\.comparison\?\.sales_current/);
