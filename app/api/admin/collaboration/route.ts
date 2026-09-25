@@ -222,6 +222,7 @@ export async function GET(request: Request) {
         messages: [...normalizedMessageRows, ...legacyMessageRows],
         notifications: {
           personal: personalNotifications.results,
+          unreadCount: personalNotifications.results.filter((item) => !item.read_at).length,
           leads: leads.results,
           tasks: tasks.results,
           audit: audit.results,

@@ -43,6 +43,7 @@ type Data = {
   messages: Row[];
   notifications: {
     personal: Array<Record<string, unknown>>;
+    unreadCount?: number;
     leads: Array<Record<string, unknown>>;
     tasks: Array<Record<string, unknown>>;
     audit: Array<Record<string, unknown>>;
@@ -50,12 +51,17 @@ type Data = {
 };
 export type CollaborationMode = "notifications" | "chat" | "groups";
 const date = (value: unknown) =>
-  new Date(String(value)).toLocaleString("ru-RU", {
+  new Intl.DateTimeFormat("ru-RU", { timeZone: "Asia/Bishkek",
     day: "2-digit",
     month: "short",
     hour: "2-digit",
     minute: "2-digit",
-  });
+  }).format(new Date(String(value)));
+const eventLabel = (value: unknown) => ({
+  update_deal: "Сделка обновлена", create_deal: "Создана сделка", create_lead: "Создана заявка",
+  update_lead: "Заявка обновлена", create_task: "Создана задача", toggle_task: "Изменён статус задачи",
+  save_preferences: "Профиль обновлён", staff_active: "Изменён доступ сотрудника",
+}[String(value)] || "Изменение в CRM");
 
 export function AdminCollaboration({ mode }: { mode: CollaborationMode }) {
   const [data, setData] = useState<Data | null>(null),
@@ -206,8 +212,8 @@ export function AdminCollaboration({ mode }: { mode: CollaborationMode }) {
       ...data.notifications.audit.map((item) => ({
         id: String(item.id),
         kind: "Система",
-        title: String(item.action),
-        text: String(item.detail || item.display_name || "Изменение данных"),
+        title: eventLabel(item.action),
+        text: String(item.display_name || "Система") + " · Данные объекта обновлены",
         at: item.created_at,
         icon: ShieldCheck,
         priority: "normal",

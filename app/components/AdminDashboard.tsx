@@ -19,6 +19,7 @@ type DashboardData = {
   actor: { id:string; email:string; display_name:string; role:"owner"|"director"|"manager"|"accountant"|"marketer"; theme:string; phone:string; avatar:string|null;position:string;department:string;skills:string;bio:string;permissions:string[] };
   catalog: TractorType[];
   leads: Array<Lead & Record<string, string>>;
+  unreadNotifications?: number;
   popular: Array<{ tractor_slug: string; views: number }>;
   totals: { views: number; visitors: number } | null;
   daily: Array<{ day: string; views: number }>;
@@ -48,7 +49,6 @@ const workspaceSections:Record<AdminWorkspace,SectionDef[]>={
   marketing:[
     {id:"overview",label:"Маркетинг",icon:LayoutDashboard,navHidden:true},
     {id:"catalog",label:"Каталог товаров",icon:Tractor},
-    {id:"parts",label:"Запчасти",icon:PackageSearch,kind:"parts"},
     {id:"news",label:"Новости · Публикации",icon:Newspaper},
     {id:"public-service",label:"Сервис",icon:Wrench,kind:"service_pages"},
     {id:"faq",label:"Чатбот · FAQ",icon:Bot,kind:"faq"},
@@ -95,7 +95,7 @@ type NavItem={workspace:AdminWorkspace;section:string};
 type NavGroup={id:string;label:string;items:NavItem[]};
 const navGroups:NavGroup[]=[
   {id:"marketing",label:"Маркетинг",items:[
-    {workspace:"marketing",section:"catalog"},{workspace:"marketing",section:"parts"},{workspace:"marketing",section:"news"},{workspace:"marketing",section:"public-service"},{workspace:"marketing",section:"leasing"},{workspace:"marketing",section:"leasing-models"},{workspace:"marketing",section:"promotions"},{workspace:"marketing",section:"leasing-applications"},{workspace:"marketing",section:"faq"},{workspace:"marketing",section:"site-leads"},{workspace:"marketing",section:"site-analytics"},
+    {workspace:"marketing",section:"catalog"},{workspace:"marketing",section:"news"},{workspace:"marketing",section:"public-service"},{workspace:"marketing",section:"leasing"},{workspace:"marketing",section:"leasing-models"},{workspace:"marketing",section:"promotions"},{workspace:"marketing",section:"leasing-applications"},{workspace:"marketing",section:"faq"},{workspace:"marketing",section:"site-leads"},{workspace:"marketing",section:"site-analytics"},
   ]},
   {id:"crm",label:"CRM и компания",items:[
     {workspace:"company",section:"deals"},{workspace:"company",section:"client-base"},{workspace:"company",section:"inventory-units"},{workspace:"company",section:"sales"},{workspace:"company",section:"suppliers"},{workspace:"company",section:"purchases"},{workspace:"company",section:"shipments"},{workspace:"company",section:"documents"},{workspace:"company",section:"meetings"},{workspace:"company",section:"service-cases"},{workspace:"company",section:"expenses"},{workspace:"company",section:"finance"},{workspace:"company",section:"payroll"},{workspace:"company",section:"payments"},{workspace:"company",section:"debts"},{workspace:"company",section:"employee-tasks"},
@@ -211,7 +211,7 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
   );
 
   if (!data) return dashboardError ? <div className="admin-loader"><ShieldCheck/><span>{dashboardError}</span><button type="button" onClick={()=>void load()}>Повторить</button></div> : <AtadanLoader label="Загружаем данные…" detail="Собираем актуальные показатели ATADAN" className="atadan-loader-admin" />;
-  const newLeads = data?.leads.filter((lead) => lead.status === "new").length ?? 0;
+  const unreadNotifications = data?.unreadNotifications ?? 0;
   const director=data.actor.role==="owner"||data.actor.role==="director";
   const canSee=(id:string)=>director||id==="overview"||id==="profile"||data.actor.permissions.includes(id);
   const roleAllows=(item:SectionDef)=>!item.roles||item.roles.includes(data.actor.role)||data.actor.permissions.includes(item.id);
@@ -237,7 +237,7 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
         <div className="admin-sidebar-footer"><AvatarVisual avatar={data?.profile?.avatar ?? null} size={38} /><div><strong>{data?.profile?.display_name ?? "Администратор"}</strong><span>{data?.profile?.email}</span></div><button type="button" onClick={logout} aria-label="Выйти"><LogOut size={18} /></button></div>
       </aside>
       <section className="admin-main">
-        <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / {activeGroup?.label??workspaceNames[workspace]}</span><h1>{activeDefinition?.label}</h1></div><div className="admin-header-tools"><button type="button" onClick={()=>navigateTo({workspace:"company",section:"notifications"})} aria-label="Открыть уведомления"><Bell size={18} />{newLeads ? <b>{newLeads}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
+        <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / {activeGroup?.label??workspaceNames[workspace]}</span><h1>{activeDefinition?.label}</h1></div><div className="admin-header-tools"><button type="button" onClick={()=>navigateTo({workspace:"company",section:"notifications"})} aria-label="Открыть уведомления"><Bell size={18} />{unreadNotifications ? <b>{unreadNotifications}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
         {renderedSection === "overview" ? <AdminWorkspaceOverview workspace={workspace} data={data} onNavigate={openSection} onSaveGoals={async goals=>action({action:"save_goals",goals})}/> : null}
         {crmMode ? <AdminCRM mode={crmMode} catalog={data?.catalog ?? []} /> : null}
         {renderedSection === "catalog" ? <Products data={data} edit={setProductEditor} remove={(slug) => action({ action: "delete_product", slug })} /> : null}

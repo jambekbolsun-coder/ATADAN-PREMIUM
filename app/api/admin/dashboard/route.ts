@@ -161,11 +161,15 @@ export async function GET(request: Request) {
       delayed_shipments: canInventory ? Number(rawOperations.delayed_shipments ?? 0) : 0,
     } : null;
     const safeDeals = !dealTotals || isDirector || canFinance ? dealTotals : { ...dealTotals, profit_minor: 0 };
+    const unreadNotifications = canUseSection(actor, "notifications")
+      ? Number((await db.prepare("SELECT COUNT(*) AS count FROM notifications_v2 WHERE recipient_id=? AND archived=0 AND read_at IS NULL").bind(actor.id).first<{count:number}>())?.count ?? 0)
+      : 0;
     return Response.json({
       actor,
       catalog,
       posts,
       leads: leads.results,
+      unreadNotifications,
       popular: popular.results,
       popularPosts: popularPosts.results,
       totals,

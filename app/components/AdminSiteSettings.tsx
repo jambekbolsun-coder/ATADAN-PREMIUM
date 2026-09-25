@@ -54,7 +54,7 @@ export function AdminSiteSettings(){
   }
   async function submit(event:FormEvent<HTMLFormElement>){
     event.preventDefault();if(!settings)return;setState("saving");setMessage("");const f=new FormData(event.currentTarget);
-    const next:SiteSettings={...settings,phone:String(f.get("phone")),address:String(f.get("address")),instagram:String(f.get("instagram")),annualRate:f.get("annualRate")===""?null:Number(f.get("annualRate")),downPercent:Number(f.get("downPercent")),fee:Number(f.get("fee")),method:String(f.get("method")) as SiteSettings["method"]};
+    const next:SiteSettings={...settings,phone:String(f.get("phone")),address:String(f.get("address")),instagram:String(f.get("instagram")),email:String(f.get("email")||""),workingHours:String(f.get("workingHours")||""),annualRate:f.get("annualRate")===""?null:Number(f.get("annualRate")),downPercent:Number(f.get("downPercent")),fee:Number(f.get("fee")),method:String(f.get("method")) as SiteSettings["method"]};
     const response=await fetch("/api/admin/settings",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({settings:next,version})});
     const body=await response.json() as {error?:string};
     if(!response.ok){setMessage(body.error||"Не удалось сохранить");setState("ready");return;}

@@ -5,11 +5,11 @@ import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/s
 import { normalizedRecordStatements, recordLookups } from "../../../lib/admin-record-sync";
 
 const marketingKinds = new Set([
-  "home_sections", "categories", "promotions", "parts", "attachments", "gallery",
+  "home_sections", "categories", "promotions", "attachments", "gallery",
   "reviews", "faq", "branches", "leasing_terms", "leasing_model_terms", "service_pages",
 ]);
 const companyKinds = new Set([
-  "reservations", "sales", "inventory_units", "stock_parts", "stock_attachments",
+  "reservations", "sales", "inventory_units",
   "stock_movements", "suppliers", "purchases", "shipments", "finance_entries",
   "debts", "installments", "payroll", "documents", "service_cases", "manager_plans",
   "meetings", "payments", "leasing_applications", "financial_accounts",
@@ -18,7 +18,7 @@ const allKinds = new Set([...marketingKinds, ...companyKinds]);
 const statuses = new Set(["draft", "published", "hidden", "active", "closed", "archived", "new", "contacted", "documents", "review", "approved", "rejected", "contract", "issued"]);
 
 function canAccess(actor: Actor, kind: string, mutate: boolean) {
-  const section=({parts:"parts",service_pages:"public-service",faq:"faq",leasing_terms:"leasing",leasing_model_terms:"leasing-models",promotions:"promotions",leasing_applications:"leasing-applications",sales:"sales",inventory_units:"inventory-units",suppliers:"suppliers",purchases:"purchases",shipments:"shipments",finance_entries:"expenses",financial_accounts:"financial-accounts",payroll:"payroll",payments:"payments",debts:"debts",documents:"documents",meetings:"meetings",service_cases:"service-cases"} as Record<string,string>)[kind];
+  const section=({service_pages:"public-service",faq:"faq",leasing_terms:"leasing",leasing_model_terms:"leasing-models",promotions:"promotions",leasing_applications:"leasing-applications",sales:"sales",inventory_units:"inventory-units",suppliers:"suppliers",purchases:"purchases",shipments:"shipments",finance_entries:"expenses",financial_accounts:"financial-accounts",payroll:"payroll",payments:"payments",debts:"debts",documents:"documents",meetings:"meetings",service_cases:"service-cases"} as Record<string,string>)[kind];
   if(section)return canUseSection(actor,section);
   if (actor.role === "owner" || actor.role === "director") return true;
   if (marketingKinds.has(kind)) return actor.role === "marketer";
@@ -49,10 +49,10 @@ function storedData(value:string){try{return JSON.parse(value) as Record<string,
 
 function moduleName(kind: string) {
   return ({
-    home_sections:"блок сайта",categories:"категорию",promotions:"акцию",parts:"запчасть",attachments:"навесное оборудование",
+    home_sections:"блок сайта",categories:"категорию",promotions:"акцию",attachments:"навесное оборудование",
     gallery:"фотографию",reviews:"отзыв",faq:"вопрос FAQ",branches:"филиал",leasing_terms:"условия финансирования",leasing_model_terms:"условия модели",leasing_applications:"заявку на лизинг",
     service_pages:"сервисный материал",reservations:"бронь",sales:"продажу",inventory_units:"единицу техники",
-    stock_parts:"остаток запчастей",stock_attachments:"остаток оборудования",stock_movements:"движение склада",suppliers:"поставщика",
+    stock_movements:"движение склада",suppliers:"поставщика",
     purchases:"закупку",shipments:"поставку",finance_entries:"финансовую операцию",debts:"задолженность",
     installments:"рассрочку",payroll:"начисление",documents:"документ",service_cases:"сервисный случай",
     manager_plans:"план менеджера",meetings:"встречу",payments:"платёж",financial_accounts:"счёт",

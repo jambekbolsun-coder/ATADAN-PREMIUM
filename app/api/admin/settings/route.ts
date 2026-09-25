@@ -11,7 +11,8 @@ export async function POST(request:Request){
   try{
     sameOrigin(request);const actor=await requireActor(request,true),body=await jsonBody(request,300000);
     const value=body.settings as typeof defaultSettings;if(!value||typeof value!=="object")throw new HttpError(400,"Некорректные настройки");
-    const settings={...defaultSettings,phone:cleanText(value.phone,40,true),address:cleanText(value.address,300,true),instagram:cleanText(value.instagram,300,true),annualRate:value.annualRate,downPercent:value.downPercent,fee:value.fee,method:value.method,translations:{} as typeof defaultSettings.translations,media:{} as Record<string,string>};
+    const settings={...defaultSettings,phone:cleanText(value.phone,40,true),address:cleanText(value.address,300,true),instagram:cleanText(value.instagram,300,true),email:cleanText(value.email??"",160),workingHours:cleanText(value.workingHours??"",160),annualRate:value.annualRate,downPercent:value.downPercent,fee:value.fee,method:value.method,translations:{} as typeof defaultSettings.translations,media:{} as Record<string,string>};
+    if(settings.email && !/^\S+@\S+\.\S+$/.test(settings.email))throw new HttpError(400,"Проверьте email");
     if(!/^\+?[\d\s()-]{8,40}$/.test(settings.phone)||!/^https:\/\/(www\.)?instagram\.com\//.test(settings.instagram))throw new HttpError(400,"Проверьте телефон и ссылку Instagram");
     if((settings.annualRate!==null&&(!Number.isFinite(settings.annualRate)||settings.annualRate<0||settings.annualRate>100))||!Number.isFinite(settings.downPercent)||settings.downPercent<0||settings.downPercent>100||!Number.isFinite(settings.fee)||settings.fee<0||settings.fee>100000000||!["annuity","differentiated"].includes(settings.method))throw new HttpError(400,"Проверьте условия лизинга");
     for(const locale of ["ru","ky","en"] as Locale[]){
