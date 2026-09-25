@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import { BadgeCheck, CalendarClock, FileCheck2, Handshake } from "lucide-react";
 import { FinanceCalculator } from "../components/FinanceCalculator";
 import { LeadForm } from "../components/LeadForm";
@@ -7,8 +6,10 @@ import { Trans } from "../components/I18n";
 import { getCatalog } from "../lib/catalog";
 import { getLeasingPublicConfig } from "../lib/leasing-public";
 import { getUsdKgsRate } from "../lib/exchange-rate";
+import { getRequestLocale } from "../lib/locale-server";
+import { pageMetadata } from "../lib/seo";
 
-export const metadata:Metadata={title:"Лизинг на тракторы Changfa | ATADAN",description:"Предварительный расчёт лизинга на тракторы Changfa и персональные условия финансирования."};
+export async function generateMetadata(){return pageMetadata("finance","/finance",await getRequestLocale())}
 export const dynamic = "force-dynamic";
 export default async function FinancePage(){
   const [tractors,config,usdKgsRate]=await Promise.all([getCatalog(),getLeasingPublicConfig(),getUsdKgsRate()]);

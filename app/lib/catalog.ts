@@ -1,5 +1,6 @@
 import tractorsData from "../data/tractors.json";
 import type { Tractor } from "../types";
+import { applyInventoryAvailability, type InventoryAvailability } from "./inventory-availability";
 
 export const baseTractors = tractorsData as Tractor[];
 
@@ -79,9 +80,14 @@ export async function getCatalog(includeUnpublished = false): Promise<Tractor[]>
         if (includeUnpublished || !item.status || item.status === "published") catalog.push(withGallery(item));
       }
     }
-    return catalog.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.hp - b.hp || a.model.localeCompare(b.model));
+    const inventory = await getRawDb()
+      .prepare("SELECT tractor_slug, COUNT(*)::int AS available_units FROM inventory_units_v2 WHERE archived=0 AND status='stock' AND COALESCE(tractor_slug,'')<>'' GROUP BY tractor_slug")
+      .all<InventoryAvailability>();
+    return applyInventoryAvailability(catalog, inventory.results as InventoryAvailability[])
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.hp - b.hp || a.model.localeCompare(b.model));
   } catch {
-    return baseTractors.map(withGallery);
+    // A database outage must never turn a catalogue flag into fictitious stock.
+    return applyInventoryAvailability(baseTractors.map(withGallery), []);
   }
 }
 

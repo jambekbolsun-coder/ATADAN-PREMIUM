@@ -489,7 +489,7 @@ SELECT seed.id,'faq',seed.question,seed.answer,'published','Частые воп�
 FROM (VALUES
   ('faq-base-warranty','Есть гарантия?','Да, условия гарантии фиксируются для выбранной модели и комплектации.',1),
   ('faq-base-leasing','Можно оформить лизинг?','Да. ATADAN оформляет лизинг на 7 лет. Расчёт предварительный, окончательные условия подтверждаются перед подписанием договора.',2),
-  ('faq-base-service','Есть сервис и запчасти?','Да. ATADAN помогает с обслуживанием техники и подбором запасных частей.',3)
+  ('faq-base-service','Есть сервисное обслуживание?','Да. ATADAN помогает с обслуживанием и диагностикой техники.',3)
 ) seed(id,question,answer,ordering)
 WHERE NOT EXISTS(SELECT 1 FROM admin_records r WHERE r.kind='faq' AND (r.title=seed.question OR r.data_json::jsonb->>'question'=seed.question))
 ON CONFLICT(id) DO NOTHING;
@@ -515,6 +515,47 @@ DO $$ BEGIN
       CROSS JOIN LATERAL jsonb_array_elements_text(CASE WHEN jsonb_typeof(r.data_json::jsonb->'members')='array' THEN r.data_json::jsonb->'members' ELSE '[]'::jsonb END) member(id)
       JOIN staff s ON s.id=member.id WHERE r.kind='employee_group' AND r.archived=0 ON CONFLICT DO NOTHING;
     INSERT INTO schema_migrations(id) VALUES('legacy-chat-groups-20260922');
+  END IF;
+END $$;
+
+-- Remove the four confirmed public demo parts while retaining an exact,
+-- reversible database copy. Restore by inserting the listed business columns
+-- from removed_demo_parts_backup back into admin_records.
+DO $$ BEGIN
+  IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE id='remove-demo-parts-20260925') THEN
+    CREATE TABLE IF NOT EXISTS removed_demo_parts_backup (
+      id TEXT PRIMARY KEY,kind TEXT NOT NULL,title TEXT NOT NULL,subtitle TEXT NOT NULL,
+      status TEXT NOT NULL,category TEXT NOT NULL,sort_order INTEGER NOT NULL,
+      data_json TEXT NOT NULL,archived INTEGER NOT NULL,version INTEGER NOT NULL,
+      created_by TEXT,updated_by TEXT,created_at TIMESTAMPTZ NOT NULL,
+      updated_at TIMESTAMPTZ NOT NULL,removed_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    INSERT INTO removed_demo_parts_backup(id,kind,title,subtitle,status,category,sort_order,data_json,archived,version,created_by,updated_by,created_at,updated_at)
+      SELECT id,kind,title,subtitle,status,category,sort_order,data_json,archived,version,created_by,updated_by,created_at,updated_at
+      FROM admin_records
+      WHERE kind='parts'
+        AND id IN ('67c3e5ce-3525-4260-98fe-19690bccaad4','e079051e-ef29-4216-a6d4-5f8b06769d32','d6accdae-983e-4a68-bf30-77cb70b94844','72749338-2744-47cf-810f-09bdb7f552a2')
+        AND upper(data_json::jsonb->>'sku') IN ('ATADAN-DEMO-001','ATADAN-DEMO-002','ATADAN-DEMO-003','ATADAN-DEMO-004')
+      ON CONFLICT(id) DO NOTHING;
+    DELETE FROM admin_records
+      WHERE kind='parts'
+        AND id IN ('67c3e5ce-3525-4260-98fe-19690bccaad4','e079051e-ef29-4216-a6d4-5f8b06769d32','d6accdae-983e-4a68-bf30-77cb70b94844','72749338-2744-47cf-810f-09bdb7f552a2')
+        AND upper(data_json::jsonb->>'sku') IN ('ATADAN-DEMO-001','ATADAN-DEMO-002','ATADAN-DEMO-003','ATADAN-DEMO-004');
+    INSERT INTO schema_migrations(id) VALUES('remove-demo-parts-20260925');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE id='public-service-copy-20260925') THEN
+    UPDATE admin_records
+      SET title='Есть сервисное обслуживание?',
+          subtitle='Да. ATADAN помогает с обслуживанием и диагностикой техники.',
+          data_json=jsonb_set(jsonb_set(data_json::jsonb,'{question}','"Есть сервисное обслуживание?"'::jsonb),'{answer}','"Да. ATADAN помогает с обслуживанием и диагностикой техники."'::jsonb)::text,
+          updated_at=CURRENT_TIMESTAMP,
+          version=version+1
+      WHERE id='faq-base-service' AND kind='faq'
+        AND (title='Есть сервис и запчасти?' OR data_json::jsonb->>'question'='Есть сервис и запчасти?');
+    INSERT INTO schema_migrations(id) VALUES('public-service-copy-20260925');
   END IF;
 END $$;
 `;

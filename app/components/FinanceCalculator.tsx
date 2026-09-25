@@ -16,6 +16,9 @@ import {
 import { FormEvent, useId, useRef, useState } from "react";
 import {
   calculateInstallment,
+  convertDownPayment,
+  downPaymentLimits,
+  normalizeDownPayment,
   salePrice,
   type LeaseProgram,
   type LeasePublicConfig,
@@ -120,6 +123,13 @@ export function FinanceCalculator({
       model?.minDownPercent ??
       program.minDownPercent,
     zeroPercent = Boolean(promotion?.zeroPercent || program.zeroPercent);
+  const downRules = {
+    price: basePrice,
+    minPercent: minDown,
+    maxPercent: program.maxDownPercent,
+    minAmount: program.minDownAmount,
+  };
+  const downLimits = downPaymentLimits(downRules, downMode);
   let result: ReturnType<typeof calculateInstallment> | null = null,
     calculationError = "";
   try {
@@ -363,8 +373,8 @@ export function FinanceCalculator({
                 type="button"
                 className={downMode === "percent" ? "active" : ""}
                 onClick={() => {
+                  setDownValue(convertDownPayment(downValue, downMode, "percent", downRules));
                   setDownMode("percent");
-                  setDownValue(minDown);
                 }}
               >
                 Процент
@@ -373,13 +383,8 @@ export function FinanceCalculator({
                 type="button"
                 className={downMode === "amount" ? "active" : ""}
                 onClick={() => {
+                  setDownValue(convertDownPayment(downValue, downMode, "amount", downRules));
                   setDownMode("amount");
-                  setDownValue(
-                    Math.max(
-                      program.minDownAmount,
-                      Math.ceil((basePrice * minDown) / 100),
-                    ),
-                  );
                 }}
               >
                 Сумма
@@ -389,43 +394,21 @@ export function FinanceCalculator({
               <span>{downMode === "percent" ? "Взнос, %" : "Взнос, сом"}</span>
               <input
                 type="number"
-                min={
-                  downMode === "percent"
-                    ? minDown
-                    : Math.max(
-                        program.minDownAmount,
-                        Math.ceil((basePrice * minDown) / 100),
-                      )
-                }
-                max={
-                  downMode === "percent"
-                    ? program.maxDownPercent
-                    : Math.floor((basePrice * program.maxDownPercent) / 100)
-                }
-                step={downMode === "percent" ? 1 : 1000}
+                min={downLimits.min}
+                max={downLimits.max}
+                step={downMode === "percent" ? 0.01 : 1}
                 value={downValue}
-                onChange={(event) => setDownValue(Number(event.target.value))}
+                onChange={(event) => setDownValue(normalizeDownPayment(Number(event.target.value), downMode, downRules))}
               />
             </label>
             <input
               aria-label="Первоначальный взнос · ползунок"
               type="range"
-              min={
-                downMode === "percent"
-                  ? minDown
-                  : Math.max(
-                      program.minDownAmount,
-                      Math.ceil((basePrice * minDown) / 100),
-                    )
-              }
-              max={
-                downMode === "percent"
-                  ? program.maxDownPercent
-                  : Math.floor((basePrice * program.maxDownPercent) / 100)
-              }
-              step={downMode === "percent" ? 1 : 1}
+              min={downLimits.min}
+              max={downLimits.max}
+              step={downMode === "percent" ? 0.01 : 1}
               value={downValue}
-              onChange={(event) => setDownValue(Number(event.target.value))}
+              onChange={(event) => setDownValue(normalizeDownPayment(Number(event.target.value), downMode, downRules))}
             />
           </fieldset>
           <div className="lease-fixed-term">

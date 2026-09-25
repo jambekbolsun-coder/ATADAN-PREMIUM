@@ -1,31 +1,25 @@
 "use client";
 
 import { powerRanges } from "../lib/customer-input";
-import { PartCard } from "./PartCard";
 import {
-  PackageSearch,
   Search,
   SlidersHorizontal,
-  Tractor as TractorIcon,
   X,
 } from "lucide-react";
 import { useDeferredValue, useMemo, useState } from "react";
 import type { Tractor } from "../types";
 import { TractorCard } from "./TractorCard";
 import { useI18n } from "./I18n";
-import type { PublicRecord } from "../lib/public-records";
 
 const ranges = [{ label: "Все мощности", min: 0, max: 999 }, ...powerRanges];
 
 export function CatalogExplorer({
   tractors,
-  parts = [],
   initialPower,
   initialQuery = "",
   initialPopular = false,
 }: {
   tractors: Tractor[];
-  parts?: PublicRecord[];
   initialPower?: number;
   initialQuery?: string;
   initialPopular?: boolean;
@@ -43,7 +37,6 @@ export function CatalogExplorer({
   const [stockOnly, setStockOnly] = useState(false);
   const [popularOnly, setPopularOnly] = useState(initialPopular);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [view, setView] = useState<"tractors" | "parts">("tractors");
   const deferredQuery = useDeferredValue(query);
   const selected = ranges[range];
   const filtered = useMemo(
@@ -67,15 +60,6 @@ export function CatalogExplorer({
         })
         .sort((a, b) => (popularOnly ? b.hp - a.hp : 0)),
     [tractors, deferredQuery, selected, stockOnly, popularOnly],
-  );
-  const filteredParts = useMemo(
-    () =>
-      parts.filter((part) =>
-        `${part.title} ${part.subtitle} ${part.data.sku} ${part.data.compatibleModels}`
-          .toLowerCase()
-          .includes(deferredQuery.toLowerCase()),
-      ),
-    [parts, deferredQuery],
   );
 
   const renderFilters = (scope: "desktop" | "mobile") => (
@@ -144,15 +128,7 @@ export function CatalogExplorer({
   return (
     <div className="catalog-explorer">
       <aside className="catalog-filters">
-        {view === "tractors" ? (
-          renderFilters("desktop")
-        ) : (
-          <div className="parts-filter-note">
-            <PackageSearch />
-            <strong>Запчасти Changfa</strong>
-            <p>Ищите по названию, артикулу или совместимой модели.</p>
-          </div>
-        )}
+        {renderFilters("desktop")}
       </aside>
       <div className={`filters-sheet ${filtersOpen ? "is-open" : ""}`}>
         <button
@@ -164,27 +140,6 @@ export function CatalogExplorer({
         <div className="filters-panel">{renderFilters("mobile")}</div>
       </div>
       <section className="catalog-results">
-        <div className="catalog-kind-tabs">
-          <button
-            type="button"
-            className={view === "tractors" ? "active" : ""}
-            onClick={() => setView("tractors")}
-          >
-            <TractorIcon />
-            Тракторы <b>{tractors.length}</b>
-          </button>
-          <button
-            type="button"
-            className={view === "parts" ? "active" : ""}
-            onClick={() => {
-              setView("parts");
-              setFiltersOpen(false);
-            }}
-          >
-            <PackageSearch />
-            Запчасти <b>{parts.length}</b>
-          </button>
-        </div>
         <div className="catalog-toolbar">
           <label className="search-box">
             <Search size={19} />
@@ -202,37 +157,19 @@ export function CatalogExplorer({
           >
             <SlidersHorizontal size={18} /> {t("catalog.filters")}
           </button>
-          <span>
-            {view === "tractors"
-              ? t("catalog.models", { count: filtered.length })
-              : `${filteredParts.length} запчастей`}
-          </span>
+          <span>{t("catalog.models", { count: filtered.length })}</span>
         </div>
-        {view === "tractors" ? (
-          filtered.length ? (
-            <div className="catalog-grid">
-              {filtered.map((tractor) => (
-                <TractorCard tractor={tractor} key={tractor.slug} />
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <Search size={28} />
-              <h3>{t("catalog.notFound")}</h3>
-              <p>{t("catalog.notFoundText")}</p>
-            </div>
-          )
-        ) : filteredParts.length ? (
-          <div className="parts-public-grid">
-            {filteredParts.map((part) => (
-              <PartCard part={part} key={part.id} />
+        {filtered.length ? (
+          <div className="catalog-grid">
+            {filtered.map((tractor) => (
+              <TractorCard tractor={tractor} key={tractor.slug} />
             ))}
           </div>
         ) : (
           <div className="empty-state">
-            <PackageSearch />
-            <h3>Запчасти не найдены</h3>
-            <p>Измените запрос или свяжитесь с сервисным отделом.</p>
+            <Search size={28} />
+            <h3>{t("catalog.notFound")}</h3>
+            <p>{t("catalog.notFoundText")}</p>
           </div>
         )}
       </section>

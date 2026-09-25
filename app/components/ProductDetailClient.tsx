@@ -13,15 +13,17 @@ import { TractorCard } from "./TractorCard";
 import { useI18n } from "./I18n";
 import type { LeasePublicConfig } from "../lib/leasing";
 import type { UsdKgsRate } from "../lib/exchange-rate";
+import { localizeTractor } from "../lib/tractor-localization";
 
 export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRate }: { tractor: Tractor; related: Tractor[]; leasingConfig:LeasePublicConfig; usdKgsRate: UsdKgsRate | null }) {
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
+  const localized = localizeTractor(tractor, locale);
   const rawGallery = (tractor.images?.length ? tractor.images : [tractor.image]).slice(0, 7);
   const preferredIndex = rawGallery.findIndex((image) => !image.includes("/images/tractors"));
   const gallery = preferredIndex > 0 ? [rawGallery[preferredIndex], ...rawGallery.filter((_, index) => index !== preferredIndex)] : rawGallery;
   const [activeImage, setActiveImage] = useState(0);
   const [specsOpen, setSpecsOpen] = useState(false);
-  const specs = Object.entries(tractor.specs);
+  const specs = localized.specs;
   const visibleSpecs = specsOpen ? specs : specs.slice(0, 8);
   const discount = Math.min(90, Math.max(0, tractor.discountPercent ?? 0));
   const salePrice = tractor.price && discount ? Math.round(tractor.price * (1 - discount / 100)) : tractor.price;
@@ -48,12 +50,12 @@ export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRat
         </div>
 
         <aside className="product-buy-card">
-          <div className="buy-card-heading"><span>{tractor.category}</span><small>Changfa · ATADAN</small></div>
+          <div className="buy-card-heading"><span>{localized.category}</span><small>Changfa · ATADAN</small></div>
           <h1>Changfa <strong>{tractor.model}</strong></h1>
-          <p className="product-lead-copy">{tractor.description}</p>
+          <p className="product-lead-copy">{localized.description}</p>
           <div className="buy-key-specs">
             <div><Gauge /><span>{t("product.power")}<strong>{tractor.hp} {t("common.hp")}</strong></span></div>
-            <div><Sprout /><span>{t("product.area")}<strong>{tractor.farmArea}</strong></span></div>
+            <div><Sprout /><span>{t("product.area")}<strong>{localized.farmArea}</strong></span></div>
             <div><BadgeCheck /><span>{t("product.drive")}<strong>4×4</strong></span></div>
           </div>
           <div className={`buy-price ${discount && tractor.price ? "has-discount" : ""}`}><span>{t("product.cost")}</span>{discount && tractor.price ? <del>{formatPrice(tractor.price)}</del> : null}<strong>{salePrice ? formatPrice(salePrice) : formatApproximateUsdPrice(tractor.approximatePriceUsd)}</strong><small>{!salePrice && tractor.approximatePriceUsd ? "Ориентировочная цена в долларах. Точную стоимость подтвердит менеджер." : t("product.costNote")}</small></div>
@@ -65,7 +67,7 @@ export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRat
     </section>
 
     <section className="product-comfort section-shell">
-      <div className="comfort-copy"><span className="section-label">{t("product.comfortLabel")}</span><h2>{t("product.comfortTitle")}</h2><p><strong>{tractor.comfort}.</strong> {t("product.comfortText")}</p></div>
+      <div className="comfort-copy"><span className="section-label">{t("product.comfortLabel")}</span><h2>{t("product.comfortTitle")}</h2><p><strong>{localized.comfort}.</strong> {t("product.comfortText")}</p></div>
       <div className="comfort-points">
         <article><BadgeCheck /><span>{t("product.featureVision")}</span></article>
         <article><Wrench /><span>{t("product.featureService")}</span></article>

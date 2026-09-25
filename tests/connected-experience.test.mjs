@@ -65,7 +65,7 @@ test("catalog, news and home support use distinct ten-second viewport videos", a
 });
 
 test("classic site wordmark, installable PWA assets and reference-style loaders are wired", async () => {
-  const [header, footer, dashboard, chrome, loader, transition, css, layout, manifest, worker, icon192, icon512] = await Promise.all([
+  const [header, footer, dashboard, chrome, loader, transition, css, layout, manifest, adminManifest, worker, icon192, icon512] = await Promise.all([
     source("app/components/SiteHeader.tsx"),
     source("app/components/SiteFooter.tsx"),
     source("app/components/AdminDashboard.tsx"),
@@ -74,7 +74,8 @@ test("classic site wordmark, installable PWA assets and reference-style loaders 
     source("app/components/PageTransitionLoader.tsx"),
     source("app/globals.css"),
     source("app/layout.tsx"),
-    source("public/manifest.webmanifest"),
+    source("app/manifest.ts"),
+    source("app/admin/manifest.webmanifest/route.ts"),
     source("public/sw.js"),
     readFile(new URL("public/icons/atadan-app-192.png", project)),
     readFile(new URL("public/icons/atadan-app-512.png", project)),
@@ -92,10 +93,11 @@ test("classic site wordmark, installable PWA assets and reference-style loaders 
   assert.match(css, /#071c10/i);
   assert.match(css, /#79c94b/i);
   assert.match(layout, /atadan-app-192\.png/);
-  assert.match(manifest, /"sizes":"192x192"/);
-  assert.match(manifest, /"sizes":"512x512"/);
-  assert.match(manifest, /"display": "standalone"/);
-  assert.match(worker, /atadan-shell-v2/);
+  assert.match(manifest, /start_url:"\/"/);
+  assert.match(manifest, /ATADAN/);
+  assert.match(adminManifest, /start_url:"\/admin"/);
+  assert.match(adminManifest, /ATADAN CRM/);
+  assert.match(worker, /atadan-public-v3/);
   assert.equal(icon192.readUInt32BE(16), 192);
   assert.equal(icon192.readUInt32BE(20), 192);
   assert.equal(icon512.readUInt32BE(16), 512);

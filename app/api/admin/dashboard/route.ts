@@ -42,7 +42,8 @@ function normalizedProduct(value: unknown): Tractor {
     approximatePriceUsd,
     discountPercent,
     promotionLabel: raw.promotionLabel ? cleanText(raw.promotionLabel, 120) : null,
-    inStock: Boolean(raw.inStock),
+    // Stock is derived from active VIN records after catalogue overrides merge.
+    inStock: false,
     recommended: Boolean(raw.recommended),
     popular: Boolean(raw.popular),
     status: new Set(["draft","published","hidden","archived"]).has(String(raw.status)) ? raw.status as Tractor["status"] : "published",
@@ -96,7 +97,7 @@ export async function GET(request: Request) {
         (SELECT COUNT(*) FROM leads WHERE created_at>=datetime('now','-30 days')) AS leads_30`).first() : Promise.resolve(null),
       isDirector ? db.prepare("SELECT value FROM site_settings WHERE key='director_goals'").first<{value:string}>() : Promise.resolve(null),
       (isDirector || canInventory || canFinance) ? db.prepare(`SELECT
-        (SELECT COUNT(*) FROM inventory_units_v2 WHERE archived=0 AND status IN ('stock','reserved')) AS stock_units,
+        (SELECT COUNT(*) FROM inventory_units_v2 WHERE archived=0 AND status='stock') AS stock_units,
         (SELECT COUNT(*) FROM shipments_v2 WHERE archived=0 AND status NOT IN ('closed','arrived')) AS active_shipments,
         (SELECT COUNT(*) FROM meetings_v2 WHERE archived=0 AND starts_at>=datetime('now','-30 days')) AS meetings_30,
         (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='in' AND reversed_by IS NULL) AS income_som,

@@ -1,11 +1,9 @@
-import type { Metadata } from "next";
 import { Link } from "../components/SiteLink";
 import {
   ArrowUpRight,
   ClipboardCheck,
   Cog,
   Headphones,
-  PackageCheck,
   Phone,
   Wrench,
 } from "lucide-react";
@@ -14,12 +12,10 @@ import { PageHero } from "../components/PageHero";
 import { LeadModalButton } from "../components/LeadModalButton";
 import { getPublishedRecords } from "../lib/public-records";
 import Image from "next/image";
+import { getRequestLocale } from "../lib/locale-server";
+import { pageMetadata } from "../lib/seo";
 
-export const metadata: Metadata = {
-  title: "Сервис тракторов Changfa | ATADAN",
-  description:
-    "Гарантийная поддержка, регламентное обслуживание и запчасти для тракторов Changfa.",
-};
+export async function generateMetadata(){return pageMetadata("service","/service",await getRequestLocale())}
 export default async function ServicePage() {
   const materials = await getPublishedRecords("service_pages");
   return (
@@ -52,18 +48,8 @@ export default async function ServicePage() {
           </p>
         </article>
         <article>
-          <PackageCheck />
-          <span>03</span>
-          <h2>
-            <Trans id="service.parts" />
-          </h2>
-          <p>
-            <Trans id="service.partsText" />
-          </p>
-        </article>
-        <article>
           <Headphones />
-          <span>04</span>
+          <span>03</span>
           <h2>
             <Trans id="service.support" />
           </h2>

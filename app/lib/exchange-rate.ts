@@ -5,6 +5,18 @@ export type UsdKgsRate = {
 
 const DAILY_RATE_URL = "https://www.nbkr.kg/XML/daily.xml";
 
+export function bishkekCalendarDate(value: Date = new Date()) {
+  const parts = new Intl.DateTimeFormat("ru-RU", {
+    timeZone: "Asia/Bishkek",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).formatToParts(value);
+  const part = (type: Intl.DateTimeFormatPartTypes) =>
+    parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("day")}.${part("month")}.${part("year")}`;
+}
+
 export async function getUsdKgsRate(): Promise<UsdKgsRate | null> {
   try {
     const response = await fetch(DAILY_RATE_URL, {
@@ -18,8 +30,10 @@ export async function getUsdKgsRate(): Promise<UsdKgsRate | null> {
     const nominal = Number(usd?.match(/<Nominal>([^<]+)<\/Nominal>/i)?.[1]?.replace(",", "."));
     const amount = Number(usd?.match(/<Value>([^<]+)<\/Value>/i)?.[1]?.replace(",", "."));
     const value = amount / nominal;
-    if (!date || !Number.isFinite(value) || value < 10 || value > 500) return null;
-    return { value, date };
+    if (!Number.isFinite(value) || value < 10 || value > 500) return null;
+    // Prefer the official NBKR date. If a valid feed omits it, use the
+    // retrieval calendar date in Bishkek rather than UTC.
+    return { value, date: date ?? bishkekCalendarDate() };
   } catch {
     return null;
   }
