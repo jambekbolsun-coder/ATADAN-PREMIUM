@@ -16,6 +16,7 @@ test("employee permissions are persisted and enforced by server routes", async (
   assert.match(dashboard, /const safeOperations/);
   assert.match(dashboard, /canFinance \? Number\(rawOperations\.expenses_som/);
   assert.match(records, /canUseSection\(actor,section\)/);
+  assert.match(records, /\["23505","23503","23514"\]\.includes\(code\)/);
   assert.match(migration, /permissions_json/);
 });
 

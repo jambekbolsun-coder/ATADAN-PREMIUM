@@ -185,5 +185,9 @@ export async function POST(request: Request) {
     } else throw new HttpError(400, "Неизвестное действие");
     if(marketingKinds.has(kind))revalidatePath("/","layout");
     return Response.json({ ok: true });
-  } catch (error) { if(!(error instanceof HttpError))console.error("admin records POST failed",error);return fail(error); }
+  } catch (error) {
+    const code=typeof error==="object"&&error&&"code" in error?String((error as {code?:unknown}).code??""):"";
+    if(!(error instanceof HttpError)&&!["23505","23503","23514"].includes(code))console.error("admin records POST failed",error);
+    return fail(error);
+  }
 }
