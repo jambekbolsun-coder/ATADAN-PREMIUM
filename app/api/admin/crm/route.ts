@@ -7,7 +7,7 @@ import { normalizePhone, structuredLossReason } from "../../../lib/business";
 type StageOption={id:string;label:string};
 type JsonRecordRow={id:string;data_json:string};
 const defaultStageOptions:StageOption[]=stages.map(id=>({id,label:stageLabels[id]}));
-async function loadStages(){const row=await getRawDb().prepare("SELECT value FROM site_settings WHERE key='crm_pipeline_stages'").first<{value:string}>();if(!row)return defaultStageOptions;try{const parsed=JSON.parse(row.value) as StageOption[];return Array.isArray(parsed)&&parsed.length?parsed:defaultStageOptions}catch{return defaultStageOptions}}
+async function loadStages(){const row=await getRawDb().prepare("SELECT value FROM site_settings WHERE key='crm_pipeline_stages'").first<{value:string}>();if(!row)return defaultStageOptions;try{const parsed=JSON.parse(row.value) as StageOption[];if(Array.isArray(parsed)&&parsed.length){if(!parsed.some(x=>x.id==="meeting_done")){const index=parsed.findIndex(x=>x.id==="meeting");parsed.splice(index>=0?index+1:3,0,{id:"meeting_done",label:"Встреча проведена"})}return parsed}return defaultStageOptions}catch{return defaultStageOptions}}
 function recordData(value:string){try{return JSON.parse(value) as Record<string,unknown>}catch{return {}}}
 
 export async function GET(request: Request) {
@@ -77,7 +77,7 @@ export async function GET(request: Request) {
       mode==="deals"?db.prepare("SELECT id,vin,model,status,reserved_deal_id,list_price_minor FROM inventory_units_v2 WHERE archived=0 ORDER BY status,vin LIMIT 500").all():Promise.resolve({results:[]}),
     ]);
     return Response.json({actor,deals:deals.results,customers:customers.results,tasks:tasks.results,staff:staff.results,costs:costs.results,audit:audit.results,notes:notes.results,inventory:inventory.results,stages:stageOptions.map(item=>[item.id,item.label])},{headers:{"Cache-Control":"no-store"}});
-  }catch(e){return fail(e);}
+  }catch(e){if(!(e instanceof HttpError))console.error("CRM operation failed",e);return fail(e);}
 }
 export async function POST(request: Request) {
   try {
@@ -151,11 +151,21 @@ export async function POST(request: Request) {
         if(Number(paid?.paid??0)<Number(contract.amount_minor))throw new HttpError(409,"Продажа возможна только после полной фактической оплаты");
       }
       if(Number(body.version)!==deal.version)throw new HttpError(409,"Запись изменена другим сотрудником. Обновите данные.");
-      const result=await db.prepare("UPDATE crm_deals SET stage=?,amount_minor=?,assigned_to=?,loss_reason=?,loss_reason_code=?,inventory_unit_id=?,probability=?,next_step_at=?,won_at=CASE WHEN ?='won' THEN CURRENT_TIMESTAMP ELSE won_at END,lost_at=CASE WHEN ?='lost' THEN CURRENT_TIMESTAMP ELSE lost_at END,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND version=?").bind(stage,amount,assigned,reason,reasonCode,inventoryUnitId,probability,nextStepAt,stage,stage,id,deal.version).run();
+      await db.transaction(async client=>{
+      const result=await db.prepare("UPDATE crm_deals SET stage=?,amount_minor=?,assigned_to=?,loss_reason=?,loss_reason_code=?,inventory_unit_id=?,probability=?,next_step_at=?,won_at=CASE WHEN ?='won' THEN CURRENT_TIMESTAMP ELSE won_at END,lost_at=CASE WHEN ?='lost' THEN CURRENT_TIMESTAMP ELSE lost_at END,version=version+1,updated_at=CURRENT_TIMESTAMP WHERE id=? AND version=?").bind(stage,amount,assigned,reason,reasonCode,inventoryUnitId,probability,nextStepAt,stage,stage,id,deal.version).execute(client);
       if(!result.meta.changes)throw new HttpError(409,"Запись уже изменилась. Обновите страницу.");
-      await db.batch([auditStatement(actor,action,id,JSON.stringify({from:deal.stage,to:stage,amountMinor:amount,assignedTo:assigned,inventoryUnitId,reasonCode})),db.prepare("INSERT INTO deal_stage_events(id,deal_id,from_stage,to_stage,reason_code,reason_detail,actor_id) VALUES(?,?,?,?,?,?,?)").bind(crypto.randomUUID(),id,deal.stage,stage,reasonCode,reason,actor.id)]);
+      await auditStatement(actor,action,id,JSON.stringify({from:deal.stage,to:stage,amountMinor:amount,assignedTo:assigned,inventoryUnitId,reasonCode})).execute(client);
+      await db.prepare("INSERT INTO deal_stage_events(id,deal_id,from_stage,to_stage,reason_code,reason_detail,actor_id) VALUES(?,?,?,?,?,?,?)").bind(crypto.randomUUID(),id,deal.stage,stage,reasonCode,reason,actor.id).execute(client);
+      if(stage==="meeting"||stage==="meeting_done"){
+        const previous=await db.prepare("SELECT id,starts_at,outcome FROM meetings_v2 WHERE deal_id=? AND archived=0 ORDER BY starts_at DESC LIMIT 1").bind(id).execute<{id:string;starts_at:string;outcome:string}>(client);
+        const meetingId=previous.results[0]?.id??`pipeline-meeting-${id}`,completed=stage==="meeting_done",date=nextStepAt||new Date().toISOString(),status=completed?"closed":"active";
+        const meetingData={customerId:deal.customer_id,dealId:id,responsibleId:assigned||actor.id,date:completed&&previous.results[0]?.starts_at?new Date(previous.results[0].starts_at).toISOString():date,location:"",result:previous.results[0]?.outcome||(completed?"Встреча проведена · отмечено в воронке":""),automated:true};
+        await db.prepare("INSERT INTO meetings_v2(id,customer_id,deal_id,responsible_id,starts_at,status,outcome) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,responsible_id=excluded.responsible_id,starts_at=CASE WHEN excluded.status='closed' THEN meetings_v2.starts_at ELSE excluded.starts_at END,outcome=CASE WHEN excluded.status='closed' AND meetings_v2.outcome='' THEN excluded.outcome ELSE meetings_v2.outcome END,version=meetings_v2.version+1,updated_at=CURRENT_TIMESTAMP").bind(meetingId,deal.customer_id,id,assigned||actor.id,date,status,meetingData.result).execute(client);
+        await db.prepare("INSERT INTO admin_records(id,kind,title,status,category,data_json,created_by,updated_by) VALUES(?,'meetings',?,?,'Из воронки',?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,data_json=(admin_records.data_json::jsonb||?::jsonb)::text,updated_at=CURRENT_TIMESTAMP,version=admin_records.version+1").bind(meetingId,`Встреча · ${deal.title}`,status,JSON.stringify(meetingData),actor.id,actor.id,JSON.stringify({responsibleId:assigned||actor.id,date:meetingData.date,result:meetingData.result})).execute(client);
+      }
+      });
       if(inventoryUnitId&&["reserved","contract","awaiting_payment"].includes(stage))await db.batch([db.prepare("UPDATE inventory_units_v2 SET status='reserved',reserved_deal_id=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?").bind(id,actor.id,inventoryUnitId),db.prepare("INSERT INTO inventory_lifecycle_events(id,inventory_unit_id,from_status,to_status,actor_id,note) VALUES(?,?,NULL,'reserved',?,'Резерв из CRM')").bind(crypto.randomUUID(),inventoryUnitId,actor.id)]);
-      const automation:{title:string;description:string;hours:number;priority:string}|undefined=stage==="qualified"?{title:"Назначить встречу",description:"Согласовать дату и формат встречи с квалифицированным клиентом",hours:24,priority:"high"}:stage==="meeting"?{title:"Подготовить коммерческое предложение",description:"Зафиксировать условия и отправить актуальное КП",hours:24,priority:"high"}:stage==="negotiation"?{title:"Follow-up после предложения",description:"Связаться с клиентом и зафиксировать следующий шаг",hours:48,priority:"normal"}:undefined;
+      const automation:{title:string;description:string;hours:number;priority:string}|undefined=stage==="qualified"?{title:"Назначить встречу",description:"Согласовать дату и формат встречи с квалифицированным клиентом",hours:24,priority:"high"}:stage==="meeting_done"?{title:"Подготовить коммерческое предложение",description:"Зафиксировать условия и отправить актуальное КП",hours:24,priority:"high"}:stage==="negotiation"?{title:"Follow-up после предложения",description:"Связаться с клиентом и зафиксировать следующий шаг",hours:48,priority:"normal"}:undefined;
       if(automation&&assigned)await db.prepare("INSERT INTO crm_tasks(id,deal_id,customer_id,title,description,priority,assigned_to,due_at,automation_key) VALUES(?,?,?,?,?,?,?,?,?) ON CONFLICT(automation_key) WHERE automation_key IS NOT NULL AND archived=0 DO NOTHING").bind(crypto.randomUUID(),id,deal.customer_id,automation.title,automation.description,automation.priority,assigned,new Date(Date.now()+automation.hours*60*60_000).toISOString(),`deal:${id}:${stage}`).run();
       const customer=await db.prepare("SELECT name,phone FROM crm_customers WHERE id=?").bind(deal.customer_id).first<{name:string;phone:string}>();
       if(stage==="won"){
@@ -227,5 +237,5 @@ export async function POST(request: Request) {
       await db.prepare("UPDATE staff SET theme=?,display_name=?,phone=? WHERE id=?").bind(theme,cleanText(body.displayName,120,true),cleanText(body.phone??"",40),actor.id).run();
     }else{throw new HttpError(400,"Неизвестное действие");}
     return Response.json({ok:true});
-  }catch(e){return fail(e);}
+  }catch(e){if(!(e instanceof HttpError))console.error("CRM operation failed",e);return fail(e);}
 }

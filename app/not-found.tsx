@@ -17,7 +17,7 @@ export default function NotFound() {
           <Link className="not-found-primary" href="/catalog"><Search size={18} aria-hidden="true" />Открыть каталог<ArrowRight size={18} aria-hidden="true" /></Link>
           <Link className="not-found-secondary" href="/"><Home size={18} aria-hidden="true" />На главную</Link>
         </div>
-        <nav className="not-found-quick-links" aria-label="Полезные разделы"><Link href="/service"><Wrench size={16} aria-hidden="true" />Сервис и запчасти</Link><Link href="/contacts"><Headphones size={16} aria-hidden="true" />Связаться с нами</Link></nav>
+        <nav className="not-found-quick-links" aria-label="Полезные разделы"><Link href="/service"><Wrench size={16} aria-hidden="true" />Сервис</Link><Link href="/contacts"><Headphones size={16} aria-hidden="true" />Связаться с нами</Link></nav>
       </div>
       <span className="not-found-mark" aria-hidden="true">ATADAN</span>
     </main>

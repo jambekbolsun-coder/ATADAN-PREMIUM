@@ -1,14 +1,15 @@
+import { revalidatePath } from "next/cache";
 import { getRawDb } from "../../../../db";
 import { canUseSection, requireActor, type Actor } from "../../../lib/admin-auth";
 import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
 import { normalizedRecordStatements, recordLookups } from "../../../lib/admin-record-sync";
 
 const marketingKinds = new Set([
-  "home_sections", "categories", "promotions", "parts", "attachments", "gallery",
+  "home_sections", "categories", "promotions", "attachments", "gallery",
   "reviews", "faq", "branches", "leasing_terms", "leasing_model_terms", "service_pages",
 ]);
 const companyKinds = new Set([
-  "reservations", "sales", "inventory_units", "stock_parts", "stock_attachments",
+  "reservations", "sales", "inventory_units",
   "stock_movements", "suppliers", "purchases", "shipments", "finance_entries",
   "debts", "installments", "payroll", "documents", "service_cases", "manager_plans",
   "meetings", "payments", "leasing_applications", "financial_accounts",
@@ -17,7 +18,7 @@ const allKinds = new Set([...marketingKinds, ...companyKinds]);
 const statuses = new Set(["draft", "published", "hidden", "active", "closed", "archived", "new", "contacted", "documents", "review", "approved", "rejected", "contract", "issued"]);
 
 function canAccess(actor: Actor, kind: string, mutate: boolean) {
-  const section=({parts:"parts",service_pages:"public-service",faq:"faq",leasing_terms:"leasing",leasing_model_terms:"leasing-models",promotions:"promotions",leasing_applications:"leasing-applications",sales:"sales",inventory_units:"inventory-units",suppliers:"suppliers",purchases:"purchases",shipments:"shipments",finance_entries:"expenses",financial_accounts:"financial-accounts",payroll:"payroll",payments:"payments",debts:"debts",documents:"documents",meetings:"meetings",service_cases:"service-cases"} as Record<string,string>)[kind];
+  const section=({service_pages:"public-service",faq:"faq",leasing_terms:"leasing",leasing_model_terms:"leasing-models",promotions:"promotions",leasing_applications:"leasing-applications",sales:"sales",inventory_units:"inventory-units",suppliers:"suppliers",purchases:"purchases",shipments:"shipments",finance_entries:"expenses",financial_accounts:"financial-accounts",payroll:"payroll",payments:"payments",debts:"debts",documents:"documents",meetings:"meetings",service_cases:"service-cases"} as Record<string,string>)[kind];
   if(section)return canUseSection(actor,section);
   if (actor.role === "owner" || actor.role === "director") return true;
   if (marketingKinds.has(kind)) return actor.role === "marketer";
@@ -48,10 +49,10 @@ function storedData(value:string){try{return JSON.parse(value) as Record<string,
 
 function moduleName(kind: string) {
   return ({
-    home_sections:"блок сайта",categories:"категорию",promotions:"акцию",parts:"запчасть",attachments:"навесное оборудование",
+    home_sections:"блок сайта",categories:"категорию",promotions:"акцию",attachments:"навесное оборудование",
     gallery:"фотографию",reviews:"отзыв",faq:"вопрос FAQ",branches:"филиал",leasing_terms:"условия финансирования",leasing_model_terms:"условия модели",leasing_applications:"заявку на лизинг",
     service_pages:"сервисный материал",reservations:"бронь",sales:"продажу",inventory_units:"единицу техники",
-    stock_parts:"остаток запчастей",stock_attachments:"остаток оборудования",stock_movements:"движение склада",suppliers:"поставщика",
+    stock_movements:"движение склада",suppliers:"поставщика",
     purchases:"закупку",shipments:"поставку",finance_entries:"финансовую операцию",debts:"задолженность",
     installments:"рассрочку",payroll:"начисление",documents:"документ",service_cases:"сервисный случай",
     manager_plans:"план менеджера",meetings:"встречу",payments:"платёж",financial_accounts:"счёт",
@@ -89,6 +90,7 @@ export async function GET(request: Request) {
     const bindings: unknown[] = [kind];
     if (q) { where.push("(lower(title) LIKE ? OR lower(subtitle) LIKE ? OR lower(category) LIKE ? OR lower(data_json) LIKE ?)"); bindings.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`); }
     if (status !== "all") { if (!statuses.has(status)) throw new HttpError(400, "Неизвестный статус"); where.push("status=?"); bindings.push(status); }
+    if(kind==="documents"&&url.searchParams.get("folder")){where.push("COALESCE(NULLIF(data_json::jsonb->>'folderId',''),'folder-1')=?");bindings.push(cleanText(url.searchParams.get("folder"),30,true))}
     const db = getRawDb();
     const clause = where.join(" AND ");
     const [rows, count] = await Promise.all([
@@ -123,6 +125,7 @@ export async function POST(request: Request) {
       if (!statuses.has(status)) throw new HttpError(400, "Неизвестный статус");
       const sortOrder = Math.max(0, Math.min(100_000, Math.round(Number(body.sortOrder) || 0)));
       const data = normalizeData(kind,body.data);
+      if(kind==="finance_entries")data.notes=subtitle;
       const normalized = await normalizedRecordStatements({action:"create",id,kind,title,status,data,actor});
       const statements = [
         db.prepare("INSERT INTO admin_records(id,kind,title,subtitle,status,category,sort_order,data_json,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?,?)").bind(id,kind,title,subtitle,status,category,sortOrder,JSON.stringify(data),actor.id,actor.id),
@@ -130,6 +133,7 @@ export async function POST(request: Request) {
         db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),actor.id,"Создано",id,`Создано ${moduleName(kind)} «${title}»`),
       ];
       await db.batch(statements);
+      if(marketingKinds.has(kind))revalidatePath("/","layout");
       return Response.json({ id }, { status: 201 });
     }
 
@@ -159,6 +163,7 @@ export async function POST(request: Request) {
     }
 
     if (action === "update") {
+      if (kind === "payments") throw new HttpError(409, "Проведённый платёж нельзя редактировать; используйте сторно");
       const title = cleanText(body.title, 180, true);
       const subtitle = cleanText(body.subtitle ?? "", 600);
       const category = cleanText(body.category ?? "", 100);
@@ -178,6 +183,11 @@ export async function POST(request: Request) {
       const archiveData=storedData(current.data_json);const related=await normalizedRecordStatements({action:"archive",id,kind,title:current.title,status:"archived",data:archiveData,actor});
       await db.transaction(async client=>{const result=await db.prepare("UPDATE admin_records SET archived=1,status='archived',updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?").bind(actor.id,id,expected).execute(client);if(!result.meta.changes)throw new HttpError(409,"Запись уже изменена. Обновите список.");for(const statement of related)await statement.execute(client);await db.prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(),actor.id,"Перенесено в архив",id,`Архивировано ${moduleName(kind)} «${current.title}»`).execute(client);});
     } else throw new HttpError(400, "Неизвестное действие");
+    if(marketingKinds.has(kind))revalidatePath("/","layout");
     return Response.json({ ok: true });
-  } catch (error) { if(!(error instanceof HttpError))console.error("admin records POST failed",error);return fail(error); }
+  } catch (error) {
+    const code=typeof error==="object"&&error&&"code" in error?String((error as {code?:unknown}).code??""):"";
+    if(!(error instanceof HttpError)&&!["23505","23503","23514"].includes(code))console.error("admin records POST failed",error);
+    return fail(error);
+  }
 }

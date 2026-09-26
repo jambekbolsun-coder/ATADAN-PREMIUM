@@ -172,17 +172,17 @@ export async function adminCookie(username: string, request: Request, secure = t
 }
 
 export function clearAdminCookie() {
-  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
+  return `${COOKIE_NAME}=; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=0`;
 }
 
 export type StaffRole = "owner" | "director" | "manager" | "accountant" | "marketer";
-export const permissionSections = ["catalog","parts","news","public-service","faq","leasing","leasing-models","promotions","leasing-applications","site-leads","site-analytics","site-settings","deals","client-base","inventory-units","sales","suppliers","purchases","shipments","expenses","finance","financial-accounts","payroll","payments","debts","documents","meetings","service-cases","employee-tasks","notifications","chat","groups","team","audit"] as const;
+export const permissionSections = ["catalog","news","public-service","faq","leasing","leasing-models","promotions","leasing-applications","site-leads","site-analytics","site-settings","deals","client-base","inventory-units","sales","suppliers","purchases","shipments","expenses","finance","financial-accounts","payroll","payments","debts","documents","meetings","service-cases","employee-tasks","notifications","chat","groups","team","audit"] as const;
 export type PermissionSection = typeof permissionSections[number];
 const defaultPermissions: Record<StaffRole,PermissionSection[]> = {
   owner:[...permissionSections], director:[...permissionSections],
   manager:["deals","client-base","inventory-units","sales","meetings","documents","service-cases","payments","employee-tasks","notifications","chat","groups","leasing-applications"],
   accountant:["suppliers","purchases","shipments","expenses","finance","financial-accounts","payroll","payments","debts","documents","employee-tasks","notifications","chat","groups"],
-  marketer:["catalog","parts","news","public-service","faq","leasing","leasing-models","promotions","site-leads","site-analytics","employee-tasks","notifications","chat","groups"],
+  marketer:["catalog","news","public-service","faq","leasing","leasing-models","promotions","site-leads","site-analytics","employee-tasks","notifications","chat","groups"],
 };
 export type Actor = { id: string; email: string; display_name: string; role: StaffRole; active: number; theme: string; avatar: string | null; phone: string; position:string; department:string; skills:string; bio:string; permissions:PermissionSection[] };
 type ActorRow = Omit<Actor,"permissions"> & {permissions_json:string};
@@ -256,5 +256,5 @@ export async function revokeStaffSession(request: Request) {
     const tokenHash=await digest(token),session=await getRawDb().prepare("SELECT staff_id FROM staff_sessions WHERE token_hash=?").bind(tokenHash).first<{staff_id:string}>();
     await getRawDb().batch([getRawDb().prepare("DELETE FROM staff_sessions WHERE token_hash=?").bind(tokenHash),getRawDb().prepare("INSERT INTO auth_events(id,staff_id,event_type) VALUES(?,?,'logout')").bind(crypto.randomUUID(),session?.staff_id??null)]);
   }
-  return `${STAFF_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
+  return `${STAFF_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Secure; Max-Age=0`;
 }

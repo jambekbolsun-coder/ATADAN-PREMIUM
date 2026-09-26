@@ -16,6 +16,7 @@ test("employee permissions are persisted and enforced by server routes", async (
   assert.match(dashboard, /const safeOperations/);
   assert.match(dashboard, /canFinance \? Number\(rawOperations\.expenses_som/);
   assert.match(records, /canUseSection\(actor,section\)/);
+  assert.match(records, /\["23505","23503","23514"\]\.includes\(code\)/);
   assert.match(migration, /permissions_json/);
 });
 
@@ -45,9 +46,11 @@ test("leasing applications support calculation variants, history and protected p
   assert.match(proposal, /Расчёт является предварительным/);
 });
 
-test("lead submission stays inside CRM without WhatsApp automation", async () => {
+test("lead submission opens WhatsApp only after a successful save", async () => {
   const form = await source("../app/components/LeadForm.tsx");
-  assert.doesNotMatch(form, /wa\.me|window\.open/);
+  assert.ok(form.indexOf('if (!response.ok)') < form.indexOf('window.location.assign(url)'));
+  assert.match(form, /managerWhatsAppUrl/);
+  assert.match(form, /Продолжить в WhatsApp/);
   assert.match(form, /\/api\/leads/);
 });
 
@@ -59,6 +62,16 @@ test("staff login uses a PostgreSQL-safe rate-limit upsert", async () => {
   assert.match(security, /SET hits=request_limits\.hits\+1 RETURNING hits/);
   assert.match(session, /authenticateStaff\(username, password, request\)/);
   assert.match(session, /createStaffSession\(actor, request\)/);
+});
+
+test("logout expires both staff and legacy admin cookies before reloading the login screen", async () => {
+  const route = await source("../app/api/admin/session/route.ts");
+  const dashboard = await source("../app/components/AdminDashboard.tsx");
+  assert.match(route, /response\.cookies\.set\("atadan_staff"/);
+  assert.match(route, /response\.cookies\.set\("atadan_admin"/);
+  assert.match(route, /expires:new Date\(0\)/);
+  assert.match(dashboard, /if \(!response\.ok\)/);
+  assert.match(dashboard, /window\.location\.replace\("\/admin"\)/);
 });
 
 test("plan versus actual uses one consistent thirty-day period", async () => {

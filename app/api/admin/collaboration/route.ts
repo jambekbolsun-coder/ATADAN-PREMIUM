@@ -1,58 +1,584 @@
 import { getRawDb } from "../../../../db";
 import { canUseSection, requireActor } from "../../../lib/admin-auth";
 import { auditStatement } from "../../../lib/crm";
-import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
+import {
+  cleanText,
+  fail,
+  HttpError,
+  jsonBody,
+  sameOrigin,
+} from "../../../lib/security";
 
-type LegacyRow={id:string;title:string;subtitle:string;status:string;data_json:string;created_by:string;created_at:string;updated_at:string;version:number};
-const parse=(value:string)=>{try{return JSON.parse(value) as Record<string,unknown>}catch{return {}}};
-const directKey=(left:string,right:string)=>[left,right].sort().join(":");
+type LegacyRow = {
+  id: string;
+  title: string;
+  subtitle: string;
+  status: string;
+  data_json: string;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+  version: number;
+};
+const parse = (value: string) => {
+  try {
+    return JSON.parse(value) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+};
+const directKey = (left: string, right: string) =>
+  [left, right].sort().join(":");
 
-export async function GET(request:Request){
-  try{
-    const actor=await requireActor(request),db=getRawDb(),owner=["owner","director"].includes(actor.role),scope=cleanText(new URL(request.url).searchParams.get("scope")??"notifications",20,true);
-    if(!new Set(["notifications","chat","groups"]).has(scope)||!canUseSection(actor,scope))throw new HttpError(403,"Нет доступа к этому разделу");
-    const chatAccess=scope==="chat",groupAccess=scope==="groups"||chatAccess,notificationAccess=scope==="notifications";
-    const [staff,legacyMessages,legacyGroups,normalizedGroups,normalizedMessages,members,leads,tasks,audit,personalNotifications]=await Promise.all([
-      db.prepare("SELECT id,display_name,email,role,avatar,active FROM staff WHERE active=1 ORDER BY display_name").all(),
-      chatAccess?db.prepare("SELECT * FROM admin_records WHERE kind='employee_message' AND archived=0 ORDER BY created_at DESC LIMIT 300").all<LegacyRow>():Promise.resolve({results:[]}),
-      groupAccess?db.prepare("SELECT * FROM admin_records WHERE kind='employee_group' AND archived=0 ORDER BY updated_at DESC LIMIT 100").all<LegacyRow>():Promise.resolve({results:[]}),
-      groupAccess?db.prepare(`SELECT c.id,c.title,c.title subtitle,c.status,c.created_by,c.created_at,c.updated_at,c.version,c.linked_entity_type,c.linked_entity_id,c.description,COALESCE(jsonb_agg(cm.staff_id) FILTER (WHERE cm.staff_id IS NOT NULL),'[]'::jsonb)::text members FROM conversations_v2 c LEFT JOIN conversation_members_v2 cm ON cm.conversation_id=c.id AND cm.archived_at IS NULL WHERE c.kind='group' AND c.archived=0 GROUP BY c.id ORDER BY c.updated_at DESC LIMIT 100`).all():Promise.resolve({results:[]}),
-      chatAccess?db.prepare(`SELECT m.id,m.conversation_id,m.sender_id,m.body,m.created_at,c.kind FROM messages_v2 m JOIN conversations_v2 c ON c.id=m.conversation_id AND c.archived=0 WHERE m.archived=0 AND (${owner?"TRUE":"EXISTS(SELECT 1 FROM conversation_members_v2 cm WHERE cm.conversation_id=c.id AND cm.staff_id=? AND cm.archived_at IS NULL)"}) ORDER BY m.created_at DESC LIMIT 300`).bind(...(owner?[]:[actor.id])).all():Promise.resolve({results:[]}),
-      chatAccess?db.prepare("SELECT conversation_id,staff_id FROM conversation_members_v2 WHERE archived_at IS NULL").all<{conversation_id:string;staff_id:string}>():Promise.resolve({results:[]}),
-      notificationAccess?db.prepare(`SELECT l.id,l.name,l.phone,l.tractor_slug,l.status,l.created_at FROM leads l ${owner?"":"WHERE EXISTS(SELECT 1 FROM crm_deals d WHERE d.lead_id=l.id AND d.assigned_to=?)"} ORDER BY l.created_at DESC LIMIT 40`).bind(...(owner?[]:[actor.id])).all():Promise.resolve({results:[]}),
-      notificationAccess?db.prepare(`SELECT t.id,t.title,t.due_at,t.done,t.assigned_to,s.display_name FROM crm_tasks t LEFT JOIN staff s ON s.id=t.assigned_to ${owner?"":"WHERE t.assigned_to=?"} ORDER BY t.created_at DESC LIMIT 60`).bind(...(owner?[]:[actor.id])).all():Promise.resolve({results:[]}),
-      notificationAccess?db.prepare(`SELECT a.id,a.action,a.detail,a.created_at,s.display_name FROM audit_logs a LEFT JOIN staff s ON s.id=a.actor_id ${owner?"":"WHERE a.actor_id=?"} ORDER BY a.created_at DESC LIMIT 60`).bind(...(owner?[]:[actor.id])).all():Promise.resolve({results:[]}),
-      notificationAccess?db.prepare("SELECT * FROM notifications_v2 WHERE recipient_id=? AND archived=0 ORDER BY read_at NULLS FIRST,created_at DESC LIMIT 200").bind(actor.id).all():Promise.resolve({results:[]}),
+export async function GET(request: Request) {
+  try {
+    const actor = await requireActor(request),
+      db = getRawDb(),
+      owner = ["owner", "director"].includes(actor.role),
+      scope = cleanText(
+        new URL(request.url).searchParams.get("scope") ?? "notifications",
+        20,
+        true,
+      );
+    if (
+      !new Set(["notifications", "chat", "groups"]).has(scope) ||
+      !canUseSection(actor, scope)
+    )
+      throw new HttpError(403, "Нет доступа к этому разделу");
+    const target = cleanText(
+        new URL(request.url).searchParams.get("target") ?? "",
+        120,
+      ),
+      targetValue = target.startsWith("group:") ? target.slice(6) : target;
+    const chatAccess = scope === "chat",
+      groupAccess = scope === "groups" || chatAccess,
+      notificationAccess = scope === "notifications";
+    const [
+      staff,
+      legacyMessages,
+      legacyGroups,
+      normalizedGroups,
+      normalizedMessages,
+      members,
+      leads,
+      tasks,
+      audit,
+      personalNotifications,
+    ] = await Promise.all([
+      db
+        .prepare(
+          "SELECT id,display_name,email,role,avatar,active FROM staff WHERE active=1 ORDER BY display_name",
+        )
+        .all(),
+      chatAccess
+        ? db
+            .prepare(
+              "SELECT * FROM admin_records WHERE kind='employee_message' AND archived=0 AND NOT EXISTS(SELECT 1 FROM messages_v2 m WHERE m.id=admin_records.id) ORDER BY created_at DESC LIMIT 300",
+            )
+            .all<LegacyRow>()
+        : Promise.resolve({ results: [] }),
+      groupAccess
+        ? db
+            .prepare(
+              "SELECT * FROM admin_records WHERE kind='employee_group' AND archived=0 AND NOT EXISTS(SELECT 1 FROM conversations_v2 c WHERE c.id=admin_records.id) ORDER BY updated_at DESC LIMIT 100",
+            )
+            .all<LegacyRow>()
+        : Promise.resolve({ results: [] }),
+      groupAccess
+        ? db
+            .prepare(
+              `SELECT c.id,c.title,c.title subtitle,c.status,c.created_by,c.created_at,c.updated_at,c.version,c.linked_entity_type,c.linked_entity_id,c.description,COALESCE(jsonb_agg(cm.staff_id) FILTER (WHERE cm.staff_id IS NOT NULL),'[]'::jsonb)::text members FROM conversations_v2 c LEFT JOIN conversation_members_v2 cm ON cm.conversation_id=c.id AND cm.archived_at IS NULL WHERE c.kind='group' AND c.archived=0 GROUP BY c.id ORDER BY c.updated_at DESC LIMIT 100`,
+            )
+            .all()
+        : Promise.resolve({ results: [] }),
+      chatAccess
+        ? db
+            .prepare(
+              `SELECT m.id,m.conversation_id,m.sender_id,m.body,m.attachments_json,m.created_at,c.kind FROM messages_v2 m JOIN conversations_v2 c ON c.id=m.conversation_id AND c.archived=0 WHERE m.archived=0 AND (EXISTS(SELECT 1 FROM conversation_members_v2 cm WHERE cm.conversation_id=c.id AND cm.staff_id=? AND cm.archived_at IS NULL)) ${target ? (target.startsWith("group:") ? "AND c.kind='group' AND c.id=?" : "AND c.kind='direct' AND EXISTS(SELECT 1 FROM conversation_members_v2 other WHERE other.conversation_id=c.id AND other.staff_id=? AND other.archived_at IS NULL)") : ""} ORDER BY m.created_at DESC LIMIT 300`,
+            )
+            .bind(actor.id, ...(target ? [targetValue] : []))
+            .all()
+        : Promise.resolve({ results: [] }),
+      chatAccess
+        ? db
+            .prepare(
+              "SELECT conversation_id,staff_id FROM conversation_members_v2 WHERE archived_at IS NULL",
+            )
+            .all<{ conversation_id: string; staff_id: string }>()
+        : Promise.resolve({ results: [] }),
+      notificationAccess
+        ? db
+            .prepare(
+              `SELECT l.id,l.name,l.phone,l.tractor_slug,l.status,l.created_at FROM leads l ${owner ? "" : "WHERE EXISTS(SELECT 1 FROM crm_deals d WHERE d.lead_id=l.id AND d.assigned_to=?)"} ORDER BY l.created_at DESC LIMIT 40`,
+            )
+            .bind(...(owner ? [] : [actor.id]))
+            .all()
+        : Promise.resolve({ results: [] }),
+      notificationAccess
+        ? db
+            .prepare(
+              `SELECT t.id,t.title,t.due_at,t.done,t.assigned_to,s.display_name FROM crm_tasks t LEFT JOIN staff s ON s.id=t.assigned_to ${owner ? "" : "WHERE t.assigned_to=?"} ORDER BY t.created_at DESC LIMIT 60`,
+            )
+            .bind(...(owner ? [] : [actor.id]))
+            .all()
+        : Promise.resolve({ results: [] }),
+      notificationAccess
+        ? db
+            .prepare(
+              `SELECT a.id,a.action,a.detail,a.created_at,s.display_name FROM audit_logs a LEFT JOIN staff s ON s.id=a.actor_id ${owner ? "" : "WHERE a.actor_id=?"} ORDER BY a.created_at DESC LIMIT 60`,
+            )
+            .bind(...(owner ? [] : [actor.id]))
+            .all()
+        : Promise.resolve({ results: [] }),
+      notificationAccess
+        ? db
+            .prepare(
+              "SELECT * FROM notifications_v2 WHERE recipient_id=? AND archived=0 ORDER BY read_at NULLS FIRST,created_at DESC LIMIT 200",
+            )
+            .bind(actor.id)
+            .all()
+        : Promise.resolve({ results: [] }),
     ]);
-    const groupRows=normalizedGroups.results.map((row)=>{const item=row as Record<string,unknown>;return {...item,id:String(item.id),created_by:String(item.created_by),data:{members:JSON.parse(String(item.members||"[]")),description:String(item.description??""),linkedEntityType:item.linked_entity_type??null,linkedEntityId:item.linked_entity_id??null}}}) as Array<Record<string,unknown>&{id:string;created_by:string;data:Record<string,unknown>}>;
-    const legacyGroupRows=legacyGroups.results.map(row=>({...row,data:parse(row.data_json)}));
-    const allGroups=[...groupRows,...legacyGroupRows];
-    const allowedGroups=new Set(allGroups.filter(row=>owner||row.created_by===actor.id||Array.isArray(row.data.members)&&row.data.members.includes(actor.id)).map(row=>row.id));
-    const memberMap=new Map<string,string[]>();for(const row of members.results){const list=memberMap.get(row.conversation_id)??[];list.push(row.staff_id);memberMap.set(row.conversation_id,list)}
-    const normalizedMessageRows=normalizedMessages.results.map((row)=>{const item=row as Record<string,unknown>,ids=memberMap.get(String(item.conversation_id))??[],sender=String(item.sender_id),other=ids.find(id=>id!==sender)??"";return {id:String(item.id),title:"Сообщение",subtitle:String(item.body),status:"active",category:"Чат",data:{to:String(sender===actor.id?other:actor.id),groupId:item.kind==="group"?String(item.conversation_id):null,text:String(item.body),fromName:""},created_by:sender,created_at:String(item.created_at),updated_at:String(item.created_at),version:1}});
-    const legacyMessageRows=legacyMessages.results.map(row=>({...row,data:parse(row.data_json)})).filter(row=>owner||row.created_by===actor.id||row.data.to===actor.id||(typeof row.data.groupId==="string"&&allowedGroups.has(row.data.groupId)));
-    return Response.json({actor,staff:staff.results,groups:allGroups,messages:[...normalizedMessageRows,...legacyMessageRows],notifications:{personal:personalNotifications.results,leads:leads.results,tasks:tasks.results,audit:audit.results}},{headers:{"Cache-Control":"no-store"}});
-  }catch(error){return fail(error)}
+    const groupRows = normalizedGroups.results.map((row) => {
+      const item = row as Record<string, unknown>;
+      return {
+        ...item,
+        id: String(item.id),
+        created_by: String(item.created_by),
+        data: {
+          members: JSON.parse(String(item.members || "[]")),
+          description: String(item.description ?? ""),
+          linkedEntityType: item.linked_entity_type ?? null,
+          linkedEntityId: item.linked_entity_id ?? null,
+        },
+      };
+    }) as Array<
+      Record<string, unknown> & {
+        id: string;
+        created_by: string;
+        data: Record<string, unknown>;
+      }
+    >;
+    const legacyGroupRows = legacyGroups.results.map((row) => ({
+      ...row,
+      data: parse(row.data_json),
+    }));
+    const allGroups = [...groupRows, ...legacyGroupRows];
+    const allowedGroups = new Set(
+      allGroups
+        .filter(
+          (row) =>
+          (scope === "groups" && owner) ||
+            row.created_by === actor.id ||
+            (Array.isArray(row.data.members) &&
+              row.data.members.includes(actor.id)),
+        )
+        .map((row) => row.id),
+    );
+    const memberMap = new Map<string, string[]>();
+    for (const row of members.results) {
+      const list = memberMap.get(row.conversation_id) ?? [];
+      list.push(row.staff_id);
+      memberMap.set(row.conversation_id, list);
+    }
+    const normalizedMessageRows = normalizedMessages.results.map((row) => {
+      const item = row as Record<string, unknown>,
+        ids = memberMap.get(String(item.conversation_id)) ?? [],
+        sender = String(item.sender_id),
+        other = ids.find((id) => id !== sender) ?? "";
+      return {
+        id: String(item.id),
+        title: "Сообщение",
+        subtitle: String(item.body),
+        status: "active",
+        category: "Чат",
+        data: {
+          to: String(sender === actor.id ? other : actor.id),
+          groupId: item.kind === "group" ? String(item.conversation_id) : null,
+          text: String(item.body),
+          attachments: JSON.parse(String(item.attachments_json || "[]")),
+          fromName: "",
+        },
+        created_by: sender,
+        created_at: String(item.created_at),
+        updated_at: String(item.created_at),
+        version: 1,
+      };
+    });
+    const legacyMessageRows = legacyMessages.results
+      .map((row) => ({ ...row, data: parse(row.data_json) }))
+      .filter(
+        (row) =>
+          row.created_by === actor.id ||
+          row.data.to === actor.id ||
+          (typeof row.data.groupId === "string" &&
+            allowedGroups.has(row.data.groupId)),
+      );
+    return Response.json(
+      {
+        actor,
+        staff: staff.results,
+        groups: allGroups.filter((row) => allowedGroups.has(row.id)),
+        messages: [...normalizedMessageRows, ...legacyMessageRows],
+        notifications: {
+          personal: personalNotifications.results,
+          unreadCount: personalNotifications.results.filter((item) => !item.read_at).length,
+          leads: leads.results,
+          tasks: tasks.results,
+          audit: audit.results,
+        },
+      },
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  } catch (error) {
+    if (!(error instanceof HttpError))
+      console.error("Collaboration failure", error);
+    return fail(error);
+  }
 }
 
-export async function POST(request:Request){
-  try{
-    sameOrigin(request);const actor=await requireActor(request),body=await jsonBody(request,30_000),db=getRawDb(),action=cleanText(body.action,30,true);const permission=action.includes("group")?"groups":action.startsWith("notification")?"notifications":"chat";if(!canUseSection(actor,permission))throw new HttpError(403,"Нет права выполнять это действие");
-    if(action==="send_message"){
-      const text=cleanText(body.text,4000,true),to=cleanText(body.to??"",100),groupId=cleanText(body.groupId??"",100);if(!to&&!groupId)throw new HttpError(400,"Выберите сотрудника или группу");
-      if(to){if(to===actor.id||!await db.prepare("SELECT id FROM staff WHERE id=? AND active=1").bind(to).first())throw new HttpError(400,"Сотрудник недоступен");const key=directKey(actor.id,to),id=crypto.randomUUID();await db.transaction(async client=>{const found=await db.prepare("SELECT id FROM conversations_v2 WHERE direct_key=? AND kind='direct' AND archived=0 FOR UPDATE").bind(key).execute(client);let conversationId=String(found.results[0]?.id??"");if(!conversationId){conversationId=crypto.randomUUID();await db.prepare("INSERT INTO conversations_v2(id,kind,title,direct_key,created_by) VALUES(?,'direct','',?,?)").bind(conversationId,key,actor.id).execute(client);await db.prepare("INSERT INTO conversation_members_v2(conversation_id,staff_id) VALUES(?,?),(?,?) ON CONFLICT DO NOTHING").bind(conversationId,actor.id,conversationId,to).execute(client)}await db.prepare("INSERT INTO messages_v2(id,conversation_id,sender_id,body) VALUES(?,?,?,?)").bind(id,conversationId,actor.id,text).execute(client)});return Response.json({id},{status:201});}
-      const group=await db.prepare("SELECT c.id FROM conversations_v2 c JOIN conversation_members_v2 cm ON cm.conversation_id=c.id AND cm.staff_id=? AND cm.archived_at IS NULL WHERE c.id=? AND c.kind='group' AND c.archived=0").bind(actor.id,groupId).first();if(group){const id=crypto.randomUUID();await db.batch([db.prepare("INSERT INTO messages_v2(id,conversation_id,sender_id,body) VALUES(?,?,?,?)").bind(id,groupId,actor.id,text),auditStatement(actor,"Отправлено сообщение",id)]);return Response.json({id},{status:201});}
-      const legacy=await db.prepare("SELECT data_json,created_by FROM admin_records WHERE id=? AND kind='employee_group' AND archived=0").bind(groupId).first<{data_json:string;created_by:string}>();const members=parse(legacy?.data_json??"").members;if(!legacy||(!["owner","director"].includes(actor.role)&&legacy.created_by!==actor.id&&(!Array.isArray(members)||!members.includes(actor.id))))throw new HttpError(403,"Нет доступа к этой группе");const id=crypto.randomUUID(),data={to:null,groupId,text,fromName:actor.display_name};await db.batch([db.prepare("INSERT INTO admin_records(id,kind,title,subtitle,status,category,data_json,created_by,updated_by) VALUES(?,'employee_message',?,?,'active','Чат',?,?,?)").bind(id,`Сообщение от ${actor.display_name}`,text.slice(0,180),JSON.stringify(data),actor.id,actor.id),auditStatement(actor,"Отправлено сообщение",id)]);return Response.json({id},{status:201});
+export async function POST(request: Request) {
+  try {
+    sameOrigin(request);
+    const actor = await requireActor(request),
+      body = await jsonBody(request, 30_000),
+      db = getRawDb(),
+      action = cleanText(body.action, 30, true);
+    const permission = action.includes("group")
+      ? "groups"
+      : action.startsWith("notification")
+        ? "notifications"
+        : "chat";
+    if (!canUseSection(actor, permission))
+      throw new HttpError(403, "Нет права выполнять это действие");
+    if (action === "send_message") {
+      const text = cleanText(body.text ?? "", 4000),
+        to = cleanText(body.to ?? "", 100),
+        groupId = cleanText(body.groupId ?? "", 100),
+        id = cleanText(body.clientId ?? crypto.randomUUID(), 100, true);
+      if ((!to && !groupId) || (to && groupId))
+        throw new HttpError(400, "Выберите один диалог");
+      const attachments: Array<{
+        url: string;
+        name: string;
+        type: string;
+        size: number;
+      }> = [];
+      if (body.attachments !== undefined && !Array.isArray(body.attachments))
+        throw new HttpError(400, "Проверьте вложения");
+      if (Array.isArray(body.attachments)) {
+        if (body.attachments.length > 8)
+          throw new HttpError(400, "Не более 8 файлов");
+        for (const value of body.attachments) {
+          if (!value || typeof value !== "object")
+            throw new HttpError(400, "Проверьте файл");
+          const item = value as Record<string, unknown>,
+            url = cleanText(item.url, 2000, true),
+            name = cleanText(item.name, 180, true);
+          if (!url.startsWith("/api/admin/media?key="))
+            throw new HttpError(400, "Сначала загрузите файл");
+          const key = new URL(url, "https://atadan.local").searchParams.get(
+              "key",
+            ),
+            upload = await db
+              .prepare(
+                "SELECT content_type,size FROM uploads_v3 WHERE key=? AND uploaded_by=? AND scope='chat'",
+              )
+              .bind(key, actor.id)
+              .first<{ content_type: string; size: number }>();
+          if (!upload) throw new HttpError(403, "Нет доступа к файлу");
+          attachments.push({
+            url,
+            name,
+            type: upload.content_type,
+            size: upload.size,
+          });
+        }
+      }
+      if (!text && !attachments.length)
+        throw new HttpError(400, "Введите текст или добавьте файл");
+      await db.transaction(async (client) => {
+        await db
+          .prepare("SELECT pg_advisory_xact_lock(hashtext(?))")
+          .bind(`message:${id}`)
+          .execute(client);
+        let conversationId = groupId;
+        if (to) {
+          if (
+            to === actor.id ||
+            !(await db
+              .prepare("SELECT id FROM staff WHERE id=? AND active=1")
+              .bind(to)
+              .first())
+          )
+            throw new HttpError(400, "Сотрудник недоступен");
+          const key = directKey(actor.id, to);
+          await db
+            .prepare("SELECT pg_advisory_xact_lock(hashtext(?))")
+            .bind(`chat:${key}`)
+            .execute(client);
+          const found = await db
+            .prepare(
+              "SELECT id FROM conversations_v2 WHERE direct_key=? AND kind='direct' AND archived=0",
+            )
+            .bind(key)
+            .execute(client);
+          conversationId = String(found.results[0]?.id ?? crypto.randomUUID());
+          if (!found.results.length) {
+            await db
+              .prepare(
+                "INSERT INTO conversations_v2(id,kind,title,direct_key,created_by) VALUES(?,'direct','',?,?)",
+              )
+              .bind(conversationId, key, actor.id)
+              .execute(client);
+            await db
+              .prepare(
+                "INSERT INTO conversation_members_v2(conversation_id,staff_id) VALUES(?,?),(?,?) ON CONFLICT DO NOTHING",
+              )
+              .bind(conversationId, actor.id, conversationId, to)
+              .execute(client);
+          }
+        } else {
+          const membership = await db
+            .prepare(
+              "SELECT c.id FROM conversations_v2 c JOIN conversation_members_v2 cm ON cm.conversation_id=c.id AND cm.staff_id=? AND cm.archived_at IS NULL WHERE c.id=? AND c.kind='group' AND c.archived=0",
+            )
+            .bind(actor.id, groupId)
+            .execute(client);
+          if (!membership.results.length)
+            throw new HttpError(403, "Нет доступа к группе");
+        }
+        const previous = await db
+          .prepare(
+            "SELECT sender_id,conversation_id,body,attachments_json FROM messages_v2 WHERE id=?",
+          )
+          .bind(id)
+          .execute(client);
+        if (previous.results.length) {
+          const row = previous.results[0];
+          if (
+            row.sender_id !== actor.id ||
+            row.conversation_id !== conversationId ||
+            row.body !== text ||
+            row.attachments_json !== JSON.stringify(attachments)
+          )
+            throw new HttpError(
+              409,
+              "Сообщение с этим идентификатором уже отправлено",
+            );
+          return;
+        }
+        await db
+          .prepare(
+            "INSERT INTO messages_v2(id,conversation_id,sender_id,body,attachments_json) VALUES(?,?,?,?,?)",
+          )
+          .bind(id, conversationId, actor.id, text, JSON.stringify(attachments))
+          .execute(client);
+        await db
+          .prepare(
+            "UPDATE conversations_v2 SET updated_at=CURRENT_TIMESTAMP WHERE id=?",
+          )
+          .bind(conversationId)
+          .execute(client);
+      });
+      return Response.json({ id }, { status: 201 });
     }
-    if(action==="create_group"){
-      const title=cleanText(body.title,120,true),description=cleanText(body.description??"",1000),linkedEntityType=cleanText(body.linkedEntityType??"",80),linkedEntityId=cleanText(body.linkedEntityId??"",100),members=Array.isArray(body.members)?Array.from(new Set(body.members.map(value=>cleanText(value,100)).filter(Boolean))).slice(0,100):[];if(!members.includes(actor.id))members.push(actor.id);const valid=await db.prepare(`SELECT id FROM staff WHERE active=1 AND id IN (${members.map(()=>"?").join(",")})`).bind(...members).all<{id:string}>();if(valid.results.length!==members.length)throw new HttpError(400,"В группе есть недоступный сотрудник");const id=crypto.randomUUID();await db.transaction(async client=>{await db.prepare("INSERT INTO conversations_v2(id,kind,title,description,linked_entity_type,linked_entity_id,created_by) VALUES(?,'group',?,?,?,?,?)").bind(id,title,description,linkedEntityType||null,linkedEntityId||null,actor.id).execute(client);for(const member of members)await db.prepare("INSERT INTO conversation_members_v2(conversation_id,staff_id) VALUES(?,?) ON CONFLICT DO NOTHING").bind(id,member).execute(client);await auditStatement(actor,"Создана рабочая группа",id,title).execute(client)});return Response.json({id},{status:201});
+    if (action === "create_group") {
+      const title = cleanText(body.title, 120, true),
+        description = cleanText(body.description ?? "", 1000),
+        linkedEntityType = cleanText(body.linkedEntityType ?? "", 80),
+        linkedEntityId = cleanText(body.linkedEntityId ?? "", 100),
+        members = Array.isArray(body.members)
+          ? Array.from(
+              new Set(
+                body.members
+                  .map((value) => cleanText(value, 100))
+                  .filter(Boolean),
+              ),
+            ).slice(0, 100)
+          : [];
+      if (!members.includes(actor.id)) members.push(actor.id);
+      const valid = await db
+        .prepare(
+          `SELECT id FROM staff WHERE active=1 AND id IN (${members.map(() => "?").join(",")})`,
+        )
+        .bind(...members)
+        .all<{ id: string }>();
+      if (valid.results.length !== members.length)
+        throw new HttpError(400, "В группе есть недоступный сотрудник");
+      const id = crypto.randomUUID();
+      await db.transaction(async (client) => {
+        await db
+          .prepare(
+            "INSERT INTO conversations_v2(id,kind,title,description,linked_entity_type,linked_entity_id,created_by) VALUES(?,'group',?,?,?,?,?)",
+          )
+          .bind(
+            id,
+            title,
+            description,
+            linkedEntityType || null,
+            linkedEntityId || null,
+            actor.id,
+          )
+          .execute(client);
+        for (const member of members)
+          await db
+            .prepare(
+              "INSERT INTO conversation_members_v2(conversation_id,staff_id) VALUES(?,?) ON CONFLICT DO NOTHING",
+            )
+            .bind(id, member)
+            .execute(client);
+        await auditStatement(
+          actor,
+          "Создана рабочая группа",
+          id,
+          title,
+        ).execute(client);
+      });
+      return Response.json({ id }, { status: 201 });
     }
-    if(action==="update_group"||action==="archive_group"){
-      const id=cleanText(body.id,100,true),normalized=await db.prepare("SELECT * FROM conversations_v2 WHERE id=? AND kind='group' AND archived=0").bind(id).first<{id:string;created_by:string;version:number}>();
-      if(normalized){if(!["owner","director"].includes(actor.role)&&normalized.created_by!==actor.id)throw new HttpError(403,"Изменять группу может создатель или директор");if(Number(body.version)!==Number(normalized.version))throw new HttpError(409,"Группа уже изменена. Обновите данные.");if(action==="archive_group"){await db.batch([db.prepare("UPDATE conversations_v2 SET archived=1,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?").bind(id,normalized.version),auditStatement(actor,"Архивирована группа",id)]);return Response.json({ok:true});}const title=cleanText(body.title,120,true),members=Array.isArray(body.members)?Array.from(new Set(body.members.map(value=>cleanText(value,100)).filter(Boolean))).slice(0,100):[];if(!members.includes(actor.id))members.push(actor.id);const valid=await db.prepare(`SELECT id FROM staff WHERE active=1 AND id IN (${members.map(()=>"?").join(",")})`).bind(...members).all<{id:string}>();if(valid.results.length!==members.length)throw new HttpError(400,"В группе есть недоступный сотрудник");await db.transaction(async client=>{const result=await db.prepare("UPDATE conversations_v2 SET title=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?").bind(title,id,normalized.version).execute(client);if(!result.meta.changes)throw new HttpError(409,"Группа уже изменена. Обновите данные.");await db.prepare("UPDATE conversation_members_v2 SET archived_at=CURRENT_TIMESTAMP WHERE conversation_id=?").bind(id).execute(client);for(const member of members)await db.prepare("INSERT INTO conversation_members_v2(conversation_id,staff_id,archived_at) VALUES(?,?,NULL) ON CONFLICT(conversation_id,staff_id) DO UPDATE SET archived_at=NULL").bind(id,member).execute(client);await auditStatement(actor,"Обновлена рабочая группа",id,title).execute(client)});return Response.json({ok:true});}
-      const legacy=await db.prepare("SELECT * FROM admin_records WHERE id=? AND kind='employee_group' AND archived=0").bind(id).first<LegacyRow>();if(!legacy)throw new HttpError(404,"Группа не найдена");if(!["owner","director"].includes(actor.role)&&legacy.created_by!==actor.id)throw new HttpError(403,"Изменять группу может создатель или директор");if(Number(body.version)!==Number(legacy.version))throw new HttpError(409,"Группа уже изменена. Обновите данные.");if(action==="archive_group"){await db.batch([db.prepare("UPDATE admin_records SET archived=1,status='archived',updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?").bind(actor.id,id,legacy.version),auditStatement(actor,"Архивирована группа",id)]);return Response.json({ok:true});}throw new HttpError(409,"Старая группа доступна только для чтения; создайте её заново в новом формате");
+    if (action === "update_group" || action === "archive_group") {
+      const id = cleanText(body.id, 100, true),
+        normalized = await db
+          .prepare(
+            "SELECT * FROM conversations_v2 WHERE id=? AND kind='group' AND archived=0",
+          )
+          .bind(id)
+          .first<{ id: string; created_by: string; version: number }>();
+      if (normalized) {
+        if (
+          !["owner", "director"].includes(actor.role) &&
+          normalized.created_by !== actor.id
+        )
+          throw new HttpError(
+            403,
+            "Изменять группу может создатель или директор",
+          );
+        if (Number(body.version) !== Number(normalized.version))
+          throw new HttpError(409, "Группа уже изменена. Обновите данные.");
+        if (action === "archive_group") {
+          await db.batch([
+            db
+              .prepare(
+                "UPDATE conversations_v2 SET archived=1,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?",
+              )
+              .bind(id, normalized.version),
+            auditStatement(actor, "Архивирована группа", id),
+          ]);
+          return Response.json({ ok: true });
+        }
+        const title = cleanText(body.title, 120, true),
+          members = Array.isArray(body.members)
+            ? Array.from(
+                new Set(
+                  body.members
+                    .map((value) => cleanText(value, 100))
+                    .filter(Boolean),
+                ),
+              ).slice(0, 100)
+            : [];
+        if (!members.includes(actor.id)) members.push(actor.id);
+        const valid = await db
+          .prepare(
+            `SELECT id FROM staff WHERE active=1 AND id IN (${members.map(() => "?").join(",")})`,
+          )
+          .bind(...members)
+          .all<{ id: string }>();
+        if (valid.results.length !== members.length)
+          throw new HttpError(400, "В группе есть недоступный сотрудник");
+        await db.transaction(async (client) => {
+          const result = await db
+            .prepare(
+              "UPDATE conversations_v2 SET title=?,description=?,linked_entity_type=?,linked_entity_id=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?",
+            )
+            .bind(
+              title,
+              cleanText(body.description ?? "", 1000),
+              cleanText(body.linkedEntityType ?? "", 80),
+              cleanText(body.linkedEntityId ?? "", 100),
+              id,
+              normalized.version,
+            )
+            .execute(client);
+          if (!result.meta.changes)
+            throw new HttpError(409, "Группа уже изменена. Обновите данные.");
+          await db
+            .prepare(
+              "UPDATE conversation_members_v2 SET archived_at=CURRENT_TIMESTAMP WHERE conversation_id=?",
+            )
+            .bind(id)
+            .execute(client);
+          for (const member of members)
+            await db
+              .prepare(
+                "INSERT INTO conversation_members_v2(conversation_id,staff_id,archived_at) VALUES(?,?,NULL) ON CONFLICT(conversation_id,staff_id) DO UPDATE SET archived_at=NULL",
+              )
+              .bind(id, member)
+              .execute(client);
+          await auditStatement(
+            actor,
+            "Обновлена рабочая группа",
+            id,
+            title,
+          ).execute(client);
+        });
+        return Response.json({ ok: true });
+      }
+      const legacy = await db
+        .prepare(
+          "SELECT * FROM admin_records WHERE id=? AND kind='employee_group' AND archived=0",
+        )
+        .bind(id)
+        .first<LegacyRow>();
+      if (!legacy) throw new HttpError(404, "Группа не найдена");
+      if (
+        !["owner", "director"].includes(actor.role) &&
+        legacy.created_by !== actor.id
+      )
+        throw new HttpError(
+          403,
+          "Изменять группу может создатель или директор",
+        );
+      if (Number(body.version) !== Number(legacy.version))
+        throw new HttpError(409, "Группа уже изменена. Обновите данные.");
+      if (action === "archive_group") {
+        await db.batch([
+          db
+            .prepare(
+              "UPDATE admin_records SET archived=1,status='archived',updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=? AND version=?",
+            )
+            .bind(actor.id, id, legacy.version),
+          auditStatement(actor, "Архивирована группа", id),
+        ]);
+        return Response.json({ ok: true });
+      }
+      throw new HttpError(
+        409,
+        "Старая группа доступна только для чтения; создайте её заново в новом формате",
+      );
     }
-    if(action==="notification_read"){const id=cleanText(body.id??"",100);if(id)await db.prepare("UPDATE notifications_v2 SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP) WHERE id=? AND recipient_id=?").bind(id,actor.id).run();else await db.prepare("UPDATE notifications_v2 SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP) WHERE recipient_id=? AND archived=0").bind(actor.id).run();return Response.json({ok:true});}
-    throw new HttpError(400,"Неизвестное действие");
-  }catch(error){return fail(error)}
+    if (action === "notification_read") {
+      const id = cleanText(body.id ?? "", 100);
+      if (id)
+        await db
+          .prepare(
+            "UPDATE notifications_v2 SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP) WHERE id=? AND recipient_id=?",
+          )
+          .bind(id, actor.id)
+          .run();
+      else
+        await db
+          .prepare(
+            "UPDATE notifications_v2 SET read_at=COALESCE(read_at,CURRENT_TIMESTAMP) WHERE recipient_id=? AND archived=0",
+          )
+          .bind(actor.id)
+          .run();
+      return Response.json({ ok: true });
+    }
+    throw new HttpError(400, "Неизвестное действие");
+  } catch (error) {
+    if (!(error instanceof HttpError))
+      console.error("Collaboration failure", error);
+    return fail(error);
+  }
 }

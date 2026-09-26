@@ -1,4 +1,3 @@
-import type { Metadata } from "next";
 import Image from "next/image";
 import { Link } from "../components/SiteLink";
 import { Armchair, ArrowUpRight, BadgeCheck, Eye, Handshake, HeartHandshake, SlidersHorizontal, Sprout, Wind } from "lucide-react";
@@ -6,8 +5,10 @@ import { Trans } from "../components/I18n";
 import { PageHero } from "../components/PageHero";
 import { FounderLetter } from "../components/FounderLetter";
 import { OfficeMap } from "../components/OfficeMap";
+import { getRequestLocale } from "../lib/locale-server";
+import { pageMetadata } from "../lib/seo";
 
-export const metadata: Metadata = { title: "О компании ATADAN Changfa", description: "ATADAN: официальный дистрибьютор тракторов Changfa в Кыргызстане, 6 лет на рынке." };
+export async function generateMetadata(){return pageMetadata("about","/about",await getRequestLocale())}
 
 export default function AboutPage() {
   return <main className="about-page-v2">

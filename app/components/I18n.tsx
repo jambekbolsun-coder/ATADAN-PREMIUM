@@ -7,6 +7,7 @@ export type Locale = "ru" | "ky" | "en";
 
 import { copy } from "../data/site-copy";
 import { useSiteSettings } from "./SiteSettings";
+import { localizedPath } from "../lib/i18n-routing";
 
 type I18nValue = {
   locale: Locale;
@@ -18,10 +19,12 @@ const I18nContext = createContext<I18nValue | null>(null);
 
 const localeListeners = new Set<() => void>();
 
-function localeFromStorage(): Locale {
-  if (typeof window === "undefined") return "ru";
+function localeFromStorage(fallback: Locale): Locale {
+  if (typeof window === "undefined") return fallback;
+  const explicit = new URLSearchParams(window.location.search).get("lang");
+  if (explicit === "ru" || explicit === "ky" || explicit === "en") return explicit;
   const saved = window.localStorage.getItem("atadan-locale");
-  return saved === "ru" || saved === "ky" || saved === "en" ? saved : "ru";
+  return saved === "ru" || saved === "ky" || saved === "en" ? saved : fallback;
 }
 
 function subscribeLocale(listener: () => void) {
@@ -38,7 +41,9 @@ function subscribeLocale(listener: () => void) {
 
 function saveLocale(locale: Locale) {
   window.localStorage.setItem("atadan-locale", locale);
+  document.cookie = `atadan-locale=${locale}; Path=/; Max-Age=31536000; SameSite=Lax`;
   localeListeners.forEach((listener) => listener());
+  window.location.assign(localizedPath(`${window.location.pathname}${window.location.search}${window.location.hash}`, locale));
 }
 
 function interpolate(value: string, values?: Record<string, string | number>) {
@@ -46,8 +51,8 @@ function interpolate(value: string, values?: Record<string, string | number>) {
   return value.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? `{${key}}`));
 }
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
-  const locale = useSyncExternalStore<Locale>(subscribeLocale, localeFromStorage, () => "ru");
+export function I18nProvider({ children, initialLocale = "ru" }: { children: React.ReactNode; initialLocale?: Locale }) {
+  const locale = useSyncExternalStore<Locale>(subscribeLocale, () => localeFromStorage(initialLocale), () => initialLocale);
   const settings = useSiteSettings();
 
   useEffect(() => {

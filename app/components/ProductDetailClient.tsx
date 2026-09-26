@@ -6,21 +6,24 @@ import { FinanceCalculator } from "./FinanceCalculator";
 import { ProductVideo } from "./ProductVideo";
 import { useState } from "react";
 import type { Tractor } from "../types";
-import { formatPrice } from "../lib/format";
+import { formatApproximateUsdPrice, formatPrice } from "../lib/format";
 import { LeadForm } from "./LeadForm";
 import { Link } from "./SiteLink";
 import { TractorCard } from "./TractorCard";
 import { useI18n } from "./I18n";
 import type { LeasePublicConfig } from "../lib/leasing";
+import type { UsdKgsRate } from "../lib/exchange-rate";
+import { localizeTractor } from "../lib/tractor-localization";
 
-export function ProductDetailClient({ tractor, related, leasingConfig }: { tractor: Tractor; related: Tractor[]; leasingConfig:LeasePublicConfig }) {
-  const { t } = useI18n();
+export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRate }: { tractor: Tractor; related: Tractor[]; leasingConfig:LeasePublicConfig; usdKgsRate: UsdKgsRate | null }) {
+  const { t, locale } = useI18n();
+  const localized = localizeTractor(tractor, locale);
   const rawGallery = (tractor.images?.length ? tractor.images : [tractor.image]).slice(0, 7);
   const preferredIndex = rawGallery.findIndex((image) => !image.includes("/images/tractors"));
   const gallery = preferredIndex > 0 ? [rawGallery[preferredIndex], ...rawGallery.filter((_, index) => index !== preferredIndex)] : rawGallery;
   const [activeImage, setActiveImage] = useState(0);
   const [specsOpen, setSpecsOpen] = useState(false);
-  const specs = Object.entries(tractor.specs);
+  const specs = localized.specs;
   const visibleSpecs = specsOpen ? specs : specs.slice(0, 8);
   const discount = Math.min(90, Math.max(0, tractor.discountPercent ?? 0));
   const salePrice = tractor.price && discount ? Math.round(tractor.price * (1 - discount / 100)) : tractor.price;
@@ -47,24 +50,24 @@ export function ProductDetailClient({ tractor, related, leasingConfig }: { tract
         </div>
 
         <aside className="product-buy-card">
-          <div className="buy-card-heading"><span>{tractor.category}</span><small>Changfa · ATADAN</small></div>
+          <div className="buy-card-heading"><span>{localized.category}</span><small>Changfa · ATADAN</small></div>
           <h1>Changfa <strong>{tractor.model}</strong></h1>
-          <p className="product-lead-copy">{tractor.description}</p>
+          <p className="product-lead-copy">{localized.description}</p>
           <div className="buy-key-specs">
             <div><Gauge /><span>{t("product.power")}<strong>{tractor.hp} {t("common.hp")}</strong></span></div>
-            <div><Sprout /><span>{t("product.area")}<strong>{tractor.farmArea}</strong></span></div>
+            <div><Sprout /><span>{t("product.area")}<strong>{localized.farmArea}</strong></span></div>
             <div><BadgeCheck /><span>{t("product.drive")}<strong>4×4</strong></span></div>
           </div>
-          <div className={`buy-price ${discount ? "has-discount" : ""}`}><span>{t("product.cost")}</span>{discount && tractor.price ? <del>{formatPrice(tractor.price)}</del> : null}<strong>{salePrice ? formatPrice(salePrice) : t("product.priceOnRequest")}</strong><small>{t("product.costNote")}</small></div>
+          <div className={`buy-price ${discount && tractor.price ? "has-discount" : ""}`}><span>{t("product.cost")}</span>{discount && tractor.price ? <del>{formatPrice(tractor.price)}</del> : null}<strong>{salePrice ? formatPrice(salePrice) : formatApproximateUsdPrice(tractor.approximatePriceUsd)}</strong><small>{!salePrice && tractor.approximatePriceUsd ? "Ориентировочная цена в долларах. Точную стоимость подтвердит менеджер." : t("product.costNote")}</small></div>
           <div className="installment-panel"><Banknote /><div><span>{t("product.installment")}</span><strong><a href="#leasing">{t("finance.calcCta")}</a></strong></div></div>
-          <div className="buy-actions"><a className="hero-primary" href="#request"><MessageCircle size={18} />{t("product.offer")}</a><a className="call-action" href="tel:+996706131404">{t("product.phone")}</a></div>
+          <div className="buy-actions"><a className="primary-btn" href="#request"><MessageCircle size={19}/>Написать менеджеру</a><a className="call-action" href="tel:+996706131404">{t("product.phone")}</a></div>
           <div className="buy-assurance"><ShieldCheck size={18} /><span>{t("product.assurance")}</span></div>
         </aside>
       </div>
     </section>
 
     <section className="product-comfort section-shell">
-      <div className="comfort-copy"><span className="section-label">{t("product.comfortLabel")}</span><h2>{t("product.comfortTitle")}</h2><p><strong>{tractor.comfort}.</strong> {t("product.comfortText")}</p></div>
+      <div className="comfort-copy"><span className="section-label">{t("product.comfortLabel")}</span><h2>{t("product.comfortTitle")}</h2><p><strong>{localized.comfort}.</strong> {t("product.comfortText")}</p></div>
       <div className="comfort-points">
         <article><BadgeCheck /><span>{t("product.featureVision")}</span></article>
         <article><Wrench /><span>{t("product.featureService")}</span></article>
@@ -77,6 +80,7 @@ export function ProductDetailClient({ tractor, related, leasingConfig }: { tract
       <ul>{tractor.equipment.map((item) => <li key={item}><BadgeCheck size={19} aria-hidden="true" /><span>{item}</span></li>)}</ul>
     </section> : null}
 
+    <ProductVideo tractor={tractor}/>
     <section className="product-specs-v3 section-shell">
       <div className="specs-feed-card">
         <div className="specs-heading"><div><span className="section-label">{t("product.specLabel")}</span><h2>{t("product.specTitle")}</h2></div><p>{t("product.specNote")}</p></div>
@@ -88,9 +92,8 @@ export function ProductDetailClient({ tractor, related, leasingConfig }: { tract
       </div>
     </section>
 
-    <div className="section-shell product-lease"><FinanceCalculator tractor={tractor} config={leasingConfig}/></div>
-    <ProductVideo tractor={tractor}/>
-    <section className="product-request-v3" id="request"><div className="section-shell product-request-inner"><div><span className="section-label light">{t("product.requestLabel")}</span><h2>{t("product.requestTitle", { model: tractor.model })}</h2><p>{t("product.requestText")}</p></div><LeadForm tractorSlug={tractor.slug} tractorModel={tractor.model} /></div></section>
+    <div className="section-shell product-lease"><FinanceCalculator tractor={tractor} config={leasingConfig} usdKgsRate={usdKgsRate}/></div>
+    <section className="product-request-v3" id="request"><div className="section-shell product-request-inner"><div><span className="section-label light">Changfa {tractor.model}</span><h2>Обсудите модель с менеджером</h2><p>Укажите ваши контакты и задачу. Подготовим предложение по выбранному трактору и продолжим разговор в WhatsApp.</p></div><LeadForm tractorSlug={tractor.slug} tractorModel={tractor.model} manager /></div></section>
 
     <section className="related-v3 section-shell"><div className="editorial-heading"><div><span className="section-label">{t("product.relatedLabel")}</span><h2>{t("product.relatedTitle")}</h2></div><Link className="text-link" href="/catalog">{t("product.allCatalog")}<ArrowUpRight size={17} /></Link></div><div className="catalog-grid related-grid">{related.map((item) => <TractorCard tractor={item} key={item.slug} />)}</div></section>
   </main>;
