@@ -836,7 +836,8 @@
   }
   .site-assist > .assist-instagram,
   .site-assist > .assist-whatsapp {
-    display: none;
+    display: grid;
+    place-items: center;
   }
   .site-assist .assist-panel {
     right: 12px;

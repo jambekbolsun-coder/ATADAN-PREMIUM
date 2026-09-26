@@ -14,6 +14,7 @@ import { AdminMediaUpload } from "./AdminMediaUpload";
 import { AdminRecordsManager, type RecordKind } from "./AdminRecordsManager";
 import { AdminCollaboration, type CollaborationMode } from "./AdminCollaboration";
 import { AtadanLoader } from "./AtadanLoader";
+import { AdminInstallButton } from "./PwaRegistration";
 
 type DashboardData = {
   actor: { id:string; email:string; display_name:string; role:"owner"|"director"|"manager"|"accountant"|"marketer"; theme:string; phone:string; avatar:string|null;position:string;department:string;skills:string;bio:string;permissions:string[] };
@@ -245,7 +246,7 @@ export function AdminDashboard({initialWorkspace=null,initialSection="overview"}
         <div className="admin-sidebar-footer"><AvatarVisual avatar={data?.profile?.avatar ?? null} size={38} /><div><strong>{data?.profile?.display_name ?? "Администратор"}</strong><span>{data?.profile?.email}</span></div><button type="button" onClick={logout} aria-label="Выйти"><LogOut size={18} /></button></div>
       </aside>
       <section className="admin-main">
-        <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / {activeGroup?.label??workspaceNames[workspace]}</span><h1>{activeDefinition?.label}</h1></div><div className="admin-header-tools"><button type="button" onClick={()=>navigateTo({workspace:"company",section:"notifications"})} aria-label="Открыть уведомления"><Bell size={18} />{unreadNotifications ? <b>{unreadNotifications}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
+        <header className="admin-header"><button className="admin-menu" type="button" onClick={() => setSidebar(true)} aria-label="Открыть меню"><Menu /></button><div><span>ATADAN / {activeGroup?.label??workspaceNames[workspace]}</span><h1>{activeDefinition?.label}</h1></div><div className="admin-header-tools"><AdminInstallButton role={data.actor.role}/><button type="button" onClick={()=>navigateTo({workspace:"company",section:"notifications"})} aria-label="Открыть уведомления"><Bell size={18} />{unreadNotifications ? <b>{unreadNotifications}</b> : null}</button><Link href="/" target="_blank">Открыть сайт <ChevronRight size={17} /></Link></div></header>
         {renderedSection === "overview" ? <AdminWorkspaceOverview workspace={workspace} data={data} onNavigate={openSection} onSaveGoals={async goals=>action({action:"save_goals",goals})}/> : null}
         {crmMode ? <AdminCRM mode={crmMode} catalog={data?.catalog ?? []} /> : null}
         {renderedSection === "catalog" ? <Products data={data} edit={setProductEditor} remove={(slug) => action({ action: "delete_product", slug })} /> : null}

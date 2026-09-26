@@ -29,7 +29,6 @@ export const metadata: Metadata = {
     shortcut: "/icons/atadan-app-192.png",
     apple: "/icons/atadan-app-192.png",
   },
-  manifest: "/manifest.webmanifest",
   openGraph: {
     title: "ATADAN Changfa: тракторы в Кыргызстане",
     description: "Каталог тракторов Changfa, финансирование, новости и сервис ATADAN.",

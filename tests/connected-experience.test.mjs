@@ -64,19 +64,21 @@ test("catalog, news and home support use distinct ten-second viewport videos", a
   assert.match(contacts, /contacts-cfk2404-g4-v3\.png/);
 });
 
-test("classic site wordmark, installable PWA assets and reference-style loaders are wired", async () => {
-  const [header, footer, dashboard, chrome, loader, transition, css, layout, manifest, adminManifest, worker, icon192, icon512] = await Promise.all([
+test("classic wordmark, owner-only admin PWA and reference-style loaders are wired", async () => {
+  const [header, footer, dashboard, chrome, pwa, loader, transition, css, customerCss, layout, adminLayout, adminManifest, adminWorker, icon192, icon512] = await Promise.all([
     source("app/components/SiteHeader.tsx"),
     source("app/components/SiteFooter.tsx"),
     source("app/components/AdminDashboard.tsx"),
     source("app/components/AppChrome.tsx"),
+    source("app/components/PwaRegistration.tsx"),
     source("app/components/AtadanLoader.tsx"),
     source("app/components/PageTransitionLoader.tsx"),
     source("app/globals.css"),
+    source("app/styles/customer-experience.css"),
     source("app/layout.tsx"),
-    source("app/manifest.ts"),
+    source("app/admin/layout.tsx"),
     source("app/admin/manifest.webmanifest/route.ts"),
-    source("public/sw.js"),
+    source("public/admin-sw.js"),
     readFile(new URL("public/icons/atadan-app-192.png", project)),
     readFile(new URL("public/icons/atadan-app-512.png", project)),
   ]);
@@ -93,11 +95,22 @@ test("classic site wordmark, installable PWA assets and reference-style loaders 
   assert.match(css, /#071c10/i);
   assert.match(css, /#79c94b/i);
   assert.match(layout, /atadan-app-192\.png/);
-  assert.match(manifest, /start_url:"\/"/);
-  assert.match(manifest, /ATADAN/);
-  assert.match(adminManifest, /start_url:"\/admin"/);
+  assert.doesNotMatch(layout, /manifest:\s*"\/manifest\.webmanifest"/);
+  assert.doesNotMatch(adminLayout, /manifest:/);
+  assert.doesNotMatch(chrome, /PwaRegistration admin|<PwaRegistration/);
+  assert.match(chrome, /<PublicPwaCleanup\/>/);
+  assert.match(dashboard, /<AdminInstallButton role=\{data\.actor\.role\}\/>>?/);
+  assert.match(pwa, /role !== "owner"/);
+  assert.match(pwa, /beforeinstallprompt/);
+  assert.match(pwa, /\/admin\/manifest\.webmanifest/);
+  assert.match(pwa, /\/admin-sw\.js/);
+  assert.match(adminManifest, /start_url:"\/admin\/"/);
   assert.match(adminManifest, /ATADAN CRM/);
-  assert.match(worker, /atadan-public-v3/);
+  assert.match(adminManifest, /actor\.role!=="owner"/);
+  assert.match(adminWorker, /atadan-admin-v1/);
+  assert.match(css, /body:has\(\.admin-shell\.admin-shell-unified\).*overflow:hidden/);
+  assert.match(css, /\.admin-shell-unified \.admin-main\{height:100dvh.*overflow-y:auto/);
+  assert.doesNotMatch(customerCss, /assist-whatsapp\s*\{\s*display:\s*none/);
   assert.equal(icon192.readUInt32BE(16), 192);
   assert.equal(icon192.readUInt32BE(20), 192);
   assert.equal(icon512.readUInt32BE(16), 512);
