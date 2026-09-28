@@ -23,7 +23,7 @@ const restrictedToken = crypto.randomBytes(32).toString("hex");
 const restrictedTokenHash = crypto.createHash("sha256").update(restrictedToken).digest("hex");
 const restrictedStaffId = crypto.randomUUID();
 const testIp = `198.51.100.${Math.max(1, Math.min(254, Number(String(Date.now()).slice(-3)) % 255))}`;
-const ids = { records: [], deals: [], customers: [], leads: [], backups: [] };
+const ids = { records: [], deals: [], customers: [], leads: [], backups: [], visitors: [] };
 function step(name) { console.log(`[E2E] ${name}`); }
 
 async function request(path, options = {}) {
@@ -115,6 +115,7 @@ async function cleanup() {
     await client.query("DELETE FROM audit_logs WHERE entity_id = ANY($1) OR detail LIKE $2", [[...ids.records, ...ids.deals, ...ids.customers], `%${marker}%`]);
     await client.query("DELETE FROM admin_records WHERE (data_json::jsonb->>'dealId')=ANY($1) OR subtitle LIKE $2", [ids.deals, `%${marker}%`]);
     await client.query("DELETE FROM admin_records WHERE id = ANY($1)", [ids.records]);
+    await client.query("DELETE FROM interest_events WHERE visitor_id = ANY($1)", [ids.visitors]);
     await client.query("DELETE FROM lead_requests WHERE lead_id = ANY($1)", [ids.leads]);
     await client.query("DELETE FROM crm_deals WHERE id = ANY($1)", [ids.deals]);
     await client.query("DELETE FROM leads WHERE id = ANY($1)", [ids.leads]);
@@ -171,7 +172,7 @@ try {
   step("authentication and server-side RBAC denial");
 
   const phone = `+996700${String(Date.now()).slice(-6)}`;
-  const leadPayload = { name: `E2E Клиент ${marker}`, phone, tractorSlug: "cfb504-x", message: "Полный интеграционный тест", consent: true, consentVersion: "e2e-v1", consentedAt: new Date().toISOString(), sourcePath: "/e2e" };
+  const leadPayload = { name: `E2E Клиент ${marker}`, phone, tractorSlug: "cfb504-x", message: "Полный интеграционный тест", region:"Ошская область", consent: true, consentVersion: "e2e-v1", consentedAt: new Date().toISOString(), sourcePath: "/e2e" };
   const leadOne = await request("/api/leads", { method: "POST", auth: false, headers: { "Content-Type": "application/json", "Idempotency-Key": `${marker}-lead-1`, "X-Forwarded-For": testIp }, body: JSON.stringify(leadPayload) });
   assert.equal(leadOne.response.status, 201, JSON.stringify(leadOne.body));
   ids.leads.push(leadOne.body.id);ids.deals.push(leadOne.body.dealId);
@@ -182,6 +183,20 @@ try {
   const customerRows = await pool.query("SELECT id FROM crm_customers WHERE normalized_phone=regexp_replace($1,'\\D','','g') AND archived=0", [phone]);
   assert.equal(customerRows.rowCount, 1, "Repeated phone must reuse one customer");const customerId = customerRows.rows[0].id;ids.customers.push(customerId);
   step("lead idempotency and customer deduplication");
+
+  const visitors=[crypto.randomUUID(),crypto.randomUUID()];ids.visitors.push(...visitors);
+  const analyticsPath=`/catalog/cfb504-x?e2e=${marker}`;
+  const sendEvent=async(visitorId,eventType,region)=>request("/api/events",{method:"POST",auth:false,headers:{"Content-Type":"application/json","X-Forwarded-For":testIp},body:JSON.stringify({path:analyticsPath,tractorSlug:"cfb504-x",eventType,visitorId,region})});
+  assert.equal((await sendEvent(visitors[0],"page_view","Ошская область")).response.status,204);
+  assert.equal((await sendEvent(visitors[0],"page_view","Ошская область")).response.status,204);
+  assert.equal((await sendEvent(visitors[0],"model_interest","Ошская область")).response.status,204);
+  assert.equal((await sendEvent(visitors[1],"page_view","Чуйская область")).response.status,204);
+  const duplicateCount=await pool.query("SELECT COUNT(*)::int count FROM interest_events WHERE visitor_id=$1 AND tractor_slug='cfb504-x' AND event_type='page_view'",[visitors[0]]);assert.equal(duplicateCount.rows[0].count,1,"One visitor/model/day must be counted once");
+  const analyticsDashboard=await request("/api/admin/dashboard");assert.equal(analyticsDashboard.response.status,200,JSON.stringify(analyticsDashboard.body));
+  const modelAnalytics=analyticsDashboard.body.modelAnalytics.find(item=>item.tractor_slug==="cfb504-x");assert.ok(modelAnalytics);assert.ok(modelAnalytics.viewers>=2);assert.ok(modelAnalytics.interested>=1);assert.ok(modelAnalytics.applications>=2);
+  const oshAnalytics=analyticsDashboard.body.modelRegionAnalytics.find(item=>item.tractor_slug==="cfb504-x"&&item.region==="Ошская область");assert.ok(oshAnalytics);assert.ok(oshAnalytics.viewers>=1);assert.ok(oshAnalytics.interested>=1);assert.ok(oshAnalytics.applications>=2);
+  const leadCard=analyticsDashboard.body.leads.find(item=>item.id===leadOne.body.id);assert.equal(leadCard.customer_region,"Ошская область");
+  step("deduplicated model analytics, interest funnel and regional lead context");
 
   const importPhone=`+996555${String(Date.now()).slice(-6)}`,workbook=xlsxFile([["Имя","Телефон","Регион","Источник"],[`XLSX ${marker}`,importPhone,"Бишкек","import-e2e"]]);
   const importForm=(action)=>{const form=new FormData();form.set("action",action);form.set("kind","customers");form.set("file",workbook,`${marker}.xlsx`);return form};

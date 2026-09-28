@@ -14,6 +14,7 @@ import { useI18n } from "./I18n";
 import type { LeasePublicConfig } from "../lib/leasing";
 import type { UsdKgsRate } from "../lib/exchange-rate";
 import { localizeTractor } from "../lib/tractor-localization";
+import { trackAnalyticsEvent } from "../lib/analytics-client";
 
 export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRate }: { tractor: Tractor; related: Tractor[]; leasingConfig:LeasePublicConfig; usdKgsRate: UsdKgsRate | null }) {
   const { t, locale } = useI18n();
@@ -59,8 +60,8 @@ export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRat
             <div><BadgeCheck /><span>{t("product.drive")}<strong>4×4</strong></span></div>
           </div>
           <div className={`buy-price ${discount && tractor.price ? "has-discount" : ""}`}><span>{t("product.cost")}</span>{discount && tractor.price ? <del>{formatPrice(tractor.price)}</del> : null}<strong>{salePrice ? formatPrice(salePrice) : formatApproximateUsdPrice(tractor.approximatePriceUsd)}</strong><small>{!salePrice && tractor.approximatePriceUsd ? "Ориентировочная цена в долларах. Точную стоимость подтвердит менеджер." : t("product.costNote")}</small></div>
-          <div className="installment-panel"><Banknote /><div><span>{t("product.installment")}</span><strong><a href="#leasing">{t("finance.calcCta")}</a></strong></div></div>
-          <div className="buy-actions"><a className="primary-btn" href="#request"><MessageCircle size={19}/>Написать менеджеру</a><a className="call-action" href="tel:+996706131404">{t("product.phone")}</a></div>
+          <div className="installment-panel"><Banknote /><div><span>{t("product.installment")}</span><strong><a href="#leasing" onClick={()=>trackAnalyticsEvent({path:window.location.pathname,tractorSlug:tractor.slug,eventType:"model_interest"})}>{t("finance.calcCta")}</a></strong></div></div>
+          <div className="buy-actions"><a className="primary-btn" href="#request" onClick={()=>trackAnalyticsEvent({path:window.location.pathname,tractorSlug:tractor.slug,eventType:"model_interest"})}><MessageCircle size={19}/>Написать менеджеру</a><a className="call-action" href="tel:+996706131404" onClick={()=>trackAnalyticsEvent({path:window.location.pathname,tractorSlug:tractor.slug,eventType:"model_interest"})}>{t("product.phone")}</a></div>
           <div className="buy-assurance"><ShieldCheck size={18} /><span>{t("product.assurance")}</span></div>
         </aside>
       </div>

@@ -28,6 +28,7 @@ import { useSiteSettings } from "./SiteSettings";
 import { useI18n } from "./I18n";
 import { approximateSomPrice, type UsdKgsRate } from "../lib/exchange-rate";
 import { formatApproximateUsdPrice } from "../lib/format";
+import { trackAnalyticsEvent } from "../lib/analytics-client";
 
 const emptyConfig: LeasePublicConfig = {
   programs: [],
@@ -480,7 +481,10 @@ export function FinanceCalculator({
             className="primary-btn"
             type="button"
             disabled={!result}
-            onClick={() => setApplicationOpen((value) => !value)}
+            onClick={() => {
+              if (!applicationOpen && selected) trackAnalyticsEvent({ path: window.location.pathname, tractorSlug: selected.slug, eventType: "model_interest" });
+              setApplicationOpen((value) => !value);
+            }}
           >
             <Send size={18} />
             Оставить заявку

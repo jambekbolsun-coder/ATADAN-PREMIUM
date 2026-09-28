@@ -3,9 +3,18 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
 test("analytics is gated behind an explicit privacy choice", async () => {
-  const tracker=await readFile(new URL("../app/components/AnalyticsTracker.tsx",import.meta.url),"utf8");
-  assert.match(tracker,/getItem\(PRIVACY_CHOICE_KEY\) !== "analytics"/);
+  const [tracker,client,route,dashboard]=await Promise.all([
+    readFile(new URL("../app/components/AnalyticsTracker.tsx",import.meta.url),"utf8"),
+    readFile(new URL("../app/lib/analytics-client.ts",import.meta.url),"utf8"),
+    readFile(new URL("../app/api/events/route.ts",import.meta.url),"utf8"),
+    readFile(new URL("../app/api/admin/dashboard/route.ts",import.meta.url),"utf8"),
+  ]);
+  assert.match(client,/getItem\(PRIVACY_CHOICE_KEY\) !== "analytics"/);
   assert.match(tracker,/PRIVACY_CHOICE_EVENT/);
+  assert.match(route,/ON CONFLICT\(id\) DO UPDATE/);
+  assert.match(route,/model_interest/);
+  assert.match(dashboard,/COUNT\(DISTINCT COALESCE\(visitor_id,id\)\)/);
+  assert.match(dashboard,/modelRegionAnalytics/);
 });
 
 test("lead consent is required and persisted with source metadata", async () => {
