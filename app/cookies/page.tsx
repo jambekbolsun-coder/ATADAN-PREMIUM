@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
 import { LegalPage } from "../components/LegalPage";
-export const metadata:Metadata={title:"Политика cookie | ATADAN",description:"Какие настройки браузера использует сайт ATADAN и как управлять аналитикой."};
+import { getRequestLocale } from "../lib/locale-server";
+import { pageMetadata } from "../lib/seo";
+export async function generateMetadata(){return pageMetadata("cookies","/cookies",await getRequestLocale())}
 export default function CookiesPage(){return <LegalPage kind="cookies"/>}

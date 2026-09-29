@@ -1,11 +1,9 @@
-import type { Metadata } from "next";
 import { NewsHub } from "../components/NewsHub";
 import { getNewsPosts } from "../lib/news";
+import { getRequestLocale } from "../lib/locale-server";
+import { pageMetadata } from "../lib/seo";
 
-export const metadata: Metadata = {
-  title: "ATADAN АгроЖурнал: тракторы Changfa и работа в поле",
-  description: "Практические материалы о выборе, эксплуатации, комфорте и обслуживании тракторов Changfa в Кыргызстане.",
-};
+export async function generateMetadata(){return pageMetadata("news","/news",await getRequestLocale())}
 
 export default async function NewsPage() {
   return <NewsHub posts={await getNewsPosts()} />;

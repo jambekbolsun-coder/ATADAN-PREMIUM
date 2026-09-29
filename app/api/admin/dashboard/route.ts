@@ -1,5 +1,5 @@
 import { canUseSection, requireActor } from "../../../lib/admin-auth";
-import { getCatalog } from "../../../lib/catalog";
+import { getCatalog, suggestedPriceUsd } from "../../../lib/catalog";
 import { getNewsPosts } from "../../../lib/news";
 import { cleanText, fail, HttpError, jsonBody, safeMedia, sameOrigin } from "../../../lib/security";
 import type { Tractor } from "../../../types";
@@ -22,6 +22,8 @@ function normalizedProduct(value: unknown): Tractor {
   if (!Number.isInteger(hp) || hp < 20 || hp > 500) throw new Error("hp");
   const price = raw.price === null || raw.price === "" ? null : Number(raw.price);
   if (price !== null && (!Number.isFinite(price) || price < 0 || price > 1_000_000_000)) throw new Error("price");
+  const approximatePriceUsd = raw.approximatePriceUsd === null || raw.approximatePriceUsd === "" || raw.approximatePriceUsd === undefined ? suggestedPriceUsd(hp) : Number(raw.approximatePriceUsd);
+  if (!Number.isInteger(approximatePriceUsd) || approximatePriceUsd < 10_000 || approximatePriceUsd > 200_000) throw new Error("approximatePriceUsd");
   const discountPercent = raw.discountPercent === null || raw.discountPercent === "" ? null : Number(raw.discountPercent);
   if (discountPercent !== null && (!Number.isFinite(discountPercent) || discountPercent < 0 || discountPercent > 90)) throw new Error("discount");
   const image = safeMedia(raw.image);
@@ -37,9 +39,11 @@ function normalizedProduct(value: unknown): Tractor {
     category: cleanText(raw.category, 100, true),
     farmArea: cleanText(raw.farmArea ?? "", 100),
     price,
+    approximatePriceUsd,
     discountPercent,
     promotionLabel: raw.promotionLabel ? cleanText(raw.promotionLabel, 120) : null,
-    inStock: Boolean(raw.inStock),
+    // Stock is derived from active VIN records after catalogue overrides merge.
+    inStock: false,
     recommended: Boolean(raw.recommended),
     popular: Boolean(raw.popular),
     status: new Set(["draft","published","hidden","archived"]).has(String(raw.status)) ? raw.status as Tractor["status"] : "published",
@@ -67,14 +71,48 @@ export async function GET(request: Request) {
     const canInventory = canUseSection(actor,"inventory-units");
     const canFinance = canUseSection(actor,"finance");
     const isDirector = actor.role === "owner" || actor.role === "director";
-    const [catalog, posts, leads, popular, popularPosts, totals, daily, dealTotals, taskTotals, pipeline, period, goalRow, operations, modelFunnel, channels, managers, comparison] = await Promise.all([
+    const [catalog, posts, leads, popular, popularPosts, totals, daily, modelAnalytics, modelRegionAnalytics, dealTotals, taskTotals, pipeline, period, goalRow, operations, modelFunnel, channels, managers, comparison] = await Promise.all([
       getCatalog(true),
       canNews ? getNewsPosts(true) : Promise.resolve([]),
-      canLeads ? db.prepare("SELECT * FROM leads ORDER BY created_at DESC LIMIT 200").all() : Promise.resolve({ results: [] }),
-      canAnalytics ? db.prepare(`SELECT tractor_slug, COUNT(*) AS views FROM interest_events WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug ORDER BY views DESC LIMIT 8`).all() : Promise.resolve({ results: [] }),
+      canLeads ? db.prepare("SELECT l.*,COALESCE(NULLIF(c.region,''),'') AS customer_region FROM leads l LEFT JOIN crm_customers c ON c.id=l.customer_id WHERE l.archived=0 ORDER BY l.created_at DESC LIMIT 200").all() : Promise.resolve({ results: [] }),
+      canAnalytics ? db.prepare(`SELECT tractor_slug,COUNT(DISTINCT COALESCE(visitor_id,id)) FILTER(WHERE event_type='page_view') AS views FROM interest_events WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug ORDER BY views DESC LIMIT 8`).all() : Promise.resolve({ results: [] }),
       canNews ? db.prepare(`SELECT path, COUNT(*) AS views FROM interest_events WHERE path LIKE '/news/%' GROUP BY path ORDER BY views DESC LIMIT 20`).all() : Promise.resolve({ results: [] }),
-      canAnalytics ? db.prepare("SELECT COUNT(*) AS views, COUNT(DISTINCT visitor_id) AS visitors FROM interest_events").first() : Promise.resolve(null),
-      canAnalytics ? db.prepare(`SELECT substr(created_at,1,10) AS day,COUNT(*) AS views FROM interest_events WHERE created_at>=datetime('now','-6 days') GROUP BY day ORDER BY day`).all() : Promise.resolve({ results: [] }),
+      canAnalytics ? db.prepare("SELECT COUNT(*) FILTER(WHERE event_type='page_view') AS views,COUNT(DISTINCT COALESCE(visitor_id,id)) FILTER(WHERE event_type='page_view') AS visitors,COUNT(DISTINCT COALESCE(visitor_id,id)) FILTER(WHERE event_type='model_interest') AS interested FROM interest_events").first() : Promise.resolve(null),
+      canAnalytics ? db.prepare(`SELECT to_char(days.day,'YYYY-MM-DD') AS day,COUNT(DISTINCT COALESCE(e.visitor_id,e.id)) FILTER(WHERE e.event_type='page_view') AS views
+        FROM generate_series(CURRENT_DATE-INTERVAL '6 days',CURRENT_DATE,INTERVAL '1 day') days(day)
+        LEFT JOIN interest_events e ON e.created_at>=days.day AND e.created_at<days.day+INTERVAL '1 day'
+        GROUP BY days.day ORDER BY days.day`).all() : Promise.resolve({ results: [] }),
+      canAnalytics ? db.prepare(`SELECT x.tractor_slug,
+        COALESCE(e.views,0) AS views,COALESCE(e.viewers,0) AS viewers,COALESCE(e.interested,0) AS interested,
+        COALESCE(e.viewers_30,0) AS viewers_30,COALESCE(e.interested_30,0) AS interested_30,
+        COALESCE(l.applications,0) AS applications,COALESCE(l.applicants,0) AS applicants,COALESCE(l.applications_30,0) AS applications_30
+        FROM (SELECT tractor_slug FROM interest_events WHERE tractor_slug IS NOT NULL UNION SELECT tractor_slug FROM leads WHERE tractor_slug IS NOT NULL AND archived=0) x
+        LEFT JOIN (SELECT tractor_slug,
+          COUNT(*) FILTER(WHERE event_type='page_view') views,
+          COUNT(DISTINCT COALESCE(visitor_id,id)) FILTER(WHERE event_type='page_view') viewers,
+          COUNT(DISTINCT COALESCE(visitor_id,id)) FILTER(WHERE event_type='model_interest') interested,
+          COUNT(DISTINCT COALESCE(visitor_id,id)) FILTER(WHERE event_type='page_view' AND created_at>=CURRENT_TIMESTAMP-INTERVAL '30 days') viewers_30,
+          COUNT(DISTINCT COALESCE(visitor_id,id)) FILTER(WHERE event_type='model_interest' AND created_at>=CURRENT_TIMESTAMP-INTERVAL '30 days') interested_30
+          FROM interest_events WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug) e ON e.tractor_slug=x.tractor_slug
+        LEFT JOIN (SELECT tractor_slug,COUNT(*) applications,COUNT(DISTINCT COALESCE(NULLIF(normalized_phone,''),id)) applicants,
+          COUNT(*) FILTER(WHERE created_at>=CURRENT_TIMESTAMP-INTERVAL '30 days') applications_30
+          FROM leads WHERE tractor_slug IS NOT NULL AND archived=0 GROUP BY tractor_slug) l ON l.tractor_slug=x.tractor_slug
+        ORDER BY viewers DESC,applications DESC`).all() : Promise.resolve({ results: [] }),
+      canAnalytics ? db.prepare(`SELECT keys.tractor_slug,keys.region,
+        COALESCE(e.views,0) AS views,COALESCE(e.viewers,0) AS viewers,COALESCE(e.interested,0) AS interested,COALESCE(l.applications,0) AS applications
+        FROM (
+          SELECT tractor_slug,COALESCE(NULLIF(region,''),'Регион не указан') region FROM interest_events WHERE tractor_slug IS NOT NULL
+          UNION
+          SELECT l.tractor_slug,COALESCE(NULLIF(c.region,''),'Регион не указан') region FROM leads l LEFT JOIN crm_customers c ON c.id=l.customer_id WHERE l.tractor_slug IS NOT NULL AND l.archived=0
+        ) keys
+        LEFT JOIN (SELECT tractor_slug,COALESCE(NULLIF(region,''),'Регион не указан') region,
+          COUNT(*) FILTER(WHERE event_type='page_view') views,
+          COUNT(DISTINCT COALESCE(visitor_id,id)) FILTER(WHERE event_type='page_view') viewers,
+          COUNT(DISTINCT COALESCE(visitor_id,id)) FILTER(WHERE event_type='model_interest') interested
+          FROM interest_events WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug,COALESCE(NULLIF(region,''),'Регион не указан')) e ON e.tractor_slug=keys.tractor_slug AND e.region=keys.region
+        LEFT JOIN (SELECT l.tractor_slug,COALESCE(NULLIF(c.region,''),'Регион не указан') region,COUNT(*) applications
+          FROM leads l LEFT JOIN crm_customers c ON c.id=l.customer_id WHERE l.tractor_slug IS NOT NULL AND l.archived=0 GROUP BY l.tractor_slug,COALESCE(NULLIF(c.region,''),'Регион не указан')) l ON l.tractor_slug=keys.tractor_slug AND l.region=keys.region
+        ORDER BY keys.tractor_slug,viewers DESC,applications DESC`).all() : Promise.resolve({ results: [] }),
       (canDeals || canFinance) ? db.prepare(`SELECT COUNT(*) AS total,
         (SELECT COUNT(*) FROM crm_deals WHERE archived=0 AND stage NOT IN ('won','lost')) AS active,
         (SELECT COUNT(*) FROM sales_v2 WHERE archived=0) AS won,
@@ -88,16 +126,16 @@ export async function GET(request: Request) {
         FROM crm_tasks WHERE archived=0`).first() : Promise.resolve(null),
       canDeals ? db.prepare(`SELECT stage,COUNT(*) AS count,COALESCE(SUM(amount_minor),0) AS amount_minor FROM crm_deals WHERE archived=0 GROUP BY stage ORDER BY count DESC`).all() : Promise.resolve({ results: [] }),
       (canAnalytics || canLeads) ? db.prepare(`SELECT
-        (SELECT COUNT(*) FROM interest_events WHERE created_at>=datetime('now','-30 days')) AS views_30,
-        (SELECT COUNT(DISTINCT visitor_id) FROM interest_events WHERE created_at>=datetime('now','-30 days')) AS visitors_30,
+        (SELECT COUNT(*) FROM interest_events WHERE event_type='page_view' AND created_at>=datetime('now','-30 days')) AS views_30,
+        (SELECT COUNT(DISTINCT COALESCE(visitor_id,id)) FROM interest_events WHERE event_type='page_view' AND created_at>=datetime('now','-30 days')) AS visitors_30,
         (SELECT COUNT(*) FROM leads WHERE created_at>=datetime('now','-30 days')) AS leads_30`).first() : Promise.resolve(null),
       isDirector ? db.prepare("SELECT value FROM site_settings WHERE key='director_goals'").first<{value:string}>() : Promise.resolve(null),
       (isDirector || canInventory || canFinance) ? db.prepare(`SELECT
-        (SELECT COUNT(*) FROM inventory_units_v2 WHERE archived=0 AND status IN ('stock','reserved')) AS stock_units,
+        (SELECT COUNT(*) FROM inventory_units_v2 WHERE archived=0 AND status='stock') AS stock_units,
         (SELECT COUNT(*) FROM shipments_v2 WHERE archived=0 AND status NOT IN ('closed','arrived')) AS active_shipments,
         (SELECT COUNT(*) FROM meetings_v2 WHERE archived=0 AND starts_at>=datetime('now','-30 days')) AS meetings_30,
         (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='in' AND reversed_by IS NULL) AS income_som,
-        (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='out' AND reversed_by IS NULL) AS expenses_som,
+        (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='out' AND payment_id IS NULL AND reversed_by IS NULL) AS expenses_som,
         (SELECT COALESCE(SUM(GREATEST(r.principal_minor-COALESCE(p.paid,0),0)),0)/100 FROM receivables_v2 r LEFT JOIN (SELECT deal_id,SUM(amount_minor) paid FROM payments_v2 WHERE status='posted' AND archived=0 GROUP BY deal_id) p ON p.deal_id=r.deal_id WHERE r.archived=0 AND r.status IN ('open','overdue')) AS debts_som,
         (SELECT COALESCE(SUM(purchase_cost_minor+landed_cost_minor),0)/100 FROM inventory_units_v2 WHERE archived=0 AND status NOT IN ('sold','delivered')) AS stock_value_som,
         (SELECT COALESCE(SUM(CASE WHEN direction='in' THEN amount_minor ELSE -amount_minor END),0)/100 FROM account_transactions WHERE reversed_by IS NULL)+(SELECT COALESCE(SUM(opening_balance_minor),0)/100 FROM financial_accounts WHERE active=1) AS cash_balance_som,
@@ -107,7 +145,7 @@ export async function GET(request: Request) {
         COALESCE(v.views,0) AS views,COALESCE(l.leads,0) AS leads,COALESCE(q.qualified,0) AS qualified,COALESCE(m.meetings,0) AS meetings,COALESCE(p.proposals,0) AS proposals,
         COALESCE(s.sales,0) AS sales,COALESCE(s.revenue_minor,0) AS revenue_minor,COALESCE(s.profit_minor,0) AS profit_minor
         FROM (SELECT tractor_slug FROM interest_events WHERE tractor_slug IS NOT NULL UNION SELECT tractor_slug FROM leads WHERE tractor_slug IS NOT NULL UNION SELECT tractor_slug FROM crm_deals WHERE tractor_slug IS NOT NULL) x
-        LEFT JOIN (SELECT tractor_slug,COUNT(*) views FROM interest_events WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug) v ON v.tractor_slug=x.tractor_slug
+        LEFT JOIN (SELECT tractor_slug,COUNT(DISTINCT COALESCE(visitor_id,id)) FILTER(WHERE event_type='page_view') views FROM interest_events WHERE tractor_slug IS NOT NULL GROUP BY tractor_slug) v ON v.tractor_slug=x.tractor_slug
         LEFT JOIN (SELECT tractor_slug,COUNT(*) leads FROM leads WHERE tractor_slug IS NOT NULL AND archived=0 GROUP BY tractor_slug) l ON l.tractor_slug=x.tractor_slug
         LEFT JOIN (SELECT tractor_slug,COUNT(*) qualified FROM crm_deals WHERE archived=0 AND tractor_slug IS NOT NULL AND stage IN ('qualified','meeting','negotiation','reserved','contract','awaiting_payment','won') GROUP BY tractor_slug) q ON q.tractor_slug=x.tractor_slug
         LEFT JOIN (SELECT d.tractor_slug,COUNT(*) meetings FROM meetings_v2 m JOIN crm_deals d ON d.id=m.deal_id AND d.archived=0 WHERE m.archived=0 AND d.tractor_slug IS NOT NULL GROUP BY d.tractor_slug) m ON m.tractor_slug=x.tractor_slug
@@ -133,8 +171,8 @@ export async function GET(request: Request) {
         (SELECT COALESCE(SUM(sale_amount_minor),0) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-60 days') AND sold_at<datetime('now','-30 days')) AS revenue_previous_minor,
         (SELECT COALESCE(SUM(sale_amount_minor-cost_minor),0) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-30 days')) AS profit_current_minor,
         (SELECT COALESCE(SUM(sale_amount_minor-cost_minor),0) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-60 days') AND sold_at<datetime('now','-30 days')) AS profit_previous_minor,
-        (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='out' AND reversed_by IS NULL AND occurred_at>=datetime('now','-30 days')) AS expenses_current_som,
-        (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='out' AND reversed_by IS NULL AND occurred_at>=datetime('now','-60 days') AND occurred_at<datetime('now','-30 days')) AS expenses_previous_som`).first() : Promise.resolve(null),
+        (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='out' AND payment_id IS NULL AND reversed_by IS NULL AND occurred_at>=datetime('now','-30 days')) AS expenses_current_som,
+        (SELECT COALESCE(SUM(amount_minor),0)/100 FROM account_transactions WHERE direction='out' AND payment_id IS NULL AND reversed_by IS NULL AND occurred_at>=datetime('now','-60 days') AND occurred_at<datetime('now','-30 days')) AS expenses_previous_som`).first() : Promise.resolve(null),
     ]);
     const forecast=isDirector?await db.prepare(`SELECT COUNT(*) active_deals,COALESCE(SUM(amount_minor*COALESCE(probability,CASE stage WHEN 'new' THEN 10 WHEN 'ai' THEN 15 WHEN 'qualified' THEN 30 WHEN 'meeting' THEN 45 WHEN 'negotiation' THEN 60 WHEN 'reserved' THEN 75 WHEN 'contract' THEN 85 WHEN 'awaiting_payment' THEN 95 ELSE 0 END)/100),0) weighted_minor,(SELECT COUNT(*) FROM crm_deals WHERE stage IN ('won','lost') AND updated_at>=datetime('now','-180 days')) closed_sample,(SELECT COUNT(*) FROM sales_v2 WHERE archived=0 AND sold_at>=datetime('now','-180 days')) won_sample FROM crm_deals WHERE archived=0 AND stage NOT IN ('won','lost')`).first():null;
     const regions=isDirector?await db.prepare(`SELECT COALESCE(NULLIF(c.region,''),'Не указан') region,COUNT(*) customers,COALESCE(SUM(l.leads),0) leads,COALESCE(SUM(s.sales),0) sales,COALESCE(AVG(NULLIF(c.budget_minor,0)),0) average_budget_minor,COALESCE(SUM(s.revenue_minor),0) revenue_minor,string_agg(DISTINCT c.tractor_slug,', ') FILTER(WHERE c.tractor_slug IS NOT NULL) models
@@ -142,6 +180,7 @@ export async function GET(request: Request) {
       LEFT JOIN (SELECT customer_id,COUNT(*) leads FROM leads WHERE archived=0 GROUP BY customer_id) l ON l.customer_id=c.id
       LEFT JOIN (SELECT d.customer_id,COUNT(*) sales,SUM(s.sale_amount_minor) revenue_minor FROM sales_v2 s JOIN crm_deals d ON d.id=s.deal_id AND d.archived=0 WHERE s.archived=0 GROUP BY d.customer_id) s ON s.customer_id=c.id
       WHERE c.archived=0 GROUP BY COALESCE(NULLIF(c.region,''),'Не указан') ORDER BY customers DESC`).all():{results:[]};
+    const modelRegions=isDirector?await db.prepare("SELECT tractor_slug,COALESCE(NULLIF(region,''),'Регион не указан') region,COUNT(DISTINCT COALESCE(visitor_id,id)) views FROM interest_events WHERE tractor_slug IS NOT NULL AND event_type='page_view' GROUP BY tractor_slug,COALESCE(NULLIF(region,''),'Регион не указан') ORDER BY views DESC LIMIT 1000").all():{results:[]};
     const rawOperations = operations as Record<string, number> | null;
     const safeOperations = isDirector ? operations : rawOperations ? {
       stock_units: canInventory ? Number(rawOperations.stock_units ?? 0) : 0,
@@ -156,15 +195,21 @@ export async function GET(request: Request) {
       delayed_shipments: canInventory ? Number(rawOperations.delayed_shipments ?? 0) : 0,
     } : null;
     const safeDeals = !dealTotals || isDirector || canFinance ? dealTotals : { ...dealTotals, profit_minor: 0 };
+    const unreadNotifications = canUseSection(actor, "notifications")
+      ? Number((await db.prepare("SELECT COUNT(*) AS count FROM notifications_v2 WHERE recipient_id=? AND archived=0 AND read_at IS NULL").bind(actor.id).first<{count:number}>())?.count ?? 0)
+      : 0;
     return Response.json({
       actor,
       catalog,
       posts,
       leads: leads.results,
+      unreadNotifications,
       popular: popular.results,
       popularPosts: popularPosts.results,
       totals,
       daily: daily.results,
+      modelAnalytics: modelAnalytics.results,
+      modelRegionAnalytics: modelRegionAnalytics.results,
       director: {
         deals: safeDeals,
         tasks: taskTotals,
@@ -173,6 +218,7 @@ export async function GET(request: Request) {
         goals: isDirector ? parseGoals(goalRow?.value) : parseGoals(),
         operations: safeOperations,
         models: modelFunnel.results,
+        modelRegions:modelRegions.results,
         channels: channels.results,
         managers: managers.results,
         comparison,

@@ -1,11 +1,9 @@
-import type { Metadata } from "next";
 import { HomeContent } from "./components/HomeContent";
 import { getCatalog } from "./lib/catalog";
+import { getRequestLocale } from "./lib/locale-server";
+import { pageMetadata } from "./lib/seo";
 
-export const metadata: Metadata = {
-  title: "ATADAN Changfa: официальный каталог тракторов",
-  description: "ATADAN: официальный дистрибьютор Changfa в Кыргызстане: 6 лет на рынке, каталог 50–240 л.с., лизинг и сервис.",
-};
+export async function generateMetadata(){return pageMetadata("home","/",await getRequestLocale())}
 
 export default async function Home() {
   const tractors = await getCatalog();

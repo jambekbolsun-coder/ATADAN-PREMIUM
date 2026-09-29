@@ -6,9 +6,12 @@ export type Tractor = {
   category: string;
   farmArea: string;
   price: number | null;
+  approximatePriceUsd?: number;
   discountPercent?: number | null;
   promotionLabel?: string | null;
   inStock: boolean;
+  /** Physical, active VIN records currently in the warehouse and available for sale. */
+  availableUnits?: number;
   recommended?: boolean;
   popular?: boolean;
   status?: "draft" | "published" | "hidden" | "archived";

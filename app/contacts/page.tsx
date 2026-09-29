@@ -1,11 +1,12 @@
-import type { Metadata } from "next";
 import { Clock3, MapPin, MessageCircle, Phone } from "lucide-react";
 import { LeadForm } from "../components/LeadForm";
 import { Trans } from "../components/I18n";
 import { PageHero } from "../components/PageHero";
 import { getSiteSettings } from "../lib/site-settings";
+import { getRequestLocale } from "../lib/locale-server";
+import { pageMetadata } from "../lib/seo";
 
-export const metadata: Metadata = { title: "Контакты ATADAN Changfa", description: "Связаться с официальным дистрибьютором тракторов Changfa в Кыргызстане." };
+export async function generateMetadata(){return pageMetadata("contacts","/contacts",await getRequestLocale())}
 
 export default async function ContactsPage() {
   const { settings } = await getSiteSettings();

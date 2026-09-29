@@ -20,11 +20,12 @@ const nav = [
 
 function HeaderSearch({ mobile = false, close }: { mobile?: boolean; close?: () => void }) {
   const [query, setQuery] = useState("");
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
 
   return (
     <form className={`header-search ${mobile ? "mobile" : ""}`} role="search" action="/catalog" method="get" onSubmit={close}>
       <Search size={16} aria-hidden="true" />
+      {locale !== "ru" ? <input type="hidden" name="lang" value={locale} /> : null}
       <input name="search" value={query} onChange={(event) => setQuery(event.target.value)} aria-label={t("catalog.search")} placeholder={t("catalog.search")} />
       <button type="submit" aria-label={t("catalog.search")}><ArrowUpRight size={15} /></button>
     </form>

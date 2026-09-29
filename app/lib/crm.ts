@@ -1,9 +1,9 @@
 import { getRawDb } from "../../db";
 import type { Actor } from "./admin-auth";
 import { HttpError } from "./security";
-export const stages = ["new", "ai", "qualified", "meeting", "negotiation", "reserved", "contract", "awaiting_payment", "won", "lost"] as const;
+export const stages = ["new", "ai", "qualified", "meeting", "meeting_done", "negotiation", "reserved", "contract", "awaiting_payment", "won", "lost"] as const;
 export type Stage = typeof stages[number];
-export const stageLabels: Record<Stage,string> = {new:"Новая заявка",ai:"AI-консультация",qualified:"Квалифицирован",meeting:"Встреча",negotiation:"Переговоры",reserved:"Бронь",contract:"Договор",awaiting_payment:"Ожидание оплаты",won:"Успешно продано",lost:"Закрыто"};
+export const stageLabels: Record<Stage,string> = {new:"Новая заявка",ai:"AI-консультация",qualified:"Квалифицирован",meeting:"Встреча назначена",meeting_done:"Встреча проведена",negotiation:"Переговоры",reserved:"Бронь",contract:"Договор",awaiting_payment:"Ожидание оплаты",won:"Успешно продано",lost:"Закрыто"};
 export function canTransition(from: string, to: string, role: string, reason: string, amount: number) {
   if (!/^[a-z][a-z0-9_]{1,39}$/.test(to)) throw new HttpError(400,"Неизвестный этап");
   if ((from === "won" || from === "lost") && from !== to && role !== "owner" && role !== "director") throw new HttpError(403,"Закрытую сделку может вернуть директор");

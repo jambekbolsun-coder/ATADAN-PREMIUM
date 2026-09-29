@@ -18,59 +18,43 @@ const modelVideoSlugs: Record<string, string> = {
   "CFK2404(G4)": "cfk2404-g4",
 };
 
-type VideoQuality = "hd" | "sd";
-type NetworkInformation = EventTarget & {
-  downlink?: number;
-  effectiveType?: string;
-  saveData?: boolean;
-};
-
-function connectionQuality(): VideoQuality {
-  const connection = (navigator as Navigator & { connection?: NetworkInformation }).connection;
-  if (!connection) return "hd";
-  if (connection.saveData) return "sd";
-  if (connection.effectiveType && connection.effectiveType !== "4g") return "sd";
-  if (typeof connection.downlink === "number" && connection.downlink < 3) return "sd";
-  return "hd";
-}
+type VideoQuality = "hd" | "720";
 
 export function ProductVideo({ tractor }: { tractor: Tractor }) {
   const [failed, setFailed] = useState(false);
   const [pausedByUser, setPausedByUser] = useState(false);
   const [visible, setVisible] = useState(false);
-  const [quality, setQuality] = useState<VideoQuality | null>(null);
+  const [quality, setQuality] = useState<VideoQuality>("720");
   const ref = useRef<HTMLVideoElement>(null);
   const visibleRef = useRef(false);
   const { locale } = useI18n();
   const videoSlug = modelVideoSlugs[tractor.model];
-  const url = tractor.videoUrl || (videoSlug && quality ? `/videos/models/${quality}/${videoSlug}-10s.mp4` : null);
-
-  useEffect(() => {
-    if (tractor.videoUrl) return;
-    const connection = (navigator as Navigator & { connection?: NetworkInformation }).connection;
-    const update = () => setQuality(connectionQuality());
-    const frame = requestAnimationFrame(update);
-    connection?.addEventListener("change", update);
-    return () => {
-      cancelAnimationFrame(frame);
-      connection?.removeEventListener("change", update);
-    };
-  }, [tractor.videoUrl]);
+  const url =
+    tractor.videoUrl ||
+    (videoSlug && quality
+      ? `/videos/models/${quality}/${videoSlug}-10s.mp4`
+      : null);
 
   useEffect(() => {
     const video = ref.current;
     if (!video || !url) return;
-    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const reduced = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
     const sync = () => {
-      if (visibleRef.current && !document.hidden && !pausedByUser && !reduced) void video.play().catch(() => undefined);
+      if (visibleRef.current && !document.hidden && !pausedByUser && !reduced)
+        void video.play().catch(() => undefined);
       else video.pause();
     };
-    const observer = new IntersectionObserver(([entry]) => {
-      const inView = entry.isIntersecting && entry.intersectionRatio >= 0.45;
-      visibleRef.current = inView;
-      setVisible(inView);
-      sync();
-    }, { threshold: [0, 0.45, 0.8] });
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        const inView = entry.isIntersecting && entry.intersectionRatio >= 0.45;
+        visibleRef.current = inView;
+        setVisible(inView);
+        sync();
+      },
+      { threshold: [0, 0.45, 0.8] },
+    );
     observer.observe(video);
     document.addEventListener("visibilitychange", sync);
     return () => {
@@ -80,7 +64,8 @@ export function ProductVideo({ tractor }: { tractor: Tractor }) {
     };
   }, [pausedByUser, url]);
 
-  if ((!tractor.videoUrl && !videoSlug) || tractor.hp < 160 || tractor.hp > 240) return null;
+  if ((!tractor.videoUrl && !videoSlug) || tractor.hp < 160 || tractor.hp > 240)
+    return null;
 
   const title = {
     ru: `Changfa ${tractor.model} в деталях`,
@@ -97,8 +82,11 @@ export function ProductVideo({ tractor }: { tractor: Tractor }) {
     ky: pausedByUser ? "Видеону улантуу" : "Видеону токтотуу",
     en: pausedByUser ? "Resume video" : "Pause video",
   }[locale];
-  const effectiveQuality = tractor.videoUrl ? "hd" : quality;
-  const qualityLabel = effectiveQuality === null ? "AUTO" : effectiveQuality === "sd" ? "AUTO · DATA" : "AUTO · FULL HD";
+  const qualityLabel = tractor.videoUrl
+    ? "ВИДЕО"
+    : quality === "720"
+      ? "HD · 720p"
+      : "FULL HD · 1080p";
 
   function toggle() {
     const video = ref.current;
@@ -106,7 +94,8 @@ export function ProductVideo({ tractor }: { tractor: Tractor }) {
     setPausedByUser((value) => {
       const next = !value;
       if (next) video.pause();
-      else if (visible && !document.hidden) void video.play().catch(() => undefined);
+      else if (visible && !document.hidden)
+        void video.play().catch(() => undefined);
       return next;
     });
   }
@@ -117,15 +106,61 @@ export function ProductVideo({ tractor }: { tractor: Tractor }) {
         <span className="section-label">CHANGFA · ВИДЕО МОДЕЛИ</span>
         <h2>{title}</h2>
         <p>{note}</p>
+        {!tractor.videoUrl ? (
+          <label className="video-quality-select">
+            <span>Качество видео</span>
+            <select
+              value={quality}
+              onChange={(event) => {
+                setQuality(event.target.value as VideoQuality);
+                setFailed(false);
+              }}
+            >
+              <option value="720">HD · 720p</option>
+              <option value="hd">Full HD · 1080p</option>
+            </select>
+          </label>
+        ) : null}
       </header>
       {failed ? (
-        <a className="text-link product-video-error" href="https://en.changfanz.com/archives/Tractor/15.html" target="_blank" rel="noreferrer">{title} ↗</a>
+        <a
+          className="text-link product-video-error"
+          href="https://en.changfanz.com/archives/Tractor/15.html"
+          target="_blank"
+          rel="noreferrer"
+        >
+          {title} ↗
+        </a>
       ) : (
         <div className="product-video-stage">
-          <video ref={ref} src={url ?? undefined} poster={tractor.image} muted loop playsInline preload={url ? "metadata" : "none"} onError={() => setFailed(true)} aria-label={title} />
-          <span className="product-video-model">Changfa <strong>{tractor.model}</strong></span>
-          <span className="product-video-quality" aria-label="Автоматическое качество видео">10 СЕК · {qualityLabel}</span>
-          <button type="button" onClick={toggle} aria-label={pauseLabel}>{pausedByUser ? <Play aria-hidden="true" /> : <Pause aria-hidden="true" />}<span>{pauseLabel}</span></button>
+          <video
+            ref={ref}
+            src={url ?? undefined}
+            poster={tractor.image}
+            muted
+            loop
+            playsInline
+            preload={url ? "metadata" : "none"}
+            onError={() => setFailed(true)}
+            aria-label={title}
+          />
+          <span className="product-video-model">
+            Changfa <strong>{tractor.model}</strong>
+          </span>
+          <span
+            className="product-video-quality"
+            aria-label="Текущее качество видео"
+          >
+            10 СЕК · {qualityLabel}
+          </span>
+          <button type="button" onClick={toggle} aria-label={pauseLabel}>
+            {pausedByUser ? (
+              <Play aria-hidden="true" />
+            ) : (
+              <Pause aria-hidden="true" />
+            )}
+            <span>{pauseLabel}</span>
+          </button>
         </div>
       )}
     </section>

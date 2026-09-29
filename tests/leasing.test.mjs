@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateInstallment, calculateLease, salePrice } from "../app/lib/leasing.ts";
+import { calculateInstallment, calculateLease, convertDownPayment, salePrice } from "../app/lib/leasing.ts";
 
 test("zero-rate lease preserves principal exactly", () => {
   const result = calculateLease({ price: 3_000_000, downPercent: 30, months: 84, annualRate: 0, fee: 0, method: "annuity" });
@@ -42,4 +42,20 @@ test("leasing calculator follows the configured business formula and zero-percen
   assert.equal(zero.markup,0);
   assert.equal(zero.overpayment,0);
   assert.equal(zero.contractTotal,3_000_000);
+});
+
+test("down-payment mode conversion preserves the selected economic value",()=>{
+  const rules={price:4_375_000,minPercent:30,maxPercent:90,minAmount:500_000};
+  const amount=convertDownPayment(40,"percent","amount",rules);
+  assert.equal(amount,1_750_000);
+  assert.equal(convertDownPayment(amount,"amount","percent",rules),40);
+  assert.equal(convertDownPayment(1,"percent","amount",rules),1_312_500);
+  assert.equal(convertDownPayment(99,"percent","amount",rules),3_937_500);
+});
+
+test("installment schedule never becomes negative and the final payment closes rounding",()=>{
+  const result=calculateInstallment({price:4_321_987,options:[],delivery:0,discount:0,downMode:"percent",downValue:33.33,months:84,markupPercent:7.5,annualRate:11.7,fixedCommission:12345,commissionPercent:0.7,insurance:0,processingFee:2000,includeDelivery:false,includeInsurance:false,includeCommission:true,discountOrder:"before",rounding:100,zeroPercent:false});
+  assert.equal(result.schedule.at(-1).balance,0);
+  assert.ok(result.schedule.every(row=>row.payment>=0&&row.balance>=0));
+  assert.equal(result.schedule.reduce((sum,row)=>sum+row.payment,0),result.contractTotal);
 });

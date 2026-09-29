@@ -3,7 +3,15 @@ import { Instagram } from "./BrandIcons";
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { ArrowUpRight, Cookie, MapPin, MessageCircle, Phone } from "lucide-react";
+import {
+  ArrowUpRight,
+  Clock3,
+  Cookie,
+  Mail,
+  MapPin,
+  MessageCircle,
+  Phone,
+} from "lucide-react";
 import { useI18n } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
 import { OPEN_PRIVACY_SETTINGS_EVENT } from "./CookieConsent";
@@ -21,16 +29,94 @@ export function SiteFooter() {
           <h2>{t("footer.title")}</h2>
           <p>{t("footer.about")}</p>
         </div>
-        <a className="footer-contact" href={whatsappHref} target="_blank" rel="noreferrer"><i><MessageCircle size={19} /></i><span>{t("footer.whatsapp")}<small>{settings.phone}</small></span><ArrowUpRight size={18} /></a>
+        <a
+          className="footer-contact"
+          href={whatsappHref}
+          target="_blank"
+          rel="noreferrer"
+        >
+          <i>
+            <MessageCircle size={19} />
+          </i>
+          <span>
+            {t("footer.whatsapp")}
+            <small>{settings.phone}</small>
+          </span>
+          <ArrowUpRight size={18} />
+        </a>
       </div>
       <div className="footer-grid">
-        <div className="footer-brand"><div className="footer-logo"><Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={260} height={90} /></div><span>Official Changfa distributor</span></div>
-        <div><strong>{t("footer.navigation")}</strong><Link href="/catalog">{t("nav.catalog")}</Link><Link href="/finance">{t("nav.finance")}</Link><Link href="/service">{t("nav.service")}</Link><Link href="/about">{t("nav.about")}</Link></div>
-        <div><strong>{t("footer.contacts")}</strong><a href={phoneHref}><Phone size={15} />{settings.phone}</a><a href={settings.instagram} target="_blank" rel="noreferrer"><Instagram size={15} />@atadan_kg</a><span><MapPin size={15} />{settings.address}</span></div>
-        <div><strong>ATADAN</strong><Link href="/contacts">{t("nav.contacts")}</Link><a href="https://en.changfanz.com/" target="_blank" rel="noreferrer">Changfa Global <ArrowUpRight size={13} /></a></div>
+        <div className="footer-brand">
+          <div className="footer-logo">
+            <Image
+              src="/atadan-logo-cropped.png"
+              alt="ATADAN Changfa"
+              width={260}
+              height={90}
+            />
+          </div>
+          <span>Official Changfa distributor</span>
+        </div>
+        <div>
+          <strong>{t("footer.navigation")}</strong>
+          <Link href="/catalog">{t("nav.catalog")}</Link>
+          <Link href="/finance">{t("nav.finance")}</Link>
+          <Link href="/service">{t("nav.service")}</Link>
+          <Link href="/about">{t("nav.about")}</Link>
+        </div>
+        <div>
+          <strong>{t("footer.contacts")}</strong>
+          <a href={phoneHref}>
+            <Phone size={15} />
+            {settings.phone}
+          </a>
+          <a href={settings.instagram} target="_blank" rel="noreferrer">
+            <Instagram size={15} />
+            @atadan_kg
+          </a>
+          <span>
+            <MapPin size={15} />
+            {settings.address}
+          </span>
+          {settings.email ? (
+            <a href={`mailto:${settings.email}`}>
+              <Mail size={15} />
+              {settings.email}
+            </a>
+          ) : null}
+          {settings.workingHours ? (
+            <span>
+              <Clock3 size={15} />
+              {settings.workingHours}
+            </span>
+          ) : null}
+        </div>
+        <div>
+          <strong>ATADAN</strong>
+          <Link href="/contacts">{t("nav.contacts")}</Link>
+          <a href="https://en.changfanz.com/" target="_blank" rel="noreferrer">
+            Changfa Global <ArrowUpRight size={13} />
+          </a>
+        </div>
       </div>
-      <div className="footer-legal"><Link href="/privacy">Политика конфиденциальности</Link><Link href="/terms">Условия использования</Link><Link href="/cookies">Политика cookie</Link><button type="button" onClick={()=>window.dispatchEvent(new Event(OPEN_PRIVACY_SETTINGS_EVENT))}><Cookie size={14}/>Настроить cookie</button></div>
-      <div className="footer-bottom"><span>© 2026 ATADAN Changfa</span><span>{t("footer.tagline")}</span></div>
+      <div className="footer-legal">
+        <Link href="/privacy">Политика конфиденциальности</Link>
+        <Link href="/terms">Условия использования</Link>
+        <Link href="/cookies">Политика cookie</Link>
+        <button
+          type="button"
+          onClick={() =>
+            window.dispatchEvent(new Event(OPEN_PRIVACY_SETTINGS_EVENT))
+          }
+        >
+          <Cookie size={14} />
+          Настроить cookie
+        </button>
+      </div>
+      <div className="footer-bottom">
+        <span>© 2026 ATADAN Changfa</span>
+        <span>{t("footer.tagline")}</span>
+      </div>
     </footer>
   );
 }

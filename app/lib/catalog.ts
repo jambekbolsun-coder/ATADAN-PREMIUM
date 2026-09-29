@@ -1,7 +1,12 @@
 import tractorsData from "../data/tractors.json";
 import type { Tractor } from "../types";
+import { applyInventoryAvailability, type InventoryAvailability } from "./inventory-availability";
 
 export const baseTractors = tractorsData as Tractor[];
+
+export function suggestedPriceUsd(hp: number) {
+  return Math.max(10_000, Math.round((10_000 + Math.max(0, hp - 50) * 130) / 500) * 500);
+}
 
 const seriesGalleries: Record<string, string[]> = {
   b: ["/images/series/b-01.jpg", "/images/series/b-02.jpg", "/images/series/b-03.jpg"],
@@ -49,7 +54,7 @@ function withGallery(tractor: Tractor): Tractor {
     "/images/series/changfa-rear.webp",
     "/images/series/changfa-side.webp",
   ];
-  return { ...tractor, image: primaryImage, images: Array.from(new Set(detailedViews)).slice(0, 7) };
+  return { ...tractor, approximatePriceUsd: tractor.approximatePriceUsd ?? suggestedPriceUsd(tractor.hp), image: primaryImage, images: Array.from(new Set(detailedViews)).slice(0, 7) };
 }
 
 export async function getCatalog(includeUnpublished = false): Promise<Tractor[]> {
@@ -75,9 +80,14 @@ export async function getCatalog(includeUnpublished = false): Promise<Tractor[]>
         if (includeUnpublished || !item.status || item.status === "published") catalog.push(withGallery(item));
       }
     }
-    return catalog.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.hp - b.hp || a.model.localeCompare(b.model));
+    const inventory = await getRawDb()
+      .prepare("SELECT tractor_slug, COUNT(*)::int AS available_units FROM inventory_units_v2 WHERE archived=0 AND status='stock' AND COALESCE(tractor_slug,'')<>'' GROUP BY tractor_slug")
+      .all<InventoryAvailability>();
+    return applyInventoryAvailability(catalog, inventory.results as InventoryAvailability[])
+      .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.hp - b.hp || a.model.localeCompare(b.model));
   } catch {
-    return baseTractors.map(withGallery);
+    // A database outage must never turn a catalogue flag into fictitious stock.
+    return applyInventoryAvailability(baseTractors.map(withGallery), []);
   }
 }
 

@@ -18,7 +18,7 @@ test("production metadata and contact channel are configured", async () => {
   ]);
   assert.match(layout, /ATADAN Changfa/);
   assert.doesNotMatch(layout, /codex-preview|Starter Project/);
-  assert.match(home, /6 лет/);
+  assert.match(home, /pageMetadata\("home"/);
   assert.match(home, /getCatalog/);
   assert.match(leads, /INSERT INTO leads/);
 });
@@ -54,7 +54,7 @@ test("admin tools retain the shared locale context", async () => {
   assert.match(dashboard, /Лизинг и рассрочка/);
   assert.match(dashboard, /initialWorkspace/);
   assert.match(calculator, /useI18n\(\)/);
-  assert.match(chrome, /pathname\.startsWith\("\/admin"\).*<I18nProvider>/s);
+  assert.match(chrome, /pathname\.startsWith\("\/admin"\).*<I18nProvider initialLocale=\{locale\}>/s);
 });
 
 test("admin workspaces use routed SQL-backed modules", async () => {

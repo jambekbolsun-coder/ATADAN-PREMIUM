@@ -1,6 +1,7 @@
-import { authenticateStaff, clearAdminCookie, createStaffSession, getActor, revokeStaffSession } from "../../../lib/admin-auth";
+import { authenticateStaff, createStaffSession, getActor, revokeStaffSession } from "../../../lib/admin-auth";
 import { ensureDb, getRawDb } from "../../../../db";
 import { cleanText, digest, fail, HttpError, jsonBody, rateLimit, sameOrigin } from "../../../lib/security";
+import { NextResponse } from "next/server";
 export async function GET(request: Request) {
   try { const actor = await getActor(request); return Response.json({authenticated:!!actor, actor}, {headers:{"Cache-Control":"no-store"}}); } catch(e) { return fail(e); }
 }
@@ -28,5 +29,11 @@ export async function POST(request: Request) {
   }
 }
 export async function DELETE(request: Request) {
-  try { sameOrigin(request); await ensureDb(); const headers = new Headers({"Cache-Control":"no-store"}); headers.append("Set-Cookie",await revokeStaffSession(request)); headers.append("Set-Cookie",clearAdminCookie()); return Response.json({authenticated:false},{headers}); } catch(e) {return fail(e);}
+  try {
+    sameOrigin(request); await ensureDb(); await revokeStaffSession(request);
+    const response=NextResponse.json({authenticated:false},{headers:{"Cache-Control":"no-store"}}),secure=new URL(request.url).protocol==="https:";
+    response.cookies.set("atadan_staff","",{path:"/",httpOnly:true,sameSite:"strict",secure,maxAge:0,expires:new Date(0)});
+    response.cookies.set("atadan_admin","",{path:"/",httpOnly:true,sameSite:"strict",secure,maxAge:0,expires:new Date(0)});
+    return response;
+  } catch(e) {return fail(e);}
 }

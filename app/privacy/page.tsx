@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
 import { LegalPage } from "../components/LegalPage";
-export const metadata:Metadata={title:"Политика конфиденциальности | ATADAN",description:"Как ATADAN обрабатывает данные заявок и анонимную аналитику сайта."};
+import { getRequestLocale } from "../lib/locale-server";
+import { pageMetadata } from "../lib/seo";
+export async function generateMetadata(){return pageMetadata("privacy","/privacy",await getRequestLocale())}
 export default function PrivacyPage(){return <LegalPage kind="privacy"/>}

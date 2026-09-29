@@ -64,18 +64,21 @@ test("catalog, news and home support use distinct ten-second viewport videos", a
   assert.match(contacts, /contacts-cfk2404-g4-v3\.png/);
 });
 
-test("classic site wordmark, installable PWA assets and reference-style loaders are wired", async () => {
-  const [header, footer, dashboard, chrome, loader, transition, css, layout, manifest, worker, icon192, icon512] = await Promise.all([
+test("classic wordmark, owner-only admin PWA and reference-style loaders are wired", async () => {
+  const [header, footer, dashboard, chrome, pwa, loader, transition, css, customerCss, layout, adminLayout, adminManifest, adminWorker, icon192, icon512] = await Promise.all([
     source("app/components/SiteHeader.tsx"),
     source("app/components/SiteFooter.tsx"),
     source("app/components/AdminDashboard.tsx"),
     source("app/components/AppChrome.tsx"),
+    source("app/components/PwaRegistration.tsx"),
     source("app/components/AtadanLoader.tsx"),
     source("app/components/PageTransitionLoader.tsx"),
     source("app/globals.css"),
+    source("app/styles/customer-experience.css"),
     source("app/layout.tsx"),
-    source("public/manifest.webmanifest"),
-    source("public/sw.js"),
+    source("app/admin/layout.tsx"),
+    source("app/admin/manifest.webmanifest/route.ts"),
+    source("public/admin-sw.js"),
     readFile(new URL("public/icons/atadan-app-192.png", project)),
     readFile(new URL("public/icons/atadan-app-512.png", project)),
   ]);
@@ -92,10 +95,22 @@ test("classic site wordmark, installable PWA assets and reference-style loaders 
   assert.match(css, /#071c10/i);
   assert.match(css, /#79c94b/i);
   assert.match(layout, /atadan-app-192\.png/);
-  assert.match(manifest, /"sizes":"192x192"/);
-  assert.match(manifest, /"sizes":"512x512"/);
-  assert.match(manifest, /"display": "standalone"/);
-  assert.match(worker, /atadan-shell-v2/);
+  assert.doesNotMatch(layout, /manifest:\s*"\/manifest\.webmanifest"/);
+  assert.doesNotMatch(adminLayout, /manifest:/);
+  assert.doesNotMatch(chrome, /PwaRegistration admin|<PwaRegistration/);
+  assert.match(chrome, /<PublicPwaCleanup\/>/);
+  assert.match(dashboard, /<AdminInstallButton role=\{data\.actor\.role\}\/>>?/);
+  assert.match(pwa, /role !== "owner"/);
+  assert.match(pwa, /beforeinstallprompt/);
+  assert.match(pwa, /\/admin\/manifest\.webmanifest/);
+  assert.match(pwa, /\/admin-sw\.js/);
+  assert.match(adminManifest, /start_url:"\/admin\/"/);
+  assert.match(adminManifest, /ATADAN CRM/);
+  assert.match(adminManifest, /actor\.role!=="owner"/);
+  assert.match(adminWorker, /atadan-admin-v1/);
+  assert.match(css, /body:has\(\.admin-shell\.admin-shell-unified\).*overflow:hidden/);
+  assert.match(css, /\.admin-shell-unified \.admin-main\{height:100dvh.*overflow-y:auto/);
+  assert.doesNotMatch(customerCss, /assist-whatsapp\s*\{\s*display:\s*none/);
   assert.equal(icon192.readUInt32BE(16), 192);
   assert.equal(icon192.readUInt32BE(20), 192);
   assert.equal(icon512.readUInt32BE(16), 512);
@@ -114,22 +129,21 @@ test("every 160-240 hp product clip is a real ten-second local MP4", async () =>
   for (const name of names) {
     const [hd, sd] = await Promise.all([
       readFile(new URL(`public/videos/models/hd/${name}-10s.mp4`, project)),
-      readFile(new URL(`public/videos/models/sd/${name}-10s.mp4`, project)),
+      readFile(new URL(`public/videos/models/720/${name}-10s.mp4`, project)),
     ]);
     assert.ok(mp4Duration(hd) >= 9.95 && mp4Duration(hd) <= 10.05, `${name} HD duration is exactly ten seconds`);
-    assert.ok(mp4Duration(sd) >= 9.95 && mp4Duration(sd) <= 10.05, `${name} data-saver duration is exactly ten seconds`);
-    assert.ok(hd.byteLength > sd.byteLength, `${name} serves a lighter file on slow connections`);
+    assert.ok(mp4Duration(sd) >= 9.95 && mp4Duration(sd) <= 10.05, `${name} 720p duration is exactly ten seconds`);
+    assert.ok(sd.byteLength > 10000, `${name} 720p is a real encoded video`);
   }
   const component = await source("app/components/ProductVideo.tsx");
   assert.match(component, /new IntersectionObserver/);
   assert.match(component, /void video\.play\(\)/);
   assert.match(component, /else video\.pause\(\)/);
-  assert.match(component, /connection\.saveData/);
-  assert.match(component, /connection\.effectiveType/);
-  assert.match(component, /connection\.downlink < 3/);
+  assert.doesNotMatch(component, /connection\.saveData|connection\.effectiveType/);
   assert.match(component, /videos\/models\/\$\{quality\}/);
-  assert.match(component, /AUTO · FULL HD/);
-  assert.match(component, /AUTO · DATA/);
+  assert.match(component, /HD · 720p/);
+  assert.match(component, /FULL HD · 1080p/);
+  assert.match(component, /Качество видео/);
   assert.doesNotMatch(component, /<video[^>]* controls/);
   assert.doesNotMatch(component, /10 секунд официальной динамики модели/);
   assert.match(component, /В интерактивном видео крупным планом показаны кабина/);
@@ -140,7 +154,8 @@ test("admin navigation exposes connected marketing and company modules", async (
   const marketing = dashboard.match(/marketing:\[(.*?)\],\s*company:/s)?.[1] ?? "";
   const company = dashboard.match(/company:\[(.*?)\],\s*control:/s)?.[1] ?? "";
   for (const id of ["catalog", "news", "public-service", "faq", "leasing"]) assert.match(marketing, new RegExp(`id:"${id}"`));
-  for (const id of ["deals", "client-base", "inventory-units", "sales", "suppliers", "purchases", "shipments", "financial-accounts", "documents", "meetings", "service-cases", "finance", "team"]) assert.match(company, new RegExp(`id:"${id}"`));
+  assert.doesNotMatch(company, /id:"financial-accounts"/);
+  for (const id of ["deals", "client-base", "inventory-units", "sales", "suppliers", "purchases", "shipments", "documents", "meetings", "service-cases", "finance", "team"]) assert.match(company, new RegExp(`id:"${id}"`));
 });
 
 test("deal movement creates one normalized sale and locks the linked VIN", async () => {
@@ -167,7 +182,7 @@ test("published service and FAQ records reach their public surfaces", async () =
     source("app/components/SiteAssist.tsx"),
   ]);
   assert.match(layout, /getPublishedRecords\("faq"\)/);
-  assert.match(assist, /faqs\.length\?faqs/);
+  assert.match(assist, /faqs\.length\s*\?\s*faqs/);
   assert.match(service, /getPublishedRecords\("service_pages"\)/);
   assert.match(service, /service-material-image/);
 });

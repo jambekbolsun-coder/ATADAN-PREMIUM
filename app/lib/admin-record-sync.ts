@@ -1,7 +1,8 @@
 import { getRawDb, type PreparedStatement } from "../../db";
 import type { Actor } from "./admin-auth";
-import { inventoryStatusMap, isoDate, normalizeVin, somToMinor } from "./business";
+import { inventoryStatusMap, isoDate, normalizePhone, normalizeVin, somToMinor } from "./business";
 import { HttpError } from "./security";
+import { getCatalog } from "./catalog";
 
 type Data = Record<string, unknown>;
 
@@ -58,9 +59,10 @@ export async function normalizedRecordStatements(args: {
   }
 
   if(kind==="shipments"){
-    const purchaseOrderId=text(data,"purchaseOrderId",true);await exists("SELECT id FROM purchase_orders_v2 WHERE id=? AND archived=0",purchaseOrderId,"Выберите действующий заказ поставщику");
-    if(action==="create")statements.push(db.prepare("INSERT INTO shipments_v2(id,purchase_order_id,tracking_number,status,route,transport,eta,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,purchaseOrderId,text(data,"tracking")||null,status,text(data,"route"),text(data,"transport"),text(data,"eta")||null,actor.id,actor.id));
-    else statements.push(db.prepare("UPDATE shipments_v2 SET purchase_order_id=?,tracking_number=?,status=?,route=?,transport=?,eta=?,archived=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?").bind(purchaseOrderId,text(data,"tracking")||null,status,text(data,"route"),text(data,"transport"),text(data,"eta")||null,archived?1:0,actor.id,id));
+    const purchaseOrderId=text(data,"purchaseOrderId");if(purchaseOrderId)await exists("SELECT id FROM purchase_orders_v2 WHERE id=? AND archived=0",purchaseOrderId,"Выберите действующий заказ поставщику");
+    if(data.dateFrom&&data.eta&&isoDate(data.dateFrom)>isoDate(data.eta))throw new HttpError(400,"Дата прибытия должна быть не раньше отправления");
+    if(action==="create")statements.push(db.prepare("INSERT INTO shipments_v2(id,purchase_order_id,tracking_number,status,route,transport,eta,created_by,updated_by) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,purchaseOrderId||null,text(data,"tracking")||null,status,text(data,"route"),text(data,"transport"),text(data,"eta")||null,actor.id,actor.id));
+    else statements.push(db.prepare("UPDATE shipments_v2 SET purchase_order_id=?,tracking_number=?,status=?,route=?,transport=?,eta=?,archived=?,updated_by=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?").bind(purchaseOrderId||null,text(data,"tracking")||null,status,text(data,"route"),text(data,"transport"),text(data,"eta")||null,archived?1:0,actor.id,id));
   }
 
   if(kind==="inventory_units"){
@@ -84,7 +86,8 @@ export async function normalizedRecordStatements(args: {
 
   if(kind==="finance_entries"){
     if(action!=="create")throw new HttpError(409,"Проведённый расход нельзя менять. Создайте корректирующую операцию");
-    const accountId=text(data,"accountId",true);await exists("SELECT id FROM financial_accounts WHERE id=? AND active=1",accountId,"Выберите активный счёт или кассу");
+    if(somToMinor(data.amount)<=0)throw new HttpError(400,"Сумма расхода должна быть больше нуля");
+    const accountId=text(data,"accountId")||"atadan-operating-expenses";await exists("SELECT id FROM financial_accounts WHERE id=? AND active=1",accountId,"Выберите активный счёт или кассу");
     statements.push(db.prepare("INSERT INTO account_transactions(id,account_id,direction,amount_minor,category,expense_record_id,occurred_at,description,created_by) VALUES(?,?,'out',?,?,?,?,?,?)").bind(crypto.randomUUID(),accountId,somToMinor(data.amount),text(data,"expenseCategory",true),id,isoDate(data.date),text(data,"notes")||title,actor.id));
   }
 
@@ -145,22 +148,42 @@ export async function normalizedRecordStatements(args: {
     if(documentType==="Коммерческое предложение"&&!archived){if(!customerId||!dealId)throw new HttpError(400,"Для КП выберите клиента и сделку");const deal=await db.prepare("SELECT customer_id,tractor_slug FROM crm_deals WHERE id=? AND archived=0").bind(dealId).first<{customer_id:string;tractor_slug:string|null}>();if(!deal||deal.customer_id!==customerId)throw new HttpError(400,"Сделка не принадлежит выбранному клиенту");if(!deal.tractor_slug)throw new HttpError(400,"В сделке не выбрана модель");const base=somToMinor(data.basePrice,"Базовая цена"),discount=somToMinor(data.discount,"Скидка"),options=somToMinor(data.optionsPrice,"Опции"),final=base-discount+options;if(final<=0||discount>base)throw new HttpError(400,"Проверьте цену и скидку КП");statements.push(db.prepare("INSERT INTO proposals_v2(id,customer_id,deal_id,tractor_slug,inventory_unit_id,base_price_minor,discount_minor,options_minor,final_price_minor,terms_json,status,valid_until,created_by) VALUES(?,?,?,?,?,?,?,?,?,?::text,?,?,?) ON CONFLICT(id) DO UPDATE SET customer_id=excluded.customer_id,deal_id=excluded.deal_id,tractor_slug=excluded.tractor_slug,inventory_unit_id=excluded.inventory_unit_id,base_price_minor=excluded.base_price_minor,discount_minor=excluded.discount_minor,options_minor=excluded.options_minor,final_price_minor=excluded.final_price_minor,terms_json=excluded.terms_json,status=excluded.status,valid_until=excluded.valid_until,updated_at=CURRENT_TIMESTAMP,version=proposals_v2.version+1").bind(id,customerId,dealId,deal.tractor_slug,inventoryUnitId||null,base,discount,options,final,JSON.stringify({source:"admin",documentUrl:fileUrl}),status,text(data,"validUntil")||null,actor.id));}
   }
 
+  if(kind==="meetings"&&archived)statements.push(db.prepare("UPDATE meetings_v2 SET archived=1,version=version+1 WHERE id=?").bind(id));
   if(kind==="meetings"&&!archived){
-    const customerId=text(data,"customerId",true),dealId=text(data,"dealId",true),responsibleId=text(data,"responsibleId",true);await exists("SELECT id FROM crm_customers WHERE id=? AND archived=0",customerId,"Клиент не найден");await exists("SELECT id FROM crm_deals WHERE id=? AND archived=0",dealId,"Сделка не найдена");await exists("SELECT id FROM staff WHERE id=? AND active=1",responsibleId,"Ответственный недоступен");
+    const customerId=text(data,"customerId",true),dealId=text(data,"dealId",true),responsibleId=text(data,"responsibleId",true);await exists("SELECT id FROM crm_customers WHERE id=? AND archived=0",customerId,"Клиент не найден");const linked=await db.prepare("SELECT customer_id FROM crm_deals WHERE id=? AND archived=0").bind(dealId).first<{customer_id:string}>();if(!linked||linked.customer_id!==customerId)throw new HttpError(400,"Выберите сделку этого клиента");await exists("SELECT id FROM staff WHERE id=? AND active=1",responsibleId,"Ответственный недоступен");
     if(action==="create")statements.push(db.prepare("INSERT INTO meetings_v2(id,customer_id,deal_id,responsible_id,starts_at,status,location,outcome) VALUES(?,?,?,?,?,?,?,?)").bind(id,customerId,dealId,responsibleId,isoDate(data.date),status,text(data,"location"),text(data,"result")));
-    else statements.push(db.prepare("UPDATE meetings_v2 SET customer_id=?,deal_id=?,responsible_id=?,starts_at=?,status=?,location=?,outcome=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?").bind(customerId,dealId,responsibleId,isoDate(data.date),status,text(data,"location"),text(data,"result"),id));
+    else statements.push(db.prepare("UPDATE meetings_v2 SET archived=0,customer_id=?,deal_id=?,responsible_id=?,starts_at=?,status=?,location=?,outcome=?,updated_at=CURRENT_TIMESTAMP,version=version+1 WHERE id=?").bind(customerId,dealId,responsibleId,isoDate(data.date),status,text(data,"location"),text(data,"result"),id));
   }
 
-  if(kind==="service_cases"&&!archived){const customerId=text(data,"customerId",true),saleId=text(data,"saleId",true),inventoryUnitId=text(data,"inventoryUnitId",true),responsibleId=text(data,"responsibleId");const sale=await db.prepare("SELECT customer_id,inventory_unit_id FROM sales_v2 WHERE id=? AND archived=0").bind(saleId).first<{customer_id:string;inventory_unit_id:string}>();if(!sale||sale.customer_id!==customerId||sale.inventory_unit_id!==inventoryUnitId)throw new HttpError(400,"Сервис должен быть связан с покупкой клиента и тем же VIN");if(responsibleId)await exists("SELECT id FROM staff WHERE id=? AND active=1",responsibleId,"Ответственный недоступен");if(action==="create")statements.push(db.prepare("INSERT INTO service_cases_v2(id,customer_id,sale_id,inventory_unit_id,responsible_id,status,issue,resolution,opened_at) VALUES(?,?,?,?,?,?,?,?,?)").bind(id,customerId,saleId,inventoryUnitId,responsibleId||null,status,text(data,"issue",true),text(data,"resolution"),text(data,"date")?isoDate(data.date):new Date().toISOString()));else statements.push(db.prepare("UPDATE service_cases_v2 SET responsible_id=?,status=?,issue=?,resolution=?,closed_at=CASE WHEN ?='closed' THEN CURRENT_TIMESTAMP ELSE NULL END,version=version+1 WHERE id=?").bind(responsibleId||null,status,text(data,"issue",true),text(data,"resolution"),status,id));}
+  if(kind==="service_cases"){
+    if(archived){statements.push(db.prepare("UPDATE service_cases_v2 SET archived=1,version=version+1 WHERE id=?").bind(id));return statements;}
+    let customerId=text(data,"customerId");const saleId=text(data,"saleId"),selection=text(data,"inventoryUnitId",true);
+    let inventoryUnitId:string|null=selection,tractorSlug="";
+    if(selection.startsWith("model:")){
+      const model=(await getCatalog()).find(item=>item.slug===selection.slice(6));
+      if(!model)throw new HttpError(400,"Выберите действующую модель трактора");
+      inventoryUnitId=null;tractorSlug=model.slug;data.tractorModel=model.model;
+    }else{
+      const unit=await db.prepare("SELECT tractor_slug,model FROM inventory_units_v2 WHERE id=? AND archived=0").bind(selection).first<{tractor_slug:string;model:string}>();
+      if(!unit)throw new HttpError(400,"Выберите трактор со склада");
+      tractorSlug=unit.tractor_slug;data.tractorModel=unit.model;
+    }
+    data.tractorSlug=tractorSlug;
+    if(!customerId){const name=text(data,"clientName",true),phone=text(data,"clientPhone",true),normalized=normalizePhone(phone);const existing=await db.prepare("SELECT id FROM crm_customers WHERE normalized_phone=? AND archived=0").bind(normalized).first<{id:string}>();customerId=existing?.id??crypto.randomUUID();if(!existing)statements.push(db.prepare("INSERT INTO crm_customers(id,name,phone,normalized_phone,source) VALUES(?,?,?,?,'service')").bind(customerId,name,phone,normalized));data.customerId=customerId;}
+    if(saleId){const sale=await db.prepare("SELECT customer_id,inventory_unit_id FROM sales_v2 WHERE id=? AND archived=0").bind(saleId).first<{customer_id:string;inventory_unit_id:string}>();if(!sale||sale.customer_id!==customerId||sale.inventory_unit_id!==inventoryUnitId)throw new HttpError(400,"Проверьте связь с продажей клиента");}
+    if(data.motoHours!==undefined&&(!Number.isFinite(Number(data.motoHours))||Number(data.motoHours)<0))throw new HttpError(400,"Проверьте моточасы");
+    statements.push(db.prepare("INSERT INTO service_cases_v2(id,customer_id,sale_id,inventory_unit_id,tractor_slug,responsible_id,status,issue,resolution,opened_at) VALUES(?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET inventory_unit_id=excluded.inventory_unit_id,tractor_slug=excluded.tractor_slug,status=excluded.status,issue=excluded.issue,resolution=excluded.resolution,opened_at=excluded.opened_at,archived=0,closed_at=CASE WHEN excluded.status='closed' THEN CURRENT_TIMESTAMP ELSE NULL END,version=service_cases_v2.version+1").bind(id,customerId,saleId||null,inventoryUnitId,tractorSlug,text(data,"responsibleId")||actor.id,status,text(data,"issue",true),text(data,"resolution"),isoDate(data.date)));
+  }
 
   return statements;
 }
 
 export async function recordLookups() {
+  const catalog=await getCatalog(),categories=new Map(catalog.map(model=>[model.slug,model.category]));
   const db=getRawDb();const [customers,deals,inventory,accounts,suppliers,purchases,shipments,staff,sales,leasing]=await Promise.all([
     db.prepare("SELECT id,name AS label FROM crm_customers WHERE archived=0 ORDER BY name LIMIT 1000").all(),
     db.prepare("SELECT id,title AS label,customer_id FROM crm_deals WHERE archived=0 ORDER BY updated_at DESC LIMIT 1000").all(),
-    db.prepare("SELECT id,vin||' · '||model AS label,status FROM inventory_units_v2 WHERE archived=0 ORDER BY vin LIMIT 1000").all(),
+    db.prepare("SELECT id,model||' · VIN '||vin AS label,status,model,tractor_slug FROM inventory_units_v2 WHERE archived=0 ORDER BY vin LIMIT 1000").all(),
     db.prepare("SELECT id,name AS label FROM financial_accounts WHERE active=1 ORDER BY name").all(),
     db.prepare("SELECT id,name AS label FROM suppliers_v2 WHERE archived=0 ORDER BY name").all(),
     db.prepare("SELECT id,order_number AS label,supplier_id FROM purchase_orders_v2 WHERE archived=0 ORDER BY created_at DESC LIMIT 1000").all(),
@@ -168,5 +191,5 @@ export async function recordLookups() {
     db.prepare("SELECT id,display_name AS label FROM staff WHERE active=1 ORDER BY display_name").all(),
     db.prepare("SELECT id,'Продажа · '||id AS label,customer_id,inventory_unit_id FROM sales_v2 WHERE archived=0 ORDER BY sold_at DESC LIMIT 1000").all(),
     db.prepare("SELECT id,title AS label FROM admin_records WHERE kind='leasing_applications' AND archived=0 ORDER BY updated_at DESC LIMIT 1000").all(),
-  ]);return {customers:customers.results,deals:deals.results,inventory:inventory.results,accounts:accounts.results,suppliers:suppliers.results,purchases:purchases.results,shipments:shipments.results,staff:staff.results,sales:sales.results,leasing:leasing.results};
+  ]);return {models:catalog.map(model=>({id:`model:${model.slug}`,label:`Changfa ${model.model} · без VIN`,category:model.category})),customers:customers.results,deals:deals.results,inventory:inventory.results.map(row=>({...row,category:categories.get(String(row.tractor_slug))||"Другие модели"})),accounts:accounts.results,suppliers:suppliers.results,purchases:purchases.results,shipments:shipments.results,staff:staff.results,sales:sales.results,leasing:leasing.results};
 }

@@ -1,4 +1,0 @@
-const CACHE="atadan-shell-v2";
-self.addEventListener("install",event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(["/admin","/icons/atadan-app-192.png","/icons/atadan-app-512.png","/manifest.webmanifest"]))));
-self.addEventListener("activate",event=>event.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(key=>key!==CACHE).map(key=>caches.delete(key))))));
-self.addEventListener("fetch",event=>{const url=new URL(event.request.url);if(event.request.method!=="GET"||url.origin!==location.origin)return;event.respondWith(fetch(event.request).then(response=>{if(response.ok&&event.request.destination!=="document"){const copy=response.clone();void caches.open(CACHE).then(cache=>cache.put(event.request,copy))}return response}).catch(()=>caches.match(event.request).then(response=>response||(url.pathname.startsWith("/admin")?caches.match("/admin"):Response.error()))))});

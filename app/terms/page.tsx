@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
 import { LegalPage } from "../components/LegalPage";
-export const metadata:Metadata={title:"Условия использования | ATADAN",description:"Условия использования каталога тракторов и сервисов ATADAN Changfa."};
+import { getRequestLocale } from "../lib/locale-server";
+import { pageMetadata } from "../lib/seo";
+export async function generateMetadata(){return pageMetadata("terms","/terms",await getRequestLocale())}
 export default function TermsPage(){return <LegalPage kind="terms"/>}

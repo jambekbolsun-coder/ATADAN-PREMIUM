@@ -47,6 +47,11 @@ CREATE TABLE IF NOT EXISTS leads (
   consent_version TEXT NOT NULL DEFAULT 'legacy',
   consent_at TIMESTAMPTZ,
   source_path TEXT NOT NULL DEFAULT '',
+  utm_source TEXT NOT NULL DEFAULT '',
+  utm_medium TEXT NOT NULL DEFAULT '',
+  utm_campaign TEXT NOT NULL DEFAULT '',
+  utm_content TEXT NOT NULL DEFAULT '',
+  utm_term TEXT NOT NULL DEFAULT '',
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
