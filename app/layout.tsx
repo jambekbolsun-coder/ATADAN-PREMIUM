@@ -24,6 +24,9 @@ export const metadata: Metadata = {
   title: "ATADAN Changfa: тракторы в Кыргызстане",
   description: "Каталог тракторов Changfa, подбор техники, финансирование, новости и сервис ATADAN в Кыргызстане.",
   robots: { index: true, follow: true },
+  verification: {
+    google: "8J9ahNKhEvSgCU1xLVscRs92YMvSNYbj45OckHEls7k",
+  },
   icons: {
     icon: [{ url: "/icons/atadan-app-192.png", type: "image/png", sizes: "192x192" }],
     shortcut: "/icons/atadan-app-192.png",
