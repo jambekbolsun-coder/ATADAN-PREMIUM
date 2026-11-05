@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import type { Locale, LocalizedText } from "../types";
 import { localizedPath } from "./i18n-routing";
 
-export const SITE_URL="https://atadan-changfa.vercel.app";
+export const SITE_URL="https://atadan.kg";
 export const FALLBACK_IMAGE="/images/hero/atadan-field-wide.png";
 
 const localeTag:Record<Locale,string>={ru:"ru_KG",ky:"ky_KG",en:"en_US"};
