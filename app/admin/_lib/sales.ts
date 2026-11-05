@@ -15,6 +15,7 @@ import type { Actor } from "../../lib/admin-auth";
 import { normalizePhone } from "../../lib/business";
 import { HttpError } from "../../lib/security";
 import { getCatalog, suggestedPriceUsd } from "../../lib/catalog";
+import { notify } from "./db-kit";
 
 export type SaleCurrency = "USD" | "KGS";
 export type PaymentMethod = "full" | "prepay" | "installment" | "bank_leasing" | "state_leasing";
@@ -286,7 +287,7 @@ export type NewSaleInput = {
   fxRate: number | string;
   method: PaymentMethod;
   bankName?: string;
-  items: { kind: "unit" | "model_order" | "part" | "service"; unitId?: string; slug?: string; title?: string; qty?: number; price: number | string }[];
+  items: { kind: "unit" | "model_order" | "part" | "service"; unitId?: string; partId?: string; slug?: string; title?: string; qty?: number; price: number | string }[];
   advance?: number | string;
   advanceDue?: string;
   months?: number;
@@ -336,7 +337,7 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
 
     // 2. Позиции: блокируем машины, проверяем, что их никто не продал раньше
     let total = 0, listTotal = 0, costKgs = 0, unknownCost = false;
-    const rows: { kind: string; unitId: string | null; slug: string | null; title: string; qty: number; price: number; list: number; cost: number }[] = [];
+    const rows: { kind: string; unitId: string | null; partId?: string; slug: string | null; title: string; qty: number; price: number; list: number; cost: number }[] = [];
     for (const item of input.items) {
       const price = toMinor(item.price, "Цена позиции");
       if (item.kind === "unit") {
@@ -358,6 +359,15 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
         const listUsd = m.priceUsd * 100;
         rows.push({ kind: "model_order", unitId: null, slug: m.slug, title: `${m.model} · под заказ`, qty, price, list: currency === "USD" ? listUsd : Math.round(listUsd * fx), cost: 0 });
         unknownCost = true;
+      } else if (item.kind === "part" && item.partId) {
+        // запчасть со склада: блокируем строку, проверяем остаток; списание ниже, вместе с продажей
+        const qty = Math.max(1, Math.min(10_000, Math.round(Number(item.qty) || 1)));
+        const [pt] = await q<{ id: string; sku: string; name: string; qty: number; cost_minor: number; price_minor: number; archived: number }>("SELECT id, sku, name, qty, cost_minor, price_minor, archived FROM parts WHERE id=? FOR UPDATE", text(item.partId, 100));
+        if (!pt || pt.archived) throw new HttpError(404, "Запчасть не найдена на складе");
+        const already = rows.filter((r) => r.partId === pt.id).reduce((n, r) => n + r.qty, 0);
+        if (pt.qty < already + qty) throw new HttpError(409, `${pt.name} (${pt.sku}): на складе только ${pt.qty}`);
+        const costInSale = Number(pt.cost_minor);
+        rows.push({ kind: "part", unitId: null, partId: pt.id, slug: null, title: `${pt.name} · ${pt.sku}`, qty, price, list: currency === "KGS" ? Number(pt.price_minor) : Math.round(Number(pt.price_minor) / fx), cost: costInSale });
       } else if (item.kind === "part" || item.kind === "service") {
         const title = text(item.title, 200);
         if (title.length < 2) throw new HttpError(400, "Укажите название запчасти или услуги");
@@ -424,7 +434,13 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
       total, listTotal, costKgs, belowCostReason, reserveUntil, text(input.notes, 2000), actor.id,
     );
     for (const r of rows) {
-      await q("INSERT INTO sale_order_items(id,sale_id,kind,inventory_unit_id,tractor_slug,title,qty,price_minor,list_price_minor,cost_kgs_minor) VALUES(?,?,?,?,?,?,?,?,?,?)", id(), saleId, r.kind, r.unitId, r.slug, r.title, r.qty, r.price, r.list, r.cost);
+      await q("INSERT INTO sale_order_items(id,sale_id,kind,inventory_unit_id,tractor_slug,title,qty,price_minor,list_price_minor,cost_kgs_minor,part_id) VALUES(?,?,?,?,?,?,?,?,?,?,?)", id(), saleId, r.kind, r.unitId, r.slug, r.title, r.qty, r.price, r.list, r.cost, r.partId ?? null);
+      if (r.partId) {
+        const [pt] = await q<{ qty: number; min_qty: number }>("UPDATE parts SET qty=qty-?, updated_at=CURRENT_TIMESTAMP WHERE id=? AND qty>=? RETURNING qty, min_qty", r.qty, r.partId, r.qty);
+        if (!pt) throw new HttpError(409, `${r.title}: не хватает на складе`);
+        if (pt.min_qty > 0 && pt.qty <= pt.min_qty && pt.qty + r.qty > pt.min_qty) await notify(q, { topic: "parts", title: `Пора заказать: ${r.title}`, body: `Осталось ${pt.qty}, минимум ${pt.min_qty}`, url: `/admin/work/parts/${r.partId}`, roles: ["owner", "director", "accountant"], perms: ["inventory-units"] });
+        await q("INSERT INTO part_movements(id,part_id,kind,qty_delta,qty_after,unit_cost_minor,sale_id,note,created_by) VALUES(?,?,'sale',?,?,?,?,?,?)", id(), r.partId, -r.qty, pt.qty, r.cost, saleId, `Продажа ${number}`, actor.id);
+      }
       if (r.unitId) {
         const [u] = await q<{ status: string }>("SELECT status FROM inventory_units_v2 WHERE id=?", r.unitId);
         await q("UPDATE inventory_units_v2 SET reserved_sale_id=?, status=CASE WHEN status='stock' THEN 'reserved' ELSE status END, updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", saleId, actor.id, r.unitId);
@@ -436,6 +452,7 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
     await event(q, saleId, actor, "created", `Продажа оформлена: ${METHOD[method].label}${bankName ? `, ${bankName}` : ""}. Резерв до ${reserveUntil}.${unknownCost ? " Есть позиции без себестоимости: маржа предварительная." : ""}`);
     if (customerNote) await event(q, saleId, actor, "customer", customerNote);
     if (belowCostReason) await event(q, saleId, actor, "below_cost", `Цена ниже себестоимости. Причина: ${belowCostReason}`);
+    if (belowCostReason) await notify(q, { topic: "approvals", priority: "high", title: `Продажа ${number} ниже себестоимости`, body: belowCostReason, url: `/admin/work/sales/${saleId}`, exclude: actor.id, entity: { type: "sale", id: saleId } });
     return { id: saleId, number };
   });
 }
@@ -504,6 +521,7 @@ export async function addPayment(actor: Actor, saleId: string, input: PaymentInp
     );
     if (payer === "bank" && s.bank_decision !== "approved") await q("UPDATE sale_orders SET bank_decision='approved' WHERE id=?", s.id);
     await event(q, s.id, actor, "payment", `Платёж ${(amount / 100).toLocaleString("ru-RU")} ${currency === "USD" ? "$" : "с"} от ${payer === "bank" ? "банка" : "клиента"} · ${account.name}`);
+    if (s.manager_id && s.manager_id !== actor.id) await notify(q, { topic: "payments", title: `Оплата по продаже ${s.number}`, body: `${(amount / 100).toLocaleString("ru-RU")} ${currency === "USD" ? "$" : "с"} от ${payer === "bank" ? "банка" : "клиента"}`, url: `/admin/work/sales/${s.id}`, to: [s.manager_id], entity: { type: "sale", id: s.id } });
     await q("UPDATE sale_orders SET updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", s.id);
     await refreshClosed(q, s);
     return { paymentId };
@@ -678,6 +696,12 @@ export async function cancelSale(actor: Actor, saleId: string, reason: string) {
     for (const u of units) {
       await q("UPDATE inventory_units_v2 SET reserved_sale_id=NULL, status=CASE WHEN status='reserved' THEN 'stock' ELSE status END, updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=? AND reserved_sale_id=?", actor.id, u.inventory_unit_id, s.id);
       await q("INSERT INTO inventory_lifecycle_events(id,inventory_unit_id,from_status,to_status,actor_id,note) VALUES(?,?, 'reserved', 'stock', ?, ?)", id(), u.inventory_unit_id, actor.id, `Резерв снят: продажа ${s.number} отменена`);
+    }
+    // запчасти возвращаем на склад
+    const parts = await q<{ part_id: string; qty: number; cost_kgs_minor: number }>("SELECT part_id, qty, cost_kgs_minor FROM sale_order_items WHERE sale_id=? AND active=1 AND part_id IS NOT NULL", s.id);
+    for (const p of parts) {
+      const [pt] = await q<{ qty: number }>("UPDATE parts SET qty=qty+?, updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING qty", p.qty, p.part_id);
+      await q("INSERT INTO part_movements(id,part_id,kind,qty_delta,qty_after,unit_cost_minor,sale_id,note,created_by) VALUES(?,?,'return',?,?,?,?,?,?)", id(), p.part_id, p.qty, pt?.qty ?? 0, Number(p.cost_kgs_minor), s.id, `Продажа ${s.number} отменена`, actor.id);
     }
     await q("UPDATE sale_order_items SET active=0 WHERE sale_id=?", s.id);
     await q("UPDATE sale_orders SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", why, s.id);

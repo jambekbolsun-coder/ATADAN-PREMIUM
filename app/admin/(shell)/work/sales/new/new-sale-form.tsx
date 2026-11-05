@@ -9,7 +9,8 @@ import { Field } from "../../../../_ui/forms";
 type Unit = { id: string; vin: string; model: string; tractor_slug: string; status: string; list_price_minor: number; cost_minor: number };
 type Model = { slug: string; model: string; hp: number; priceUsd: number };
 type MethodInfo = { key: PaymentMethod; label: string; short: string; tone: string; hint: string };
-type Item = { key: string; kind: "unit" | "model_order" | "part" | "service"; unitId?: string; slug?: string; title: string; qty: string; price: string; costKgs: number };
+type Part = { id: string; sku: string; name: string; qty: number; unit: string; price_minor: number; cost_minor: number };
+type Item = { key: string; kind: "unit" | "model_order" | "part" | "service"; unitId?: string; partId?: string; maxQty?: number; slug?: string; title: string; qty: string; price: string; costKgs: number };
 
 const UNIT_STATUS: Record<string, string> = { stock: "на складе", ordered: "заказана", production: "в производстве", transit: "в пути", customs: "на таможне" };
 const num = (v: string) => Number(String(v).replace(/\s/g, "").replace(",", ".")) || 0;
@@ -19,7 +20,7 @@ let seq = 0;
 const key = () => `i${++seq}`;
 
 export function NewSaleForm(props: {
-  units: Unit[]; models: Model[]; fxDefault: number; fxDate: string | null; policy: SalesPolicy; methods: MethodInfo[];
+  units: Unit[]; models: Model[]; parts: Part[]; fxDefault: number; fxDate: string | null; policy: SalesPolicy; methods: MethodInfo[];
   banks: string[]; showCost: boolean; isOwner: boolean; lead: { id: string; name: string; phone: string; slug: string | null } | null;
 }) {
   const { units, models, policy, lead } = props;
@@ -66,6 +67,12 @@ export function NewSaleForm(props: {
     setItems((x) => [...x, { key: key(), kind: "model_order", slug, title: `${m.model} · под заказ`, qty: "1", price: String(currency === "USD" ? m.priceUsd : Math.round(m.priceUsd * rate)), costKgs: 0 }]);
     setPicker(null);
   }
+  const [partQuery, setPartQuery] = useState("");
+  function addPart(p: Part) {
+    if (items.some((i) => i.partId === p.id)) return;
+    setItems((x) => [...x, { key: key(), kind: "part", partId: p.id, maxQty: p.qty, title: `${p.name} · ${p.sku}`, qty: "1", price: String(Math.round(fromKgs(p.price_minor))), costKgs: p.cost_minor }]);
+    setPicker(null);
+  }
   function addFree(kind: "part" | "service") {
     setItems((x) => [...x, { key: key(), kind, title: "", qty: "1", price: "", costKgs: 0 }]);
     setPicker(null);
@@ -101,6 +108,7 @@ export function NewSaleForm(props: {
       if (currency === "USD" && !(num(fx) >= 1)) return "Укажите курс доллара";
       for (const i of items) {
         if ((i.kind === "part" || i.kind === "service") && i.title.trim().length < 2) return "Укажите название каждой запчасти или услуги";
+        if (i.partId && i.maxQty !== undefined && (num(i.qty) || 1) > i.maxQty) return `${i.title}: на складе только ${i.maxQty}`;
         if (!(num(i.price) > 0)) return `Укажите цену: ${i.title || "позиция без названия"}`;
       }
     }
@@ -131,7 +139,7 @@ export function NewSaleForm(props: {
         fxRate: currency === "USD" ? fx : 1,
         method,
         bankName: leasing ? bank : "",
-        items: items.map((i) => ({ kind: i.kind, unitId: i.unitId, slug: i.slug, title: i.title, qty: num(i.qty) || 1, price: i.price })),
+        items: items.map((i) => ({ kind: i.kind, unitId: i.unitId, partId: i.partId, slug: i.slug, title: i.title, qty: num(i.qty) || 1, price: i.price })),
         advance: advance || undefined,
         advanceDue,
         months: method === "installment" ? num(months) : undefined,
@@ -236,9 +244,26 @@ export function NewSaleForm(props: {
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", margin: "12px 0" }}>
               <button type="button" className="ax-btn" aria-pressed={picker === "unit"} onClick={() => setPicker(picker === "unit" ? null : "unit")}><Plus size={16} aria-hidden />Машина со склада</button>
               <button type="button" className="ax-btn" aria-pressed={picker === "model"} onClick={() => setPicker(picker === "model" ? null : "model")}><Plus size={16} aria-hidden />Под заказ</button>
-              <button type="button" className="ax-btn" onClick={() => addFree("part")}><Plus size={16} aria-hidden />Запчасть</button>
+              <button type="button" className="ax-btn" aria-pressed={picker === "part"} onClick={() => setPicker(picker === "part" ? null : "part")}><Plus size={16} aria-hidden />Запчасть</button>
               <button type="button" className="ax-btn" onClick={() => addFree("service")}><Plus size={16} aria-hidden />Услуга</button>
             </div>
+
+            {picker === "part" ? (
+              <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                <input className="ax-input" value={partQuery} onChange={(e) => setPartQuery(e.target.value)} placeholder="Артикул или название" aria-label="Поиск запчасти" />
+                <ul className="ax-grouped" style={{ maxHeight: 300, overflowY: "auto" }}>
+                  {props.parts.filter((p) => !partQuery.trim() || `${p.sku} ${p.name}`.toLowerCase().includes(partQuery.trim().toLowerCase())).slice(0, 60).map((p) => (
+                    <li key={p.id}>
+                      <button type="button" className="ax-row" style={{ width: "100%", textAlign: "left" }} disabled={items.some((i) => i.partId === p.id)} onClick={() => addPart(p)}>
+                        <span className="ax-row-body"><span className="ax-row-t">{p.name}</span><span className="ax-row-s">{p.sku} · на складе {p.qty} {p.unit}</span></span>
+                        <span className="ax-row-end num">{fmt(fromKgs(p.price_minor), currency)}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div><button type="button" className="ax-btn ax-btn-sm ax-btn-ghost" onClick={() => addFree("part")}>Нет в списке: ввести вручную (без списания со склада)</button></div>
+              </div>
+            ) : null}
 
             {picker === "unit" ? (
               units.length ? (

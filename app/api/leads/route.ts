@@ -67,7 +67,7 @@ export async function POST(request: Request) {
         if(assignee?.id){
           const due=new Date(Date.now()+30*60_000).toISOString();
           statements.push(db.prepare("INSERT INTO crm_tasks(id,deal_id,customer_id,title,description,priority,assigned_to,due_at) VALUES(?,?,?,'Связаться с новым лидом','Новая заявка с публичного сайта','high',?,?)").bind(crypto.randomUUID(),dealId,customerId,assignee.id,due));
-          statements.push(db.prepare("INSERT INTO notifications_v2(id,recipient_id,type,priority,title,body,entity_type,entity_id,target_url) VALUES(?,?,'new_lead','high',?,?,'deal',?,'/admin/legacy/company/deals')").bind(crypto.randomUUID(),assignee.id,`Новый лид: ${name}`,phone,dealId));
+          statements.push(db.prepare("INSERT INTO notifications_v2(id,recipient_id,type,priority,title,body,entity_type,entity_id,target_url) VALUES(?,?,'new_lead','high',?,?,'deal',?,'/admin/work/leads')").bind(crypto.randomUUID(),assignee.id,`Новый лид: ${name}`,phone,dealId));
         }
         for (const statement of statements) await statement.execute(client);
       });

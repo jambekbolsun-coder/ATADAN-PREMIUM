@@ -436,3 +436,11 @@ a.ax-list-row:hover { background: var(--surface-2); border-radius: 10px; }
 .ax-pipe-col h4 span { background: var(--surface); border-radius: 10px; padding: 0 7px; }
 .ax-pipe-card { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px; margin-bottom: 8px; }
 .ax-pipe-card:hover { border-color: var(--brand); }
+
+/* ── Формы редактирования: кнопки сохранения всегда под рукой */
+.ax-sticky-actions { position: sticky; bottom: 0; z-index: 6; padding: 10px 0; background: linear-gradient(to top, var(--bg) 70%, transparent); }
+@media (max-width: 1023px) { .ax-sticky-actions { bottom: calc(64px + env(safe-area-inset-bottom)); } }
+.ax-thumb { width: 54px; height: 40px; object-fit: cover; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); display: block; }
+.ax-langs { display: flex; gap: 6px; margin-bottom: 10px; }
+.ax-langs button { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 13px; }
+.ax-langs button[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 650; }

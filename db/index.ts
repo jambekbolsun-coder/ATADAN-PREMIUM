@@ -4,6 +4,7 @@ import { POSTGRES_SCHEMA_SQL } from "./postgres-schema";
 import { ADMIN_V2_SCHEMA_SQL } from "./admin-v2-schema";
 import { SALES_DEPT_SCHEMA_SQL } from "./sales-dept-schema";
 import { STOCK_MONEY_SCHEMA_SQL } from "./stock-money-schema";
+import { MARKETING_SCHEMA_SQL } from "./marketing-schema";
 
 types.setTypeParser(types.builtins.INT8, Number);
 types.setTypeParser(types.builtins.NUMERIC, Number);
@@ -151,6 +152,7 @@ export async function ensureDb() {
       await client.query(ADMIN_V2_SCHEMA_SQL);
       await client.query(SALES_DEPT_SCHEMA_SQL);
       await client.query(STOCK_MONEY_SCHEMA_SQL);
+      await client.query(MARKETING_SCHEMA_SQL);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);

@@ -14,6 +14,7 @@ import type { Actor } from "../../lib/admin-auth";
 import { normalizeVin } from "../../lib/business";
 import { HttpError } from "../../lib/security";
 import { catalogModels } from "./sales";
+import { notify } from "./db-kit";
 
 export type PoCurrency = "USD" | "CNY" | "KGS";
 export const UNIT_STATUS: Record<string, { label: string; tone: "good" | "warn" | "bad" | "info" | "mute" }> = {
@@ -412,6 +413,7 @@ export async function receiveShipment(actor: Actor, shipmentId: string, unitIds:
     const missing = units.filter((u) => !u.received_at && !pick.has(u.id));
     await q(`UPDATE shipments_v2 SET status=?, received_at=CASE WHEN ? THEN CURRENT_TIMESTAMP ELSE received_at END, arrived_at=COALESCE(arrived_at,CURRENT_TIMESTAMP), updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?`, missing.length ? "cleared" : "received", !missing.length, actor.id, s.id);
     await audit(q, actor, "shipment.received", s.id, `Принято ${got} машин${missing.length ? `, не пришли: ${missing.map((m) => m.vin).join(", ")}` : ""}`);
+    if (missing.length) await notify(q, { topic: "logistics", priority: "high", title: `Недостача в поставке ${s.tracking_number}`, body: `Не пришли: ${missing.map((m) => m.vin).join(", ")}`, url: `/admin/work/logistics/shipments/${s.id}`, roles: ["owner", "director", "accountant"], perms: ["shipments"], exclude: actor.id, entity: { type: "shipment", id: s.id } });
     await recalcShipment(q, s.id);
     return { received: got, missing: missing.length };
   });
