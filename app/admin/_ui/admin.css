@@ -428,3 +428,11 @@ a.ax-list-row:hover { background: var(--surface-2); border-radius: 10px; }
 .ax-in { color: var(--good); font-weight: 650; }
 .ax-out { color: var(--bad); font-weight: 650; }
 .ax-row-line { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+
+/* логистика: поставки по этапам */
+.ax-pipe { display: grid; grid-template-columns: repeat(6, minmax(170px, 1fr)); gap: 10px; overflow-x: auto; padding-bottom: 4px; }
+.ax-pipe-col { background: var(--surface-2); border: 1px solid var(--border); border-radius: 14px; padding: 10px; min-height: 140px; }
+.ax-pipe-col h4 { margin: 0 0 8px; font-size: 12px; font-weight: 650; color: var(--muted); display: flex; justify-content: space-between; gap: 6px; }
+.ax-pipe-col h4 span { background: var(--surface); border-radius: 10px; padding: 0 7px; }
+.ax-pipe-card { display: block; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 10px; margin-bottom: 8px; }
+.ax-pipe-card:hover { border-color: var(--brand); }

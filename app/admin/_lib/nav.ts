@@ -45,7 +45,7 @@ export const NAV: NavItem[] = [
   { href: "/admin/work/logistics", label: "Логистика", icon: "truck", tone: "sky", space: "work", group: "Склад и логистика", perms: ["purchases", "shipments", "suppliers"], hint: "Заказы заводу, поставки, таможня, приём на склад", legacy: "/admin/legacy/company/shipments" },
   { href: "/admin/work/service", label: "Сервис и гарантия", icon: "wrench", tone: "lilac", space: "work", group: "Склад и логистика", perms: ["service-cases"], hint: "Обращения по технике, гарантийные случаи", legacy: "/admin/legacy/company/service-cases" },
   // ── Работа · Финансы
-  { href: "/admin/work/cash", label: "Касса и платежи", icon: "wallet", tone: "green", space: "work", group: "Финансы", perms: ["payments", "finance", "financial-accounts"], hint: "Все деньги: приход, расход, остатки касс и счетов", legacy: "/admin/legacy/company/payments" },
+  { href: "/admin/work/cash", label: "Касса и платежи", icon: "wallet", tone: "green", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Все деньги: приход, расход, остатки касс и счетов", legacy: "/admin/legacy/company/payments" },
   { href: "/admin/work/debts", label: "Долги", icon: "scale", tone: "terra", space: "work", group: "Финансы", perms: ["debts"], hint: "Кто нам должен: клиенты и банки, просрочки", legacy: "/admin/legacy/company/debts" },
   { href: "/admin/work/expenses", label: "Расходы", icon: "receipt", tone: "sun", space: "work", group: "Финансы", perms: ["expenses"], hint: "Аренда, реклама, таможня, логистика и прочее", legacy: "/admin/legacy/company/expenses" },
   { href: "/admin/work/margin", label: "Маржа", icon: "trend", tone: "teal", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Прибыль по продаже, модели и менеджеру", legacy: "/admin/legacy/control/control-models" },
@@ -140,9 +140,9 @@ export type PlusAction = { key: string; label: string; hint: string; icon: IconK
 
 export const PLUS_ACTIONS: PlusAction[] = [
   { key: "sale", label: "Новая продажа", hint: "Клиент, техника, способ оплаты", icon: "cart", tone: "green", href: "/admin/work/sales/new", perms: ["sales", "deals"] },
-  { key: "payment", label: "Записать платёж", hint: "По продаже или прочий приход", icon: "wallet", tone: "sun", href: "/admin/work/cash/new", perms: ["payments", "finance"] },
-  { key: "expense", label: "Добавить расход", hint: "Сумма, категория, чек", icon: "receipt", tone: "terra", href: "/admin/work/expenses/new", perms: ["expenses"] },
-  { key: "receive", label: "Принять технику", hint: "По поставке, с VIN", icon: "truck", tone: "sky", href: "/admin/work/logistics/receive", perms: ["inventory-units", "shipments"] },
+  { key: "payment", label: "Приход или расход", hint: "Касса: приход, расход, перевод", icon: "wallet", tone: "sun", href: "/admin/work/cash/new", roles: ["owner", "director", "accountant"] },
+  { key: "expense", label: "Добавить расход", hint: "Сумма, категория, касса", icon: "receipt", tone: "terra", href: "/admin/work/cash/new?type=out", roles: ["owner", "director", "accountant"] },
+  { key: "receive", label: "Принять технику", hint: "Поставка пришла на склад", icon: "truck", tone: "sky", href: "/admin/work/logistics?tab=shipments", perms: ["shipments", "purchases"] },
   { key: "lead", label: "Новая заявка", hint: "Звонок или визит в офис", icon: "inbox", tone: "teal", href: "/admin/work/leads/new", perms: ["site-leads", "deals"] },
   { key: "model", label: "Модель в каталог", hint: "Цена, фото, характеристики", icon: "tractor", tone: "lilac", href: "/admin/marketing/catalog/new", perms: ["catalog"] },
   { key: "part", label: "Запчасть", hint: "Артикул, цена, к каким моделям", icon: "box", tone: "sun", href: "/admin/marketing/parts/new", perms: ["catalog"] },

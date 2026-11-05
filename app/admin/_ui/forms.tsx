@@ -38,6 +38,7 @@ type DialogProps = {
 /** Кнопка, открывающая диалог с формой. После успеха диалог закрывается и показывается уведомление. */
 export function ActionDialog({ label, title, description, action, submitLabel, variant = "primary", triggerClass, disabled, disabledReason, children }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
   const [state, formAction, actionPending] = useActionState(action, null);
   const [transitionPending, startSubmit] = useTransition();
   const submitting = actionPending || transitionPending;
@@ -48,7 +49,11 @@ export function ActionDialog({ label, title, description, action, submitLabel, v
     if (state?.ok) setToast(state.message ?? "Сохранено");
   }
   useEffect(() => {
-    if (state?.ok) ref.current?.close();
+    // после успеха закрываем и очищаем поля, чтобы следующая запись не унаследовала старые значения
+    if (state?.ok) {
+      ref.current?.close();
+      formRef.current?.reset();
+    }
   }, [state]);
   return (
     <>
@@ -68,6 +73,7 @@ export function ActionDialog({ label, title, description, action, submitLabel, v
           {description ? <div className="ax-small" style={{ marginBottom: 12 }}>{description}</div> : null}
           {/* Отправляем вручную: при ошибке введённые значения не сбрасываются (React по умолчанию очищает форму). */}
           <form
+            ref={formRef}
             onSubmit={(e) => {
               e.preventDefault();
               const data = new FormData(e.currentTarget);
