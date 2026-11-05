@@ -3,6 +3,8 @@ import { clientIp, digest, HttpError } from "./security";
 
 const COOKIE_NAME = "atadan_admin";
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
+/** «Запомнить меня» на странице входа: сессия на 30 дней вместо 8 часов. */
+const REMEMBER_TTL_SECONDS = 30 * 24 * 60 * 60;
 const DEFAULT_PBKDF2_ITERATIONS = 100_000;
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -239,16 +241,17 @@ export async function authenticateStaff(email: string, password: string, request
   await getRawDb().prepare("UPDATE staff SET password_hash=?,salt=?,role='owner',active=1 WHERE id=?").bind(derived.hash, derived.salt, owner.id).run();
   return owner;
 }
-export async function createStaffSession(actor: Actor, request: Request) {
+export async function createStaffSession(actor: Actor, request: Request, remember = false) {
+  const ttl = remember ? REMEMBER_TTL_SECONDS : SESSION_TTL_SECONDS;
   const token = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
   const now=Math.floor(Date.now()/1000);
   const ip=clientIp(request);
   await getRawDb().batch([
     getRawDb().prepare("DELETE FROM staff_sessions WHERE expires_at<=?").bind(now),
-    getRawDb().prepare("INSERT INTO staff_sessions(token_hash,staff_id,expires_at,id,ip_hash,user_agent) VALUES(?,?,?,?,?,?)").bind(await digest(token),actor.id,now+SESSION_TTL_SECONDS,crypto.randomUUID(),await digest(ip),request.headers.get("user-agent")?.slice(0,500)??""),
+    getRawDb().prepare("INSERT INTO staff_sessions(token_hash,staff_id,expires_at,id,ip_hash,user_agent) VALUES(?,?,?,?,?,?)").bind(await digest(token),actor.id,now+ttl,crypto.randomUUID(),await digest(ip),request.headers.get("user-agent")?.slice(0,500)??""),
     getRawDb().prepare("INSERT INTO auth_events(id,staff_id,identifier,event_type,ip_hash,user_agent) VALUES(?,?,?,'login_success',?,?)").bind(crypto.randomUUID(),actor.id,actor.email,await digest(ip),request.headers.get("user-agent")?.slice(0,500)??""),
   ]);
-  return `${STAFF_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${SESSION_TTL_SECONDS}${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`;
+  return `${STAFF_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${ttl}${new URL(request.url).protocol === "https:" ? "; Secure" : ""}`;
 }
 export async function revokeStaffSession(request: Request) {
   const token = staffToken(request);

@@ -19,7 +19,7 @@ export async function POST(request: Request) {
       await getRawDb().prepare("INSERT INTO auth_events(id,identifier,event_type,ip_hash,user_agent) VALUES(?,?,'login_failed',?,?)").bind(crypto.randomUUID(),username,await digest(ip),request.headers.get("user-agent")?.slice(0,500)??"").run();
       throw new HttpError(401, "Неверный логин или пароль");
     }
-    return Response.json({ authenticated:true }, {headers:{"Set-Cookie":await createStaffSession(actor, request),"Cache-Control":"no-store"}});
+    return Response.json({ authenticated:true }, {headers:{"Set-Cookie":await createStaffSession(actor, request, body.remember === true),"Cache-Control":"no-store"}});
   } catch(e) {
     if (!(e instanceof HttpError) || e.status >= 500) {
       const error=e as Error & {code?:string};
