@@ -176,6 +176,7 @@ export default async function Home() {
           ) : null}
         </div>
 
+        <div className="ax-aside-sticky">
         <Card title={<>Требует внимания {d.attention.length ? <Badge tone="bad">{d.attention.length}</Badge> : null}</>}>
           {d.attention.length ? (
             <div className="ax-list">
@@ -192,6 +193,7 @@ export default async function Home() {
           )}
           {seesCost(actor) ? null : <p className="ax-small" style={{ margin: "12px 4px 0" }}>Себестоимость и маржа видны владельцу, директору и бухгалтеру.</p>}
         </Card>
+        </div>
       </div>
     </>
   );

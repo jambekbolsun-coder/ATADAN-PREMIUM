@@ -453,3 +453,9 @@ a.ax-list-row:hover { background: var(--surface-2); border-radius: 10px; }
   .ax, .ax-card { background: #fff !important; color: #000 !important; box-shadow: none !important; }
   .ax-card { border: 1px solid #ccc !important; break-inside: avoid; }
 }
+
+/* Боковая колонка страницы (например «Требует внимания»): по высоте содержимого, на компьютере прилипает при прокрутке */
+.ax-aside-sticky { align-self: start; min-width: 0; }
+@media (min-width: 1024px) {
+  .ax-aside-sticky { position: sticky; top: 72px; max-height: calc(100dvh - 88px); overflow-y: auto; scrollbar-width: thin; }
+}
