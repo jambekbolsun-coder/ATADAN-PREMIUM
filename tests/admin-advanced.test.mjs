@@ -61,7 +61,7 @@ test("staff login uses a PostgreSQL-safe rate-limit upsert", async () => {
   ]);
   assert.match(security, /SET hits=request_limits\.hits\+1 RETURNING hits/);
   assert.match(session, /authenticateStaff\(username, password, request\)/);
-  assert.match(session, /createStaffSession\(actor, request\)/);
+  assert.match(session, /createStaffSession\(actor, request(, body\.remember === true)?\)/);
 });
 
 test("logout expires both staff and legacy admin cookies before reloading the login screen", async () => {
