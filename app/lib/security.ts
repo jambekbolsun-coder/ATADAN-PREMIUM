@@ -1,5 +1,15 @@
 import { getRawDb } from "../../db";
 export class HttpError extends Error { constructor(public status: number, message: string) { super(message); } }
+/**
+ * IP клиента для лимитов и журнала. На Vercel заголовки x-real-ip и x-forwarded-for
+ * выставляет сама платформа (подменить их клиент не может); cf-connecting-ip приходит
+ * от клиента как есть, поэтому ему не доверяем.
+ */
+export function clientIp(request: Request) {
+  return request.headers.get("x-real-ip")?.trim()
+    || request.headers.get("x-forwarded-for")?.split(",")[0]?.trim()
+    || "local";
+}
 export function sameOrigin(request: Request) {
   if (request.headers.get("sec-fetch-site") === "cross-site") throw new HttpError(403, "Запрос с другого сайта запрещён");
   const origin = request.headers.get("origin");

@@ -28,7 +28,9 @@ type ImportKind = "customers" | "inventory";
 type ImportRow = Record<string, string> & { __row: string };
 
 function csvCell(value: unknown) {
-  const text = value == null ? "" : String(value);
+  let text = value == null ? "" : String(value);
+  // Защита от формул в Excel: текст, начинающийся с = + - @, открывается как формула.
+  if (typeof value === "string" && /^[=+\-@\t\r]/.test(text) && !/^-?\d+([.,]\d+)?$/.test(text)) text = `'${text}`;
   return /[",\r\n]/.test(text) ? `"${text.replaceAll('"', '""')}"` : text;
 }
 
@@ -142,8 +144,16 @@ export async function GET(request: Request) {
     }
     const permission = exportPermission[type], sql = exportSql[type];
     if (!permission || !sql || !canUseSection(actor, permission)) throw new HttpError(403, "Нет доступа к экспорту");
-    const rows = await db.prepare(sql).all();
-    return new Response(toCsv(rows.results), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename=atadan-${type}-${new Date().toISOString().slice(0, 10)}.csv`, "Cache-Control": "no-store" } });
+    let rows = (await db.prepare(sql).all()).results as Record<string, unknown>[];
+    // Менеджер выгружает только свои сделки и своих клиентов - как и видит их в CRM.
+    if (actor.role === "manager" && ["clients", "deals", "sales", "payments", "debts"].includes(type)) {
+      const own = (await db.prepare("SELECT id,customer_id FROM crm_deals WHERE assigned_to=? AND archived=0").bind(actor.id).all<{ id: string; customer_id: string }>()).results;
+      const dealIds = new Set(own.map((row) => row.id)), customerIds = new Set(own.map((row) => row.customer_id));
+      rows = rows.filter((row) => type === "clients" ? customerIds.has(String(row.id)) : type === "deals" ? row.assigned_to === actor.id : dealIds.has(String(row.deal_id)));
+    }
+    // Себестоимость и маржу видят только владелец, директор и бухгалтер.
+    if (!["owner", "director", "accountant"].includes(actor.role)) rows = rows.map((row) => Object.fromEntries(Object.entries(row).filter(([key]) => !/cost|margin/i.test(key))));
+    return new Response(toCsv(rows), { headers: { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": `attachment; filename=atadan-${type}-${new Date().toISOString().slice(0, 10)}.csv`, "Cache-Control": "no-store" } });
   } catch (error) { return fail(error); }
 }
 

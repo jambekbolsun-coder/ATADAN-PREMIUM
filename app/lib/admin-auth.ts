@@ -1,5 +1,5 @@
 import { ensureDb, getRawDb } from "../../db";
-import { digest, HttpError } from "./security";
+import { clientIp, digest, HttpError } from "./security";
 
 const COOKIE_NAME = "atadan_admin";
 const SESSION_TTL_SECONDS = 8 * 60 * 60;
@@ -242,7 +242,7 @@ export async function authenticateStaff(email: string, password: string, request
 export async function createStaffSession(actor: Actor, request: Request) {
   const token = bytesToHex(crypto.getRandomValues(new Uint8Array(32)));
   const now=Math.floor(Date.now()/1000);
-  const ip=request.headers.get("cf-connecting-ip")||request.headers.get("x-forwarded-for")?.split(",")[0]||"local";
+  const ip=clientIp(request);
   await getRawDb().batch([
     getRawDb().prepare("DELETE FROM staff_sessions WHERE expires_at<=?").bind(now),
     getRawDb().prepare("INSERT INTO staff_sessions(token_hash,staff_id,expires_at,id,ip_hash,user_agent) VALUES(?,?,?,?,?,?)").bind(await digest(token),actor.id,now+SESSION_TTL_SECONDS,crypto.randomUUID(),await digest(ip),request.headers.get("user-agent")?.slice(0,500)??""),

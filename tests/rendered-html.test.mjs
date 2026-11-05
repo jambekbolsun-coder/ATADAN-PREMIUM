@@ -62,7 +62,7 @@ test("admin workspaces use routed SQL-backed modules", async () => {
     readFile(new URL("../app/components/AdminDashboard.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/api/admin/records/route.ts", import.meta.url), "utf8"),
     readFile(new URL("../db/schema.ts", import.meta.url), "utf8"),
-    readFile(new URL("../app/admin/[workspace]/[[...section]]/page.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/admin/legacy/[workspace]/[[...section]]/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/globals.css", import.meta.url), "utf8"),
   ]);
   assert.match(dashboard, /inventory-units/);

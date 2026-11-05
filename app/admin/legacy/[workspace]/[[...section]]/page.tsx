@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
-import { AdminDashboard } from "../../../components/AdminDashboard";
-import type { AdminWorkspace } from "../../../components/AdminPortalHome";
+import { AdminDashboard } from "../../../../components/AdminDashboard";
+import type { AdminWorkspace } from "../../../../components/AdminPortalHome";
 
 export const metadata:Metadata={title:"Админ-панель | ATADAN",robots:{index:false,follow:false}};
 export const dynamic="force-dynamic";

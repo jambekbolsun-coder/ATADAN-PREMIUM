@@ -30,8 +30,8 @@ export default function JoinTeamPage(){
   return <main className="join-page"><section className="join-card">
     <Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={250} height={86}/>
     {status==="loading"?<div className="join-state"><LoaderCircle className="spin"/><h1>Проверяем приглашение</h1></div>:null}
-    {status==="error"?<div className="join-state error"><ShieldCheck/><h1>Ссылка недоступна</h1><p>{message}</p><Link href="/admin">Вернуться ко входу</Link></div>:null}
-    {status==="done"?<div className="join-state success"><CheckCircle2/><h1>Аккаунт создан</h1><p>Теперь войдите с адресом <strong>{email}</strong> и новым паролем.</p><Link className="admin-primary" href="/admin">Войти в кабинет</Link></div>:null}
+    {status==="error"?<div className="join-state error"><ShieldCheck/><h1>Ссылка недоступна</h1><p>{message}</p><Link href="/admin/login">Вернуться ко входу</Link></div>:null}
+    {status==="done"?<div className="join-state success"><CheckCircle2/><h1>Аккаунт создан</h1><p>Теперь войдите с адресом <strong>{email}</strong> и новым паролем.</p><Link className="admin-primary" href="/admin/login">Войти в кабинет</Link></div>:null}
     {status==="ready"?<form onSubmit={submit}><span className="join-icon"><KeyRound/></span><h1>Создайте аккаунт</h1><p>Приглашение для <strong>{email}</strong></p><label><span>Ваше имя</span><input name="name" required minLength={2} maxLength={120} autoComplete="name"/></label><label><span>Новый пароль</span><input name="password" type="password" required minLength={10} maxLength={128} autoComplete="new-password"/></label><label><span>Повторите пароль</span><input name="confirmation" type="password" required minLength={10} maxLength={128} autoComplete="new-password"/></label>{message?<p className="admin-error" role="alert">{message}</p>:null}<button className="admin-primary" type="submit">Создать аккаунт</button></form>:null}
   </section></main>;
 }

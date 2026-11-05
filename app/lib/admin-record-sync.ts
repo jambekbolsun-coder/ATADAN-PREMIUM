@@ -178,8 +178,11 @@ export async function normalizedRecordStatements(args: {
   return statements;
 }
 
-export async function recordLookups() {
+export async function recordLookups(actor?: Actor) {
   const catalog=await getCatalog(),categories=new Map(catalog.map(model=>[model.slug,model.category]));
+  const models=catalog.map(model=>({id:`model:${model.slug}`,label:`Changfa ${model.model} · без VIN`,category:model.category}));
+  // Маркетологу справочники компании (клиенты, сделки, VIN, счета, сотрудники) не нужны и не должны уходить в браузер.
+  if(!actor||actor.role==="marketer")return {models,customers:[],deals:[],inventory:[],accounts:[],suppliers:[],purchases:[],shipments:[],staff:[],sales:[],leasing:[]};
   const db=getRawDb();const [customers,deals,inventory,accounts,suppliers,purchases,shipments,staff,sales,leasing]=await Promise.all([
     db.prepare("SELECT id,name AS label FROM crm_customers WHERE archived=0 ORDER BY name LIMIT 1000").all(),
     db.prepare("SELECT id,title AS label,customer_id FROM crm_deals WHERE archived=0 ORDER BY updated_at DESC LIMIT 1000").all(),

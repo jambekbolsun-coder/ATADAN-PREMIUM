@@ -196,7 +196,7 @@ export function AdminCollaboration({ mode }: { mode: CollaborationMode }) {
         icon: MessageCircleMore,
         priority: "high",
         read: true,
-        url: "/admin/marketing/site-leads",
+        url: "/admin/legacy/marketing/site-leads",
       })),
       ...data.notifications.tasks.map((item) => ({
         id: String(item.id),
@@ -207,7 +207,7 @@ export function AdminCollaboration({ mode }: { mode: CollaborationMode }) {
         icon: CheckSquare,
         priority: item.done ? "normal" : "high",
         read: true,
-        url: "/admin/company/employee-tasks",
+        url: "/admin/legacy/company/employee-tasks",
       })),
       ...data.notifications.audit.map((item) => ({
         id: String(item.id),
@@ -218,7 +218,7 @@ export function AdminCollaboration({ mode }: { mode: CollaborationMode }) {
         icon: ShieldCheck,
         priority: "normal",
         read: true,
-        url: "/admin/company/audit",
+        url: "/admin/legacy/company/audit",
       })),
     ]
       .sort(
@@ -556,7 +556,7 @@ function GroupEditor({
         <h3>{group.title}</h3>
         <a
           className="group-chat-link"
-          href={`/admin/company/chat?group=${encodeURIComponent(group.id)}`}
+          href={`/admin/legacy/company/chat?group=${encodeURIComponent(group.id)}`}
         >
           Открыть чат группы
         </a>

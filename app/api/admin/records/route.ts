@@ -29,6 +29,10 @@ function canAccess(actor: Actor, kind: string, mutate: boolean) {
   return !mutate && actor.role === "manager" && companyKinds.has(kind);
 }
 
+function seesCost(actor: Actor) {
+  return actor.role === "owner" || actor.role === "director" || actor.role === "accountant";
+}
+
 function parseData(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const json = JSON.stringify(value);
@@ -66,7 +70,7 @@ export async function GET(request: Request) {
     const kind = cleanText(url.searchParams.get("kind"), 60, true);
     if (!allKinds.has(kind) || !canAccess(actor, kind, false)) throw new HttpError(403, "Нет доступа к этому разделу");
     const historyFor=cleanText(url.searchParams.get("historyFor")??"",100);
-    if(historyFor){const history=await getRawDb().prepare("SELECT a.id,a.action,a.detail,a.created_at,s.display_name FROM audit_logs a LEFT JOIN staff s ON s.id=a.actor_id WHERE a.entity_id=? ORDER BY a.created_at DESC LIMIT 100").bind(historyFor).all();return Response.json({actor,history:history.results},{headers:{"Cache-Control":"no-store"}});}
+    if(historyFor){if(actor.role!=="owner"&&actor.role!=="director")throw new HttpError(403,"История доступна директору");const history=await getRawDb().prepare("SELECT a.id,a.action,a.detail,a.created_at,s.display_name FROM audit_logs a LEFT JOIN staff s ON s.id=a.actor_id WHERE a.entity_id=? ORDER BY a.created_at DESC LIMIT 100").bind(historyFor).all();return Response.json({actor,history:history.results},{headers:{"Cache-Control":"no-store"}});}
     const q = cleanText(url.searchParams.get("q") ?? "", 120).toLowerCase();
     const status = cleanText(url.searchParams.get("status") ?? "all", 20);
     const page = Math.max(1, Math.min(10_000, Number(url.searchParams.get("page")) || 1));
@@ -75,16 +79,16 @@ export async function GET(request: Request) {
     if(kind==="sales"||kind==="debts"){
       const db=getRawDb(),search=`%${q}%`,offset=(page-1)*pageSize;
       if(kind==="sales"){
-        if(status==="archived")return Response.json({actor,records:[],total:0,page,pageSize,lookups:await recordLookups()},{headers:{"Cache-Control":"no-store"}});
+        if(status==="archived")return Response.json({actor,records:[],total:0,page,pageSize,lookups:await recordLookups(actor)},{headers:{"Cache-Control":"no-store"}});
         const filter=q?"AND (lower(c.name) LIKE ? OR lower(i.vin) LIKE ? OR lower(i.model) LIKE ? OR lower(d.title) LIKE ? OR lower(s.id) LIKE ? )":"";
         const values=q?[search,search,search,search,search]:[];
-        const [rows,count]=await Promise.all([db.prepare(`SELECT s.id,'sales' kind,'Продажа · '||i.model title,c.name||' · '||i.vin subtitle,'active' status,'Из CRM' category,0 sort_order,jsonb_build_object('dealId',s.deal_id,'customerId',s.customer_id,'inventoryUnitId',s.inventory_unit_id,'tractorModel',i.model,'tractorVin',i.vin,'salePrice',s.sale_amount_minor/100.0,'costPrice',s.cost_minor/100.0,'paid',COALESCE(p.paid,0)/100.0,'balance',GREATEST(s.sale_amount_minor-COALESCE(p.paid,0),0)/100.0,'saleDate',s.sold_at,'paymentHistory',COALESCE(p.history,'[]'::jsonb)::text)::text data_json,s.archived,s.version,s.created_by,s.created_by updated_by,s.created_at,s.updated_at FROM sales_v2 s JOIN crm_customers c ON c.id=s.customer_id JOIN crm_deals d ON d.id=s.deal_id JOIN inventory_units_v2 i ON i.id=s.inventory_unit_id LEFT JOIN LATERAL(SELECT SUM(amount_minor) paid,jsonb_agg(jsonb_build_object('id',id,'amount',amount_minor/100.0,'date',paid_at,'method',method) ORDER BY paid_at DESC) history FROM payments_v2 WHERE deal_id=s.deal_id AND status='posted' AND archived=0)p ON TRUE WHERE s.archived=0 ${filter} ORDER BY s.sold_at DESC LIMIT ? OFFSET ?`).bind(...values,pageSize,offset).all(),db.prepare(`SELECT COUNT(*) total FROM sales_v2 s JOIN crm_customers c ON c.id=s.customer_id JOIN crm_deals d ON d.id=s.deal_id JOIN inventory_units_v2 i ON i.id=s.inventory_unit_id WHERE s.archived=0 ${filter}`).bind(...values).first<{total:number}>()]);
-        return Response.json({actor,records:rows.results,total:Number(count?.total??0),page,pageSize,lookups:await recordLookups()},{headers:{"Cache-Control":"no-store"}});
+        const [rows,count]=await Promise.all([db.prepare(`SELECT s.id,'sales' kind,'Продажа · '||i.model title,c.name||' · '||i.vin subtitle,'active' status,'Из CRM' category,0 sort_order,jsonb_build_object('dealId',s.deal_id,'customerId',s.customer_id,'inventoryUnitId',s.inventory_unit_id,'tractorModel',i.model,'tractorVin',i.vin,'salePrice',s.sale_amount_minor/100.0,'costPrice',${seesCost(actor)?"s.cost_minor/100.0":"NULL"},'paid',COALESCE(p.paid,0)/100.0,'balance',GREATEST(s.sale_amount_minor-COALESCE(p.paid,0),0)/100.0,'saleDate',s.sold_at,'paymentHistory',COALESCE(p.history,'[]'::jsonb)::text)::text data_json,s.archived,s.version,s.created_by,s.created_by updated_by,s.created_at,s.updated_at FROM sales_v2 s JOIN crm_customers c ON c.id=s.customer_id JOIN crm_deals d ON d.id=s.deal_id JOIN inventory_units_v2 i ON i.id=s.inventory_unit_id LEFT JOIN LATERAL(SELECT SUM(amount_minor) paid,jsonb_agg(jsonb_build_object('id',id,'amount',amount_minor/100.0,'date',paid_at,'method',method) ORDER BY paid_at DESC) history FROM payments_v2 WHERE deal_id=s.deal_id AND status='posted' AND archived=0)p ON TRUE WHERE s.archived=0 ${filter} ORDER BY s.sold_at DESC LIMIT ? OFFSET ?`).bind(...values,pageSize,offset).all(),db.prepare(`SELECT COUNT(*) total FROM sales_v2 s JOIN crm_customers c ON c.id=s.customer_id JOIN crm_deals d ON d.id=s.deal_id JOIN inventory_units_v2 i ON i.id=s.inventory_unit_id WHERE s.archived=0 ${filter}`).bind(...values).first<{total:number}>()]);
+        return Response.json({actor,records:rows.results,total:Number(count?.total??0),page,pageSize,lookups:await recordLookups(actor)},{headers:{"Cache-Control":"no-store"}});
       }
-      if(status==="archived")return Response.json({actor,records:[],total:0,page,pageSize,lookups:await recordLookups()},{headers:{"Cache-Control":"no-store"}});
+      if(status==="archived")return Response.json({actor,records:[],total:0,page,pageSize,lookups:await recordLookups(actor)},{headers:{"Cache-Control":"no-store"}});
       const filter=q?"AND (lower(c.name) LIKE ? OR lower(d.title) LIKE ? OR lower(r.id) LIKE ? )":"",values=q?[search,search,search]:[];
       const [rows,count]=await Promise.all([db.prepare(`SELECT r.id,'debts' kind,'Задолженность · '||d.title title,c.name subtitle,CASE WHEN r.due_at<CURRENT_TIMESTAMP THEN 'overdue' ELSE 'active' END status,'Автоматический расчёт' category,0 sort_order,jsonb_build_object('dealId',r.deal_id,'customerId',r.customer_id,'principal',r.principal_minor/100.0,'paid',COALESCE(p.paid,0)/100.0,'amount',GREATEST(r.principal_minor-COALESCE(p.paid,0),0)/100.0,'dueAt',r.due_at)::text data_json,r.archived,r.version,NULL created_by,NULL updated_by,r.created_at,r.updated_at FROM receivables_v2 r JOIN crm_customers c ON c.id=r.customer_id JOIN crm_deals d ON d.id=r.deal_id LEFT JOIN(SELECT deal_id,SUM(amount_minor) paid FROM payments_v2 WHERE status='posted' AND archived=0 GROUP BY deal_id)p ON p.deal_id=r.deal_id WHERE r.archived=0 AND GREATEST(r.principal_minor-COALESCE(p.paid,0),0)>0 ${filter} ORDER BY (r.due_at<CURRENT_TIMESTAMP) DESC,r.due_at LIMIT ? OFFSET ?`).bind(...values,pageSize,offset).all(),db.prepare(`SELECT COUNT(*) total FROM receivables_v2 r JOIN crm_customers c ON c.id=r.customer_id JOIN crm_deals d ON d.id=r.deal_id LEFT JOIN(SELECT deal_id,SUM(amount_minor) paid FROM payments_v2 WHERE status='posted' AND archived=0 GROUP BY deal_id)p ON p.deal_id=r.deal_id WHERE r.archived=0 AND GREATEST(r.principal_minor-COALESCE(p.paid,0),0)>0 ${filter}`).bind(...values).first<{total:number}>()]);
-      return Response.json({actor,records:rows.results,total:Number(count?.total??0),page,pageSize,lookups:await recordLookups()},{headers:{"Cache-Control":"no-store"}});
+      return Response.json({actor,records:rows.results,total:Number(count?.total??0),page,pageSize,lookups:await recordLookups(actor)},{headers:{"Cache-Control":"no-store"}});
     }
     const where = ["kind=?", status==="archived"?"archived=1":"archived=0"];
     const bindings: unknown[] = [kind];
@@ -102,7 +106,7 @@ export async function GET(request: Request) {
       const ids=records.map(row=>row.id),cases=await db.prepare(`SELECT lc.*,jsonb_array_length(lc.required_documents_json::jsonb) required_count,(SELECT COUNT(DISTINCT d.checklist_key) FROM documents_v2 d WHERE d.leasing_application_id=lc.id AND d.archived=0 AND d.status='verified') verified_count FROM leasing_cases_v2 lc WHERE lc.id IN (${ids.map(()=>"?").join(",")})`).bind(...ids).all<Record<string,unknown>&{id:string}>(),byId=new Map(cases.results.map(row=>[row.id,row]));
       records=records.map(record=>{const row=byId.get(record.id);if(!row)return record;const data=storedData(record.data_json),required=JSON.parse(String(row.required_documents_json||"[]")) as string[];return {...record,data_json:JSON.stringify({...data,customerId:row.customer_id??data.customerId,dealId:row.deal_id??data.dealId,partnerName:row.partner_name,partnerDecision:row.partner_decision,documentStatus:row.document_status,requiredDocuments:required.join(", "),contractNumber:row.contract_number,documentsVerified:Number(row.verified_count||0),documentsRequired:Number(row.required_count||0)})}});
     }
-    return Response.json({ actor, records, total: Number(count?.total ?? 0), page, pageSize, lookups: await recordLookups() }, { headers: { "Cache-Control": "no-store" } });
+    return Response.json({ actor, records, total: Number(count?.total ?? 0), page, pageSize, lookups: await recordLookups(actor) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) { if(!(error instanceof HttpError))console.error("admin records GET failed",error);return fail(error); }
 }
 

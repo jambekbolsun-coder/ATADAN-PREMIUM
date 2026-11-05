@@ -1,6 +1,6 @@
 import { authenticateStaff, createStaffSession, getActor, revokeStaffSession } from "../../../lib/admin-auth";
 import { ensureDb, getRawDb } from "../../../../db";
-import { cleanText, digest, fail, HttpError, jsonBody, rateLimit, sameOrigin } from "../../../lib/security";
+import { cleanText, clientIp, digest, fail, HttpError, jsonBody, rateLimit, sameOrigin } from "../../../lib/security";
 import { NextResponse } from "next/server";
 export async function GET(request: Request) {
   try { const actor = await getActor(request); return Response.json({authenticated:!!actor, actor}, {headers:{"Cache-Control":"no-store"}}); } catch(e) { return fail(e); }
@@ -11,7 +11,7 @@ export async function POST(request: Request) {
     const username = cleanText(body.username, 200, true).toLowerCase();
     if (typeof body.password !== "string" || body.password.length < 1 || body.password.length > 128) throw new HttpError(400, "Проверьте пароль");
     const password = body.password;
-    const ip = request.headers.get("cf-connecting-ip") || request.headers.get("x-forwarded-for")?.split(",")[0] || "local";
+    const ip = clientIp(request);
     await rateLimit(`login-ip:${ip}`, 30, 900);
     await rateLimit(`login:${ip}:${username}`, 8, 900);
     const actor = await authenticateStaff(username, password, request);

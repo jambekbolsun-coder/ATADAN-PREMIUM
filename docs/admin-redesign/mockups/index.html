@@ -1,0 +1,947 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ATADAN · макеты админ-панели</title>
+<style>
+/* ───────── ТЕМЫ ───────── */
+:root,[data-theme="forest"]{
+  --bg:#eef4f0;--surface:#ffffff;--surface-2:#f4f8f5;--border:#dbe5de;--text:#0f1f17;--muted:#5a6d62;
+  --brand:#146b3a;--brand-2:#1c8a4c;--brand-ink:#ffffff;--brand-soft:#e1f1e6;
+  --side-bg:#0b2e1f;--side-text:#d3e6da;--side-muted:#86a893;--side-active:#17533a;--side-line:#1b4331;--side-brand:#7fd8a2;
+  --good:#15803d;--good-soft:#dcf5e4;--warn:#b45309;--warn-soft:#fdf0d5;--bad:#c0352b;--bad-soft:#fde4e1;--info:#1f6fb5;--info-soft:#e1eefa;
+  --sun:#d99a0b;--sun-soft:#fdf3d6;--sky:#2f80c9;--sky-soft:#e2eefa;--lilac:#7a5af0;--lilac-soft:#ede8fe;--terra:#e0663f;--terra-soft:#fde8df;--teal:#139e9a;--teal-soft:#dbf3f2;
+  --shadow:0 12px 32px rgb(11 46 31 / .14);color-scheme:light;
+}
+[data-theme="field"]{
+  --bg:#f6f4ec;--surface:#ffffff;--surface-2:#f8f6f0;--border:#e5e1d3;--text:#1d2620;--muted:#6b7068;
+  --brand:#167a42;--brand-2:#1f9150;--brand-soft:#e3f2e7;
+  --side-bg:#ffffff;--side-text:#28332c;--side-muted:#8a8f86;--side-active:#e3f2e7;--side-line:#ece8dc;--side-brand:#167a42;
+}
+[data-theme="night"]{
+  --bg:#08110d;--surface:#0f1b15;--surface-2:#15241d;--border:#21352b;--text:#e7f1eb;--muted:#92a99b;
+  --brand:#3fbd76;--brand-2:#56cf8a;--brand-ink:#06140d;--brand-soft:#123222;
+  --side-bg:#050c09;--side-text:#cfe2d6;--side-muted:#6f8a7a;--side-active:#13301f;--side-line:#14251c;--side-brand:#56cf8a;
+  --good:#4ade80;--good-soft:#123020;--warn:#fbbf24;--warn-soft:#33270c;--bad:#f87171;--bad-soft:#3a1517;--info:#7cc0f5;--info-soft:#102a3d;
+  --sun:#f2bf3c;--sun-soft:#30260c;--sky:#6fb2f0;--sky-soft:#0f2638;--lilac:#ab95ff;--lilac-soft:#221b3f;--terra:#f38c66;--terra-soft:#381c12;--teal:#3fd0ca;--teal-soft:#0c2f2e;
+  --shadow:0 12px 32px rgb(0 0 0 / .5);color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{font:14px/1.45 "Geist","Inter",system-ui,-apple-system,"Segoe UI",sans-serif;background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased}
+.num{font-variant-numeric:tabular-nums;white-space:nowrap}
+button,input,select{font:inherit;color:inherit}
+a{color:inherit;text-decoration:none}
+svg.i{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.9;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
+
+/* ───────── панель макетов (не часть дизайна) ───────── */
+.mock-bar{position:relative;z-index:100;display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 12px;background:#101418;color:#e8ecef;font-size:12.5px}
+.mock-bar b{margin-right:6px;font-size:12px;color:#9fb1bd;font-weight:600}
+.mock-bar button{border:1px solid #2d363d;background:#1a2127;border-radius:8px;padding:5px 10px;cursor:pointer;color:#dfe6ea}
+.mock-bar button.on{background:#e8ecef;color:#101418;border-color:#e8ecef;font-weight:600}
+.mock-bar .sep{width:1px;height:20px;background:#2d363d;margin:0 6px}
+
+/* ───────── оболочка (как в Citadel) ───────── */
+.app{display:flex;min-height:calc(100vh - 44px)}
+.side{width:256px;flex-shrink:0;background:var(--side-bg);color:var(--side-text);display:flex;flex-direction:column;position:sticky;top:0;height:100vh;border-right:1px solid var(--side-line)}
+.logo{display:flex;align-items:center;gap:10px;padding:16px 16px 12px}
+.logo-tile{width:36px;height:36px;border-radius:11px;background:linear-gradient(135deg,#1c8a4c,#0f5a31);display:grid;place-items:center;color:#fff;font-weight:800;font-size:17px;box-shadow:inset 0 0 0 1px rgb(255 255 255 / .15)}
+.logo b{display:block;font-size:16px;letter-spacing:.02em}
+.logo small{display:block;font-size:11px;color:var(--side-muted)}
+.create{margin:0 12px 6px;display:flex;align-items:center;justify-content:center;gap:8px;height:40px;border-radius:12px;border:0;background:var(--brand);color:var(--brand-ink);font-weight:600;cursor:pointer}
+[data-theme="forest"] .create{background:#e5b64c;color:#1d1503}
+.side nav{flex:1;overflow-y:auto;padding:4px 8px 12px}
+.grp{margin-top:14px;padding:0 10px 4px;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--side-muted)}
+.sub{padding:6px 12px 2px 12px;font-size:11.5px;color:var(--side-muted)}
+.nav{display:flex;align-items:center;gap:10px;min-height:36px;padding:0 10px;border-radius:10px;color:var(--side-text);cursor:pointer;font-size:13.5px;opacity:.86}
+.nav:hover{background:var(--side-active);opacity:1}
+.nav.on{background:var(--side-active);opacity:1;font-weight:600}
+.nav.on svg{color:var(--side-brand)}
+.nav .cnt{margin-left:auto;font-size:11px;font-weight:700;background:#e5b64c;color:#1d1503;border-radius:20px;padding:0 7px;line-height:18px}
+.me{display:flex;align-items:center;gap:10px;padding:12px 16px;border-top:1px solid var(--side-line);cursor:pointer}
+.av{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:13px;background:var(--sun-soft);color:var(--sun);flex-shrink:0}
+.me small{display:block;font-size:11.5px;color:var(--side-muted)}
+.col{flex:1;min-width:0;display:flex;flex-direction:column}
+.top{position:sticky;top:0;z-index:20;height:56px;display:flex;align-items:center;gap:6px;padding:0 20px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--border)}
+.top h1{margin:0;flex:1;font-size:17px;font-weight:650}
+.crumb{color:var(--muted);font-weight:500}
+.tap{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;cursor:pointer;position:relative;border:0;background:none}
+.tap:hover{background:var(--surface-2)}
+.dot{position:absolute;top:5px;right:4px;min-width:17px;height:17px;border-radius:9px;background:var(--terra);color:#fff;font-size:10px;font-weight:700;display:grid;place-items:center;padding:0 4px;box-shadow:0 0 0 2px var(--bg)}
+.search{display:flex;align-items:center;gap:8px;height:36px;width:320px;white-space:nowrap;overflow:hidden;padding:0 12px;border-radius:12px;background:var(--surface);border:1px solid var(--border);color:var(--muted);font-size:13px}
+.search kbd{margin-left:auto;font:11px/1 inherit;border:1px solid var(--border);border-radius:6px;padding:3px 5px}
+main{padding:20px 24px 48px;max-width:1360px;width:100%;margin:0 auto}
+.screen{display:none}
+.screen.on{display:block}
+
+/* ───────── компоненты ───────── */
+.ph{display:flex;align-items:flex-end;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+.ph h2{margin:0;font-size:22px;font-weight:700;letter-spacing:-.01em}
+.ph p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.ph .act{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+.btn{display:inline-flex;align-items:center;gap:7px;height:36px;padding:0 14px;border-radius:12px;border:1px solid var(--border);background:var(--surface);font-weight:600;font-size:13.5px;cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--surface-2)}
+.btn.pri{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.btn.pri:hover{background:var(--brand-2)}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.danger{color:var(--bad)}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.sm{height:30px;padding:0 10px;font-size:12.5px;border-radius:10px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:16px}
+.card h3{margin:0 0 12px;font-size:14.5px;font-weight:650;display:flex;align-items:center;gap:8px}
+.card h3 .more{margin-left:auto;font-size:12.5px;font-weight:600;color:var(--brand)}
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}
+.g2{grid-template-columns:1fr 1fr}
+.g-main{grid-template-columns:minmax(0,1fr) 360px}
+.kpi{position:relative;overflow:hidden}
+.kpi .ic{width:38px;height:38px;border-radius:12px;display:grid;place-items:center;margin-bottom:12px}
+.kpi .lbl{font-size:12.5px;color:var(--muted);font-weight:500}
+.kpi .val{font-size:24px;font-weight:700;margin-top:2px;letter-spacing:-.01em}
+.kpi .hint{font-size:12px;margin-top:4px;color:var(--muted)}
+.kpi::after{content:"";position:absolute;right:-30px;top:-30px;width:110px;height:110px;border-radius:50%;background:var(--k);opacity:.07}
+.up{color:var(--good);font-weight:600}.down{color:var(--bad);font-weight:600}
+.c-sun{--k:var(--sun);background:var(--sun-soft);color:var(--sun)}
+.c-sky{--k:var(--sky);background:var(--sky-soft);color:var(--sky)}
+.c-lilac{--k:var(--lilac);background:var(--lilac-soft);color:var(--lilac)}
+.c-terra{--k:var(--terra);background:var(--terra-soft);color:var(--terra)}
+.c-teal{--k:var(--teal);background:var(--teal-soft);color:var(--teal)}
+.c-green{--k:var(--brand);background:var(--brand-soft);color:var(--brand)}
+.kpi.k-sun{--k:var(--sun)}.kpi.k-sky{--k:var(--sky)}.kpi.k-green{--k:var(--brand)}.kpi.k-terra{--k:var(--terra)}.kpi.k-lilac{--k:var(--lilac)}.kpi.k-teal{--k:var(--teal)}
+.badge{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 9px;border-radius:20px;font-size:12px;font-weight:600;white-space:nowrap}
+.badge::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.b-good{background:var(--good-soft);color:var(--good)}.b-warn{background:var(--warn-soft);color:var(--warn)}.b-bad{background:var(--bad-soft);color:var(--bad)}.b-info{background:var(--info-soft);color:var(--info)}.b-mute{background:var(--surface-2);color:var(--muted)}
+.tag{display:inline-flex;align-items:center;gap:5px;height:22px;padding:0 8px;border-radius:7px;font-size:12px;font-weight:600;white-space:nowrap}
+.tabs{display:flex;gap:4px;margin-bottom:14px;overflow-x:auto;border-bottom:1px solid var(--border)}
+.tabs a{padding:9px 12px;font-size:13.5px;color:var(--muted);border-bottom:2px solid transparent;white-space:nowrap;cursor:pointer;margin-bottom:-1px}
+.tabs a.on{color:var(--text);font-weight:650;border-color:var(--brand)}
+.tabs a span{margin-left:4px;font-size:11.5px;background:var(--surface-2);border-radius:10px;padding:1px 7px;color:var(--muted)}
+.tabs a.on span{background:var(--brand-soft);color:var(--brand)}
+.filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 11px;border-radius:10px;border:1px solid var(--border);background:var(--surface);font-size:13px;cursor:pointer}
+.chip b{font-weight:600}
+.chip.on{border-color:var(--brand);background:var(--brand-soft);color:var(--brand);font-weight:600}
+.input{height:36px;width:100%;padding:0 12px;border-radius:12px;border:1px solid var(--border);background:var(--surface);font-size:14px}
+.input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 22%,transparent)}
+.lbl2{display:block;font-size:12.5px;font-weight:600;color:var(--muted);margin:0 0 5px}
+.field{margin-bottom:12px}
+.hintx{font-size:12px;color:var(--muted);margin-top:4px}
+table.tbl{width:100%;border-collapse:collapse;font-size:13.5px}
+.tbl th{text-align:left;font-weight:600;color:var(--muted);font-size:12px;padding:10px 12px;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--surface-2);position:sticky;top:0}
+.tbl td{padding:10px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tbody tr{cursor:pointer}
+.tbl tbody tr:hover td{background:color-mix(in srgb,var(--surface-2) 80%,transparent)}
+.tbl .r{text-align:right}
+.tbl tfoot td{font-weight:650;background:var(--surface-2);border-top:1px solid var(--border)}
+.t-wrap{border:1px solid var(--border);border-radius:16px;overflow:hidden;background:var(--surface)}
+.sm-txt{font-size:12px;color:var(--muted)}
+.strong{font-weight:650}
+.prog{height:6px;border-radius:4px;background:var(--surface-2);overflow:hidden;min-width:70px}
+.prog i{display:block;height:100%;border-radius:4px;background:var(--brand)}
+.notice{display:flex;gap:10px;padding:11px 13px;border-radius:12px;font-size:13px;align-items:flex-start}
+.n-info{background:var(--info-soft);color:var(--info)}.n-warn{background:var(--warn-soft);color:var(--warn)}.n-good{background:var(--good-soft);color:var(--good)}
+.notice p{margin:0;color:var(--text)}
+.list .row{display:flex;align-items:center;gap:12px;padding:11px 4px;border-bottom:1px solid var(--border);cursor:pointer}
+.list .row:last-child{border-bottom:0}
+.list .row:hover{background:var(--surface-2);border-radius:10px}
+.row-ic{width:34px;height:34px;border-radius:11px;display:grid;place-items:center;flex-shrink:0}
+.row .t{font-weight:600;font-size:13.5px}
+.row .s{font-size:12px;color:var(--muted)}
+.row .end{margin-left:auto;text-align:right}
+.chev{color:var(--muted)}
+.stack{display:flex;height:12px;border-radius:7px;overflow:hidden;gap:2px}
+.stack i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:10px;font-size:12.5px}
+.legend span{display:flex;align-items:center;gap:6px}
+.legend i{width:10px;height:10px;border-radius:3px;display:block}
+.bars{display:flex;align-items:flex-end;gap:10px;height:170px;padding-top:6px}
+.bars div{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+.bars i{display:block;width:100%;max-width:38px;border-radius:7px 7px 3px 3px;background:color-mix(in srgb,var(--brand) 30%,var(--surface-2))}
+.bars div.cur i{background:var(--brand)}
+.bars small{font-size:11px;color:var(--muted)}
+.bars b{font-size:11px;font-weight:600;color:var(--muted)}
+.bars div.cur b{color:var(--brand)}
+.steps{display:flex;gap:0;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+.step{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);font-weight:500}
+.step i{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-size:12px;font-weight:700;background:var(--surface-2);border:1px solid var(--border)}
+.step.done{color:var(--text)}
+.step.done i{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.step.cur{color:var(--text);font-weight:650}
+.step.cur i{background:var(--surface);border:2px solid var(--brand);color:var(--brand)}
+.step-line{width:36px;height:2px;background:var(--border);margin:0 8px}
+.step-line.done{background:var(--brand)}
+.pay-opt{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-bottom:16px}
+.opt{border:1.5px solid var(--border);border-radius:14px;padding:12px;cursor:pointer;background:var(--surface)}
+.opt .row-ic{margin-bottom:8px;width:32px;height:32px}
+.opt b{display:block;font-size:13px}
+.opt small{font-size:11.5px;color:var(--muted)}
+.opt.on{border-color:var(--brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--brand) 18%,transparent)}
+.check{display:flex;gap:10px;align-items:center;padding:8px 0;font-size:13.5px;border-bottom:1px dashed var(--border)}
+.check:last-child{border-bottom:0}
+.cb{width:20px;height:20px;border-radius:6px;display:grid;place-items:center;border:1.5px solid var(--border);flex-shrink:0}
+.cb.y{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
+.cb.y svg{width:13px;height:13px;stroke-width:3}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px}
+.kv dt{color:var(--muted)}
+.kv dd{margin:0;font-weight:550;text-align:right}
+.tl{position:relative;padding-left:18px}
+.tl::before{content:"";position:absolute;left:5px;top:6px;bottom:6px;width:2px;background:var(--border)}
+.tl div{position:relative;margin-bottom:11px;font-size:13px}
+.tl div::before{content:"";position:absolute;left:-17px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--brand)}
+.tl small{display:block;color:var(--muted);font-size:11.5px}
+.ship{flex:1;min-width:220px;border:1px solid var(--border);border-radius:14px;padding:12px;background:var(--surface)}
+.ship-col h4{margin:0 0 8px;font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;display:flex;gap:6px;align-items:center}
+.pipe{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.ship-col{background:var(--surface-2);border-radius:14px;padding:10px;min-height:120px}
+.ship-col .ship{margin-bottom:8px;min-width:0}
+.ship .tt{font-weight:650;font-size:13.5px;display:flex;justify-content:space-between;gap:6px}
+.ship .ss{font-size:12px;color:var(--muted);margin-top:2px}
+.ag{font-weight:650}
+.ag.g{color:var(--good)}.ag.w{color:var(--warn)}.ag.b{color:var(--bad)}
+.acc{display:flex;flex-direction:column;gap:2px}
+.acc .t{font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:8px}
+.acc .v{font-size:20px;font-weight:700}
+.in{color:var(--good);font-weight:650}.out{color:var(--bad);font-weight:650}
+.bucket{display:grid;grid-template-columns:110px 1fr 120px;gap:10px;align-items:center;font-size:13px;margin-bottom:9px}
+.bucket .bar{height:10px;border-radius:5px;background:var(--surface-2);overflow:hidden}
+.bucket .bar i{display:block;height:100%;border-radius:5px}
+.thumb{width:46px;height:34px;border-radius:9px;display:grid;place-items:center}
+.price-in{width:110px;height:32px;border:1px dashed var(--border);border-radius:9px;padding:0 9px;display:flex;align-items:center;justify-content:space-between;font-variant-numeric:tabular-nums;font-weight:600;background:var(--surface)}
+.price-in:hover{border-style:solid;border-color:var(--brand)}
+.sw{width:36px;height:21px;border-radius:12px;background:var(--brand);position:relative;flex-shrink:0}
+.sw::after{content:"";position:absolute;width:17px;height:17px;border-radius:50%;background:#fff;top:2px;right:2px}
+.sw.off{background:var(--border)}
+.sw.off::after{right:auto;left:2px}
+.grouped{border:1px solid var(--border);border-radius:16px;background:var(--surface);overflow:hidden;margin-bottom:16px}
+.grouped .row{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border);cursor:pointer}
+.grouped .row:last-child{border-bottom:0}
+.grouped .row:hover{background:var(--surface-2)}
+.grouped .row.on{background:var(--brand-soft)}
+.gt{font-size:12.5px;font-weight:650;color:var(--muted);margin:0 4px 8px}
+.themes{display:flex;gap:10px}
+.th{flex:1;border:1.5px solid var(--border);border-radius:14px;padding:8px;cursor:pointer;font-size:12.5px;font-weight:600;text-align:center}
+.th.on{border-color:var(--brand)}
+.th .pv{height:52px;border-radius:9px;display:flex;overflow:hidden;margin-bottom:6px;border:1px solid var(--border)}
+.th .pv i{display:block}
+.drop{border:2px dashed var(--border);border-radius:14px;padding:18px;text-align:center;color:var(--muted);font-size:13px}
+.err{color:var(--bad);font-weight:600}
+.toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(20px);opacity:0;transition:.2s;background:#13241b;color:#e9f5ee;padding:11px 16px;border-radius:12px;font-size:13.5px;box-shadow:var(--shadow);z-index:200;display:flex;gap:10px;align-items:center}
+.toast.show{opacity:1;transform:translateX(-50%)}
+.tip{position:relative}
+.tip:hover::after{content:attr(data-tip);position:absolute;bottom:calc(100% + 8px);right:0;width:250px;background:#13241b;color:#e9f5ee;font-size:12px;font-weight:500;padding:8px 10px;border-radius:10px;z-index:10;white-space:normal;line-height:1.4}
+hr.sp{border:0;border-top:1px solid var(--border);margin:14px 0}
+
+/* ───────── вход ───────── */
+.full{display:none;min-height:calc(100vh - 44px)}
+.full.on{display:block}
+.auth{display:flex;align-items:center;justify-content:center;min-height:calc(100vh - 44px);padding:40px 16px;background:radial-gradient(1200px 500px at 50% -10%,var(--brand-soft),transparent 70%)}
+.auth-in{width:100%;max-width:400px}
+.auth .brand{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.auth .brand .logo-tile{width:48px;height:48px;border-radius:14px;font-size:22px}
+.auth .brand b{display:block;font-size:20px;font-weight:800;letter-spacing:.02em}
+.auth .brand small{font-size:12.5px;color:var(--muted)}
+.auth .card{padding:24px;border-radius:20px}
+.auth h1{margin:0;font-size:20px}
+.auth .sub2{color:var(--muted);font-size:13.5px;margin:4px 0 18px}
+.auth .btn.pri{width:100%;justify-content:center;height:44px;font-size:15px;margin-top:6px}
+.auth .foot{display:flex;justify-content:space-between;margin-top:14px;font-size:13px;color:var(--muted)}
+.auth .input{height:44px}
+
+/* ───────── телефоны ───────── */
+.phones{display:flex;flex-wrap:wrap;gap:28px;justify-content:center;padding:28px 16px 60px}
+.phone-wrap{display:flex;flex-direction:column;align-items:center;gap:10px}
+.phone-wrap > p{margin:0;font-weight:600;font-size:13px;color:var(--muted)}
+.phone{width:360px;height:740px;border-radius:44px;border:10px solid #121815;background:var(--bg);overflow:hidden;position:relative;display:flex;flex-direction:column;box-shadow:0 20px 50px rgb(0 0 0 / .25)}
+.p-status{height:30px;display:flex;justify-content:space-between;align-items:center;padding:0 22px;font-size:12px;font-weight:650}
+.p-top{height:52px;display:flex;align-items:center;gap:4px;padding:0 10px;border-bottom:1px solid var(--border)}
+.p-top h1{flex:1;margin:0;font-size:17px;font-weight:650;padding-left:4px}
+.p-body{flex:1;overflow:hidden;padding:12px 14px 90px}
+.p-nav{position:absolute;left:0;right:0;bottom:0;height:78px;background:color-mix(in srgb,var(--surface) 96%,transparent);border-top:1px solid var(--border);display:grid;grid-template-columns:repeat(5,1fr);padding:0 4px 14px}
+.p-nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;font-size:10.5px;font-weight:550;color:var(--muted)}
+.p-nav a.on{color:var(--brand)}
+.p-nav svg.i{width:23px;height:23px}
+.p-plus{display:flex;justify-content:center;align-items:flex-start}
+.p-plus span{margin-top:-16px;width:56px;height:56px;border-radius:50%;background:#e5b64c;color:#1d1503;display:grid;place-items:center;box-shadow:0 8px 20px rgb(229 182 76 / .45),0 0 0 4px var(--bg)}
+[data-theme="night"] .p-plus span{background:var(--brand);color:var(--brand-ink);box-shadow:0 8px 20px rgb(0 0 0 / .4),0 0 0 4px var(--bg)}
+.p-plus svg.i{width:28px;height:28px;stroke-width:2.4}
+.m-kpi{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.m-kpi .card{padding:12px;border-radius:14px}
+.m-kpi .val{font-size:18px}
+.m-kpi .kpi .ic{width:30px;height:30px;border-radius:10px;margin-bottom:8px}
+.m-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:12px;margin-bottom:9px}
+.m-card .l1{display:flex;justify-content:space-between;gap:8px;font-weight:650;font-size:14px}
+.m-card .l2{font-size:12.5px;color:var(--muted);margin-top:2px}
+.m-card .l3{display:flex;align-items:center;gap:8px;margin-top:9px}
+.m-tabs{display:flex;gap:6px;margin-bottom:12px;overflow:hidden}
+.m-tabs span{padding:6px 11px;border-radius:10px;font-size:13px;color:var(--muted);white-space:nowrap}
+.m-tabs span.on{background:var(--surface);box-shadow:inset 0 0 0 1px var(--border);color:var(--text);font-weight:650}
+.sheet-bg{position:absolute;inset:0;background:rgb(5 12 9 / .5)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--surface);border-radius:24px 24px 0 0;padding:6px 14px 24px;box-shadow:0 -10px 40px rgb(0 0 0 / .25)}
+.grip{width:40px;height:4px;border-radius:2px;background:var(--border);margin:6px auto 10px}
+.sheet h2{margin:0 0 10px;font-size:17px}
+.sheet .grouped{background:var(--surface-2);border:0;margin:0}
+.sheet .grouped .row{padding:10px 12px}
+.m-sticky{position:absolute;left:0;right:0;bottom:78px;padding:10px 14px;background:linear-gradient(transparent,var(--bg) 30%)}
+.m-sticky .btn{width:100%;justify-content:center;height:46px;font-size:15px}
+
+/* ───────── пути продажи ───────── */
+.lane{display:grid;grid-template-columns:230px 1fr;gap:14px;align-items:start;padding:14px 0;border-bottom:1px solid var(--border)}
+.lane:last-child{border-bottom:0}
+.lane-h{display:flex;gap:10px;align-items:flex-start}
+.lane-h b{display:block;font-size:14px}
+.lane-h small{font-size:12px;color:var(--muted)}
+.flow{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.fs{padding:7px 11px;border-radius:10px;font-size:12.5px;font-weight:600;background:var(--surface-2);border:1px solid var(--border)}
+.fs.k{background:var(--brand-soft);border-color:transparent;color:var(--brand)}
+.fs.g{background:var(--brand);color:var(--brand-ink);border-color:var(--brand)}
+.fa{color:var(--muted)}
+.alt{margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:12.5px}
+.alt .fs{background:var(--bad-soft);color:var(--bad);border-color:transparent}
+.alt .fs.w{background:var(--warn-soft);color:var(--warn)}
+
+@media (max-width:1180px){.g4{grid-template-columns:1fr 1fr}.g-main{grid-template-columns:1fr}.pay-opt{grid-template-columns:repeat(3,1fr)}.pipe{grid-template-columns:repeat(3,1fr)}}
+</style>
+</head>
+<body data-theme="forest">
+
+<div class="mock-bar">
+  <b>Экран</b>
+  <button data-go="login">Вход</button>
+  <button data-go="home" class="on">Главная</button>
+  <button data-go="sales">Продажи</button>
+  <button data-go="newsale">Новая продажа</button>
+  <button data-go="sale">Карточка продажи</button>
+  <button data-go="paths">Пути продажи</button>
+  <button data-go="stock">Склад и логистика</button>
+  <button data-go="money">Касса и долги</button>
+  <button data-go="catalog">Каталог техники</button>
+  <button data-go="settings">Настройки · экспорт/импорт</button>
+  <button data-go="phone">📱 Телефон</button>
+  <span class="sep"></span>
+  <b>Тема</b>
+  <button data-th="forest" class="on">Лес</button>
+  <button data-th="field">Поле</button>
+  <button data-th="night">Ночь</button>
+</div>
+
+<!-- ═════════════ ВХОД ═════════════ -->
+<div class="full" id="s-login">
+  <div class="auth"><div class="auth-in">
+    <div class="brand"><div class="logo-tile">A</div><div><b>ATADAN</b><small>Официальный дистрибьютор Changfa</small></div></div>
+    <div class="card">
+      <h1>Вход в ATADAN</h1>
+      <div class="sub2">Рабочее пространство компании</div>
+      <div class="field"><label class="lbl2">Электронная почта</label><input class="input" placeholder="name@atadan.kg"></div>
+      <div class="field"><label class="lbl2">Пароль</label><input class="input" type="password" value="••••••••••"></div>
+      <button class="btn pri" data-go="home">Войти</button>
+      <p class="sm-txt" style="margin:14px 0 0">Доступ только по персональному приглашению. Общих паролей нет.</p>
+    </div>
+    <div class="foot"><a href="#" data-toast="Откроется форма: email → ссылка для сброса пароля">Забыли пароль?</a><a href="#" data-toast="Установит админку как приложение на телефон (PWA)">Установить приложение</a></div>
+  </div></div>
+</div>
+
+<!-- ═════════════ ПРИЛОЖЕНИЕ ═════════════ -->
+<div class="app" id="app">
+  <aside class="side">
+    <div class="logo"><div class="logo-tile">A</div><div><b>ATADAN</b><small>Админ-панель</small></div></div>
+    <button class="create" data-toast="Откроется меню «Создать»: продажа, платёж, расход, приход техники, модель, запчасть, публикация"><svg class="i"><use href="#plus"/></svg>Создать</button>
+    <nav>
+      <a class="nav" data-go="home"><svg class="i"><use href="#home"/></svg>Главная</a>
+      <div class="grp">Работа</div>
+      <div class="sub">Отдел продаж</div>
+      <a class="nav" data-toast="Заявки: новые с сайта и звонков → «Оформить продажу» или «Отказ» с причиной"><svg class="i"><use href="#inbox"/></svg>Заявки<span class="cnt">3</span></a>
+      <a class="nav" data-go="sales" data-also="newsale sale paths"><svg class="i"><use href="#cart"/></svg>Продажи</a>
+      <a class="nav" data-toast="Клиенты: карточка с покупками, техникой, долгами и историей"><svg class="i"><use href="#users"/></svg>Клиенты</a>
+      <div class="sub">Склад и логистика</div>
+      <a class="nav" data-go="stock"><svg class="i"><use href="#tractor"/></svg>Техника</a>
+      <a class="nav" data-toast="Запчасти: остатки, приход, списание, инвентаризация, минимальный остаток"><svg class="i"><use href="#box"/></svg>Запчасти</a>
+      <a class="nav" data-toast="Логистика: заказы заводу → поставки → приём на склад"><svg class="i"><use href="#truck"/></svg>Логистика</a>
+      <div class="sub">Финансы</div>
+      <a class="nav" data-go="money"><svg class="i"><use href="#wallet"/></svg>Касса и платежи</a>
+      <a class="nav" data-toast="Долги: клиенты и банки, корзины просрочки 1–30 / 31–60 / 61–90 / 90+"><svg class="i"><use href="#scale"/></svg>Долги</a>
+      <a class="nav" data-toast="Расходы по категориям с привязкой к поставке, машине или рекламе"><svg class="i"><use href="#receipt"/></svg>Расходы</a>
+      <a class="nav" data-toast="Маржа: по продаже, модели, менеджеру; себестоимость с курсами"><svg class="i"><use href="#trend"/></svg>Маржа</a>
+      <a class="nav" data-toast="Отчёты: продажи, склад, деньги, маркетинг; экспорт XLSX"><svg class="i"><use href="#chart"/></svg>Отчёты</a>
+      <div class="grp">Маркетинг</div>
+      <a class="nav" data-go="catalog"><svg class="i"><use href="#tractor"/></svg>Каталог техники</a>
+      <a class="nav" data-toast="Каталог запчастей для сайта (та же запчасть, что и на складе)"><svg class="i"><use href="#box"/></svg>Каталог запчастей</a>
+      <a class="nav" data-toast="Публикации АгроЖурнала: черновик → опубликовано"><svg class="i"><use href="#news"/></svg>Публикации</a>
+      <a class="nav" data-toast="Акции: скидка на модель или запчасть на даты"><svg class="i"><use href="#percent"/></svg>Акции</a>
+      <a class="nav" data-toast="Лизинг: банки, ставки, взносы, сроки → калькулятор на сайте"><svg class="i"><use href="#bank"/></svg>Лизинг</a>
+      <a class="nav" data-toast="Страницы сайта: сервис, FAQ, контакты"><svg class="i"><use href="#globe"/></svg>Страницы сайта</a>
+      <a class="nav" data-toast="Аналитика сайта: посещения, интерес к моделям, заявки по источникам"><svg class="i"><use href="#chart"/></svg>Аналитика сайта</a>
+      <div class="grp">Система</div>
+      <a class="nav" data-go="settings"><svg class="i"><use href="#gear"/></svg>Настройки</a>
+    </nav>
+    <div class="me" data-go="settings"><div class="av">Б</div><div><b style="font-size:13.5px">Бекболсун</b><small>Владелец</small></div></div>
+  </aside>
+
+  <div class="col">
+    <header class="top">
+      <h1 id="title">Главная</h1>
+      <div class="search"><svg class="i"><use href="#search"/></svg>Поиск: VIN, клиент, телефон, № продажи<kbd>Ctrl K</kbd></div>
+      <button class="tap" data-toast="Уведомления: 2 согласования, 3 новые заявки, поставка опаздывает"><svg class="i" style="width:21px;height:21px"><use href="#bell"/></svg><span class="dot">5</span></button>
+    </header>
+    <main>
+
+<!-- ═════════════ ГЛАВНАЯ ═════════════ -->
+<section class="screen on" id="s-home" data-title="Главная">
+  <div class="ph">
+    <div><h2>Доброе утро, Бекболсун</h2><p>Ноябрь 2026 · данные на 09:40 · курс НБКР: $1 = 87,45 с · ¥1 = 13,10 с</p></div>
+    <div class="act">
+      <span class="chip">Сегодня</span><span class="chip">Неделя</span><span class="chip on">Месяц</span><span class="chip">Год</span>
+    </div>
+  </div>
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card kpi k-sun"><div class="ic c-sun"><svg class="i"><use href="#cart"/></svg></div><div class="lbl">Выручка за ноябрь</div><div class="val num">18 450 000 с</div><div class="hint"><span class="up">▲ 12%</span> к октябрю · 7 продаж</div></div>
+    <div class="card kpi k-green"><div class="ic c-green"><svg class="i"><use href="#trend"/></svg></div><div class="lbl">Валовая маржа</div><div class="val num">2 310 000 с</div><div class="hint">12,5% от выручки · <span class="up">▲ 0,8 п.</span></div></div>
+    <div class="card kpi k-sky"><div class="ic c-sky"><svg class="i"><use href="#tractor"/></svg></div><div class="lbl">Техника на складе</div><div class="val num">14 шт.</div><div class="hint num">по себестоимости $356 800 · ещё 9 в пути</div></div>
+    <div class="card kpi k-terra"><div class="ic c-terra"><svg class="i"><use href="#scale"/></svg></div><div class="lbl">Нам должны</div><div class="val num">6 120 000 с</div><div class="hint"><span class="down">840 000 с просрочено</span> · банки 3 900 000 с</div></div>
+  </div>
+  <div class="grid g-main">
+    <div class="grid">
+      <div class="card">
+        <h3>Продажи по месяцам, млн сом <a class="more" data-go="sales">Все продажи →</a></h3>
+        <div class="bars">
+          <div><b>6,1</b><i style="height:34%"></i><small>Июн</small></div>
+          <div><b>9,8</b><i style="height:54%"></i><small>Июл</small></div>
+          <div><b>15,2</b><i style="height:84%"></i><small>Авг</small></div>
+          <div><b>17,9</b><i style="height:99%"></i><small>Сен</small></div>
+          <div><b>16,4</b><i style="height:91%"></i><small>Окт</small></div>
+          <div class="cur"><b>18,4</b><i style="height:100%"></i><small>Ноя</small></div>
+        </div>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <h3>Как платят клиенты</h3>
+          <div class="stack"><i style="width:31%;background:var(--brand)"></i><i style="width:18%;background:var(--sun)"></i><i style="width:12%;background:var(--lilac)"></i><i style="width:27%;background:var(--sky)"></i><i style="width:12%;background:var(--teal)"></i></div>
+          <div class="legend"><span><i style="background:var(--brand)"></i>Полная 31%</span><span><i style="background:var(--sun)"></i>Предоплата 18%</span><span><i style="background:var(--lilac)"></i>Рассрочка 12%</span><span><i style="background:var(--sky)"></i>Банк. лизинг 27%</span><span><i style="background:var(--teal)"></i>Гослизинг 12%</span></div>
+        </div>
+        <div class="card">
+          <h3>Откуда клиенты (заявки → продажи)</h3>
+          <div class="list">
+            <div class="row" style="padding:6px 0"><span class="tag c-green">Сайт</span><span class="sm-txt">41 → 4</span><span class="end num strong">9,8%</span></div>
+            <div class="row" style="padding:6px 0"><span class="tag c-teal">WhatsApp</span><span class="sm-txt">28 → 2</span><span class="end num strong">7,1%</span></div>
+            <div class="row" style="padding:6px 0"><span class="tag c-lilac">Instagram</span><span class="sm-txt">19 → 1</span><span class="end num strong">5,3%</span></div>
+            <div class="row" style="padding:6px 0"><span class="tag c-sun">Выставка</span><span class="sm-txt">6 → 0</span><span class="end num strong">0%</span></div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="padding:0">
+        <div style="padding:14px 16px 0"><h3>Последние продажи <a class="more" data-go="sales">Все →</a></h3></div>
+        <table class="tbl">
+          <tbody>
+            <tr data-go="sale"><td><b>П-2026-0118</b><div class="sm-txt">04.11</div></td><td>Токтогулов Асан<div class="sm-txt">CFJ2004(G4)</div></td><td><span class="tag c-sky">Банк. лизинг</span></td><td class="r num strong">$29 500</td><td><span class="badge b-warn">Ждём оплату банка</span></td></tr>
+            <tr data-go="sale"><td><b>П-2026-0117</b><div class="sm-txt">03.11</div></td><td>КФХ «Нур-Береке»<div class="sm-txt">CFG1204-B</div></td><td><span class="tag c-green">Полная</span></td><td class="r num strong">$17 900</td><td><span class="badge b-good">Выдана</span></td></tr>
+            <tr data-go="sale"><td><b>П-2026-0116</b><div class="sm-txt">02.11</div></td><td>Мамытов Бакыт<div class="sm-txt">CFE904-H + навеска</div></td><td><span class="tag c-lilac">Рассрочка</span></td><td class="r num strong">$14 300</td><td><span class="badge b-info">Выдана в долг</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Требует внимания <span class="badge b-bad" style="margin-left:auto">6</span></h3>
+      <div class="list">
+        <div class="row" data-go="sale"><div class="row-ic c-sun"><svg class="i"><use href="#percent"/></svg></div><div><div class="t">2 продажи ждут согласования</div><div class="s">скидка больше 5% · Нурлан, Айбек</div></div><svg class="i chev end"><use href="#chev"/></svg></div>
+        <div class="row" data-toast="Откроются заявки без ответа"><div class="row-ic c-terra"><svg class="i"><use href="#inbox"/></svg></div><div><div class="t">3 заявки без ответа</div><div class="s">дольше 15 минут · сайт, WhatsApp</div></div><svg class="i chev end"><use href="#chev"/></svg></div>
+        <div class="row" data-go="stock"><div class="row-ic c-sky"><svg class="i"><use href="#truck"/></svg></div><div><div class="t">Поставка ПСТ-0012 опаздывает</div><div class="s">на 4 дня · 6 машин · Торугарт</div></div><svg class="i chev end"><use href="#chev"/></svg></div>
+        <div class="row" data-go="money"><div class="row-ic c-lilac"><svg class="i"><use href="#scale"/></svg></div><div><div class="t">Просрочка по рассрочке</div><div class="s">Асанов Т. · 31–60 дней · 540 000 с</div></div><svg class="i chev end"><use href="#chev"/></svg></div>
+        <div class="row" data-go="stock"><div class="row-ic c-teal"><svg class="i"><use href="#tractor"/></svg></div><div><div class="t">2 машины на складе больше 90 дней</div><div class="s">CFD504-M, CFE704-H</div></div><svg class="i chev end"><use href="#chev"/></svg></div>
+        <div class="row" data-toast="Откроются запчасти ниже минимума"><div class="row-ic c-green"><svg class="i"><use href="#box"/></svg></div><div><div class="t">4 запчасти ниже минимума</div><div class="s">фильтры, ремни — к весеннему сезону</div></div><svg class="i chev end"><use href="#chev"/></svg></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ ПРОДАЖИ ═════════════ -->
+<section class="screen" id="s-sales" data-title="Продажи" data-crumb="Отдел продаж">
+  <div class="ph">
+    <div><h2>Продажи</h2><p>Кто купил, что, за сколько и как оплатил</p></div>
+    <div class="act"><button class="btn" data-go="paths"><svg class="i"><use href="#route"/></svg>Пути продажи</button><button class="btn" data-toast="Экспорт XLSX с текущими фильтрами. Себестоимость — только у тех, кому видна"><svg class="i"><use href="#download"/></svg>Экспорт</button><button class="btn pri" data-go="newsale"><svg class="i"><use href="#plus"/></svg>Новая продажа</button></div>
+  </div>
+  <div class="tabs"><a class="on">Все<span>128</span></a><a>Оформлена<span>6</span></a><a>Ждём оплату<span>9</span></a><a>Оплачена<span>4</span></a><a>Выдана в долг<span>3</span></a><a>Закрыта<span>104</span></a><a>На согласовании<span>2</span></a><a>Отменена<span>2</span></a></div>
+  <div class="filters">
+    <div class="search" style="width:280px;height:32px;border-radius:10px"><svg class="i"><use href="#search"/></svg>Клиент, телефон, VIN, №</div>
+    <span class="chip">Период: <b>ноябрь</b> ▾</span><span class="chip">Способ оплаты ▾</span><span class="chip">Менеджер ▾</span><span class="chip on">✓ Только с долгом</span>
+    <span class="sm-txt" style="margin-left:auto">Фильтры сохраняются в адресе страницы</span>
+  </div>
+  <div class="t-wrap">
+    <table class="tbl">
+      <thead><tr><th>№ / дата</th><th>Клиент</th><th>Что купил</th><th class="r">Сумма</th><th>Способ оплаты</th><th>Оплачено</th><th>Статус</th><th>Менеджер</th></tr></thead>
+      <tbody>
+        <tr data-go="sale"><td><b>П-2026-0118</b><div class="sm-txt">04.11.2026</div></td><td><b>Токтогулов Асан</b><div class="sm-txt">КФХ «Ак-Суу» · Чуйская</div></td><td>CFJ2004(G4)<div class="sm-txt">VIN …2214</div></td><td class="r num strong">$29 500</td><td><span class="tag c-sky">Лизинг · Айыл Банк</span></td><td><div class="prog"><i style="width:20%"></i></div><div class="sm-txt num">20% · $5 900</div></td><td><span class="badge b-warn">Ждём оплату банка</span></td><td>Нурлан</td></tr>
+        <tr data-go="sale"><td><b>П-2026-0116</b><div class="sm-txt">02.11.2026</div></td><td><b>Мамытов Бакыт</b><div class="sm-txt">Иссык-Кульская</div></td><td>CFE904-H<div class="sm-txt">+ плуг ПЛН-3-35</div></td><td class="r num strong">$14 300</td><td><span class="tag c-lilac">Рассрочка 12 мес</span></td><td><div class="prog"><i style="width:38%;background:var(--lilac)"></i></div><div class="sm-txt num">38% · $5 430</div></td><td><span class="badge b-info">Выдана в долг</span></td><td>Айбек</td></tr>
+        <tr data-go="sale"><td><b>П-2026-0115</b><div class="sm-txt">31.10.2026</div></td><td><b>ОсОО «Агро-Талас»</b><div class="sm-txt">Таласская</div></td><td>2 × CFK2404(G4)</td><td class="r num strong">$69 000</td><td><span class="tag c-teal">Гослизинг 6%</span></td><td><div class="prog"><i style="width:10%;background:var(--teal)"></i></div><div class="sm-txt num">10% · $6 900</div></td><td><span class="badge b-warn">Ждём транш</span></td><td>Нурлан</td></tr>
+        <tr data-go="sale"><td><b>П-2026-0114</b><div class="sm-txt">29.10.2026</div></td><td><b>Жээнбеков Улан</b><div class="sm-txt">Ошская</div></td><td>CFD604-Z</td><td class="r num strong">$9 800</td><td><span class="tag c-sun">Предоплата + остаток</span></td><td><div class="prog"><i style="width:50%;background:var(--sun)"></i></div><div class="sm-txt num">50% · $4 900</div></td><td><span class="badge b-warn">Ждём остаток</span></td><td>Эрмек</td></tr>
+        <tr data-go="sale"><td><b>П-2026-0113</b><div class="sm-txt">27.10.2026</div></td><td><b>Абдыкалыков Нурбек</b><div class="sm-txt">Чуйская</div></td><td>CFG1404(G4)</td><td class="r num strong">$22 400</td><td><span class="tag c-green">Полная оплата</span></td><td><div class="prog"><i style="width:0%"></i></div><div class="sm-txt num">0%</div></td><td><span class="badge b-bad">На согласовании</span></td><td>Айбек</td></tr>
+        <tr data-go="sale"><td><b>П-2026-0112</b><div class="sm-txt">25.10.2026</div></td><td><b>Сатыбалдиев Канат</b><div class="sm-txt">Джалал-Абадская</div></td><td>Запчасти · 6 поз.</td><td class="r num strong">48 600 с</td><td><span class="tag c-green">Полная оплата</span></td><td><div class="prog"><i style="width:60%"></i></div><div class="sm-txt num">60% · 29 160 с</div></td><td><span class="badge b-warn">Ждём оплату</span></td><td>Эрмек</td></tr>
+      </tbody>
+      <tfoot><tr><td colspan="3">Найдено 6 продаж</td><td class="r num">$145 000 + 48 600 с</td><td></td><td colspan="3" class="num">Долг по выборке: $106 270 + 19 440 с</td></tr></tfoot>
+    </table>
+  </div>
+</section>
+
+<!-- ═════════════ НОВАЯ ПРОДАЖА ═════════════ -->
+<section class="screen" id="s-newsale" data-title="Новая продажа" data-crumb="Продажи">
+  <div class="ph"><div><h2>Новая продажа</h2><p>4 шага. Черновик сохраняется сам, машину он не резервирует</p></div><div class="act"><span class="badge b-mute">Черновик сохранён 09:52</span></div></div>
+  <div class="steps">
+    <div class="step done"><i>✓</i>Клиент</div><div class="step-line done"></div>
+    <div class="step done"><i>✓</i>Что покупает</div><div class="step-line done"></div>
+    <div class="step cur"><i>3</i>Оплата</div><div class="step-line"></div>
+    <div class="step"><i>4</i>Проверка и оформление</div>
+  </div>
+  <div class="grid g-main">
+    <div class="card">
+      <h3>Как клиент платит?</h3>
+      <div class="pay-opt">
+        <div class="opt"><div class="row-ic c-green"><svg class="i"><use href="#wallet"/></svg></div><b>Полная оплата</b><small>наличные или перевод</small></div>
+        <div class="opt"><div class="row-ic c-sun"><svg class="i"><use href="#split"/></svg></div><b>Предоплата + остаток</b><small>остаток до выдачи</small></div>
+        <div class="opt"><div class="row-ic c-lilac"><svg class="i"><use href="#cal"/></svg></div><b>Рассрочка ATADAN</b><small>график платежей</small></div>
+        <div class="opt on"><div class="row-ic c-sky"><svg class="i"><use href="#bank"/></svg></div><b>Банковский лизинг</b><small>аванс + банк</small></div>
+        <div class="opt"><div class="row-ic c-teal"><svg class="i"><use href="#landmark"/></svg></div><b>Гослизинг 6%</b><small>оплата траншем</small></div>
+      </div>
+      <div class="grid g2">
+        <div class="field"><label class="lbl2">Банк / программа</label><select class="input"><option>Айыл Банк · коммерческий лизинг</option></select></div>
+        <div class="field"><label class="lbl2">Валюта договора</label><select class="input"><option>USD</option></select></div>
+        <div class="field"><label class="lbl2">Аванс клиента</label><input class="input num" value="$5 900  (20%)"><div class="hintx">Минимум по программе банка — 10%. При 20% и выше залог не нужен</div></div>
+        <div class="field"><label class="lbl2">Оплатит банк</label><input class="input num" value="$23 600" disabled><div class="hintx">Считается сам: сумма − аванс</div></div>
+        <div class="field"><label class="lbl2">Ожидаемая дата оплаты банком</label><input class="input" value="18.11.2026"></div>
+        <div class="field"><label class="lbl2">Резерв машины до</label><input class="input" value="18.11.2026  (14 дней)"><div class="hintx">Продление резерва — с причиной</div></div>
+      </div>
+      <hr class="sp">
+      <h3 style="margin-bottom:6px">Документы для банка (чек-лист появится в продаже)</h3>
+      <div class="grid g2" style="gap:0 24px">
+        <div class="check"><span class="cb"></span>Паспорт клиента</div><div class="check"><span class="cb"></span>Справка о доходах / выписка</div>
+        <div class="check"><span class="cb"></span>Документы на землю (гос. акт / аренда)</div><div class="check"><span class="cb y"><svg class="i"><use href="#ok"/></svg></span>Коммерческое предложение (сформируем)</div>
+        <div class="check"><span class="cb y"><svg class="i"><use href="#ok"/></svg></span>Сертификат ТР ТС на модель</div><div class="check"><span class="cb"></span>Договор поставки с банком</div>
+      </div>
+      <div style="display:flex;gap:8px;margin-top:16px"><button class="btn">← Назад</button><button class="btn pri" style="margin-left:auto">Далее: проверка →</button></div>
+    </div>
+    <div class="grid" style="align-content:start">
+      <div class="card">
+        <h3>Сводка</h3>
+        <div class="list">
+          <div class="row" style="cursor:default"><div class="av" style="background:var(--sky-soft);color:var(--sky)">ТА</div><div><div class="t">Токтогулов Асан</div><div class="s">КФХ «Ак-Суу» · +996 555 12-34-56</div></div></div>
+          <div class="row" style="cursor:default"><div class="thumb c-green"><svg class="i"><use href="#tractor"/></svg></div><div><div class="t">CFJ2004(G4) · 200 л.с.</div><div class="s">VIN LCFJ2004G4…2214 · Готова</div></div><div class="end num strong">$29 500</div></div>
+        </div>
+        <hr class="sp">
+        <dl class="kv"><dt>Цена прайса</dt><dd class="num">$29 500</dd><dt>Скидка</dt><dd class="num">0</dd><dt>Итого</dt><dd class="num" style="font-size:16px">$29 500</dd><dt>В сомах (87,45)</dt><dd class="num">2 579 775 с</dd></dl>
+        <hr class="sp">
+        <dl class="kv"><dt>Себестоимость</dt><dd class="num">$25 550</dd><dt>Маржа</dt><dd class="num up">$3 950 · 13,4%</dd></dl>
+        <div class="sm-txt" style="margin-top:6px">Себестоимость и маржу видят только владелец, директор и бухгалтер</div>
+      </div>
+      <div class="notice n-warn"><svg class="i"><use href="#alert"/></svg><p>Если поставить скидку больше 5% или цену ниже себестоимости, продажа уйдёт <b>на согласование владельцу</b>.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ КАРТОЧКА ПРОДАЖИ ═════════════ -->
+<section class="screen" id="s-sale" data-title="П-2026-0118" data-crumb="Продажи">
+  <div class="ph">
+    <div><h2>Продажа П-2026-0118 <span class="badge b-warn" style="vertical-align:middle;margin-left:6px">Ждём оплату банка</span></h2><p>Оформлена 04.11.2026 · менеджер Нурлан · договор № 118/26</p></div>
+    <div class="act">
+      <button class="btn" data-toast="Печать: договор, счёт, КП, акт приёма-передачи — PDF с реквизитами компании"><svg class="i"><use href="#print"/></svg>Печать ▾</button>
+      <span class="tip" data-tip="Доступно после 100% оплаты или если владелец разрешил выдачу в долг"><button class="btn" disabled><svg class="i"><use href="#key"/></svg>Выдать клиенту</button></span>
+      <button class="btn pri" data-toast="Форма платежа: плательщик (клиент/банк), сумма, валюта, касса, дата. Переплата не проводится"><svg class="i"><use href="#plus"/></svg>Записать платёж</button>
+      <button class="btn ghost" data-toast="Ещё: Банк отказал · Продлить резерв · Отменить продажу (причина обязательна)">⋯</button>
+    </div>
+  </div>
+  <div class="card" style="margin-bottom:14px;padding:14px 18px">
+    <div class="steps" style="margin:0">
+      <div class="step done"><i>✓</i>Оформлена</div><div class="step-line done"></div>
+      <div class="step done"><i>✓</i>Аванс 20%</div><div class="step-line done"></div>
+      <div class="step done"><i>✓</i>Банк одобрил</div><div class="step-line done"></div>
+      <div class="step cur"><i>4</i>Оплата банка</div><div class="step-line"></div>
+      <div class="step"><i>5</i>Выдача</div><div class="step-line"></div>
+      <div class="step"><i>6</i>Закрыта</div>
+    </div>
+  </div>
+  <div class="grid g-main">
+    <div class="grid">
+      <div class="grid g2">
+        <div class="card"><h3><span class="row-ic c-sky" style="width:28px;height:28px"><svg class="i" style="width:16px;height:16px"><use href="#users"/></svg></span>Клиент <a class="more" data-toast="Откроется карточка клиента: покупки, техника, долги">Карточка →</a></h3>
+          <dl class="kv"><dt>ФИО</dt><dd>Токтогулов Асан</dd><dt>Хозяйство</dt><dd>КФХ «Ак-Суу», 180 га</dd><dt>Телефон</dt><dd class="num">+996 555 12-34-56</dd><dt>Регион</dt><dd>Чуйская, Аламедин</dd><dt>Источник</dt><dd><span class="tag c-green">Сайт · калькулятор лизинга</span></dd></dl>
+        </div>
+        <div class="card"><h3><span class="row-ic c-green" style="width:28px;height:28px"><svg class="i" style="width:16px;height:16px"><use href="#tractor"/></svg></span>Что купил <a class="more" data-go="stock">Машина →</a></h3>
+          <dl class="kv"><dt>Модель</dt><dd>CFJ2004(G4) · 200 л.с.</dd><dt>VIN</dt><dd class="num">LCFJ2004G4N032214</dd><dt>Статус машины</dt><dd><span class="badge b-info">Резерв до 18.11</span></dd><dt>Цена</dt><dd class="num">$29 500</dd><dt>Маржа</dt><dd class="num up">$3 950 · 13,4%</dd></dl>
+        </div>
+      </div>
+      <div class="card">
+        <h3><span class="row-ic c-sun" style="width:28px;height:28px"><svg class="i" style="width:16px;height:16px"><use href="#wallet"/></svg></span>Оплата</h3>
+        <div class="grid g4" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">
+          <div><div class="sm-txt">Сумма продажи</div><div class="num strong" style="font-size:19px">$29 500</div></div>
+          <div><div class="sm-txt">Оплачено</div><div class="num strong in" style="font-size:19px">$5 900</div></div>
+          <div><div class="sm-txt">Осталось · платит Айыл Банк</div><div class="num strong" style="font-size:19px;color:var(--warn)">$23 600</div></div>
+        </div>
+        <div class="prog" style="height:9px;margin-bottom:14px"><i style="width:20%"></i></div>
+        <div class="t-wrap">
+          <table class="tbl">
+            <thead><tr><th>Дата</th><th>Плательщик</th><th>Касса / счёт</th><th class="r">Сумма</th><th class="r">Курс</th><th>Статус</th></tr></thead>
+            <tbody>
+              <tr><td>04.11.2026</td><td>Токтогулов А. (аванс)</td><td>Айыл Банк р/с · KGS</td><td class="r num in">+ 515 955 с</td><td class="r num">87,45 → $5 900</td><td><span class="badge b-good">Проведён</span></td></tr>
+              <tr style="opacity:.75"><td>≈ 18.11.2026</td><td>Айыл Банк (лизинг)</td><td>—</td><td class="r num">$23 600</td><td class="r">—</td><td><span class="badge b-mute">Ожидается</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div class="grid" style="align-content:start">
+      <div class="card">
+        <h3>Лизинговое досье · Айыл Банк <span class="badge b-good" style="margin-left:auto">Одобрено</span></h3>
+        <div class="check"><span class="cb y"><svg class="i"><use href="#ok"/></svg></span>Паспорт клиента</div>
+        <div class="check"><span class="cb y"><svg class="i"><use href="#ok"/></svg></span>Справка о доходах</div>
+        <div class="check"><span class="cb y"><svg class="i"><use href="#ok"/></svg></span>Документы на землю</div>
+        <div class="check"><span class="cb y"><svg class="i"><use href="#ok"/></svg></span>КП и спецификация</div>
+        <div class="check"><span class="cb y"><svg class="i"><use href="#ok"/></svg></span>Сертификат ТР ТС</div>
+        <div class="check"><span class="cb"></span>Договор поставки с банком <a class="more" style="margin-left:auto;color:var(--brand);font-weight:600;font-size:12.5px" data-toast="Загрузить файл договора">Загрузить</a></div>
+      </div>
+      <div class="card">
+        <h3>История</h3>
+        <div class="tl">
+          <div>Банк одобрил лизинг<small>06.11 · 11:20 · Нурлан</small></div>
+          <div>Платёж 515 955 с (аванс) проведён<small>04.11 · 16:05 · Гульнара (бухгалтер)</small></div>
+          <div>Машина VIN …2214 зарезервирована до 18.11<small>04.11 · 15:40 · автоматически</small></div>
+          <div>Продажа оформлена из заявки №341 (сайт)<small>04.11 · 15:40 · Нурлан</small></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ ПУТИ ПРОДАЖИ ═════════════ -->
+<section class="screen" id="s-paths" data-title="Пути продажи" data-crumb="Продажи">
+  <div class="ph"><div><h2>Пути продажи</h2><p>Продажа одна, отличаются способ оплаты и шаги до выдачи. Красным — что делаем, если что-то пошло не так</p></div></div>
+  <div class="card">
+    <div class="lane"><div class="lane-h"><div class="row-ic c-green"><svg class="i"><use href="#wallet"/></svg></div><div><b>1. Полная оплата</b><small>наличные или перевод</small></div></div>
+      <div><div class="flow"><span class="fs k">Продажа</span><span class="fa">→</span><span class="fs k">Резерв VIN</span><span class="fa">→</span><span class="fs k">Платёж 100%</span><span class="fa">→</span><span class="fs g">Выдача + акт</span><span class="fa">→</span><span class="fs">Закрыта</span></div>
+      <div class="alt"><span class="fs">Клиент не заплатил 14 дней</span><span class="fa">→</span><span>резерв истекает, менеджеру уведомление: продлить или отменить</span></div></div></div>
+    <div class="lane"><div class="lane-h"><div class="row-ic c-sun"><svg class="i"><use href="#split"/></svg></div><div><b>2. Предоплата + остаток</b><small>часто машина ещё в пути</small></div></div>
+      <div><div class="flow"><span class="fs k">Продажа (VIN или «под заказ»)</span><span class="fa">→</span><span class="fs k">Предоплата</span><span class="fa">→</span><span class="fs">Машина пришла · PDI</span><span class="fa">→</span><span class="fs k">Остаток</span><span class="fa">→</span><span class="fs g">Выдача</span></div>
+      <div class="alt"><span class="fs">Клиент передумал</span><span class="fa">→</span><span>Отмена: «Вернуть предоплату» или «Удержать по договору»; резерв снимается</span></div></div></div>
+    <div class="lane"><div class="lane-h"><div class="row-ic c-lilac"><svg class="i"><use href="#cal"/></svg></div><div><b>3. Рассрочка ATADAN</b><small>график платежей</small></div></div>
+      <div><div class="flow"><span class="fs k">Продажа + график</span><span class="fa">→</span><span class="fs k">Первый взнос</span><span class="fa">→</span><span class="fs">Разрешение владельца</span><span class="fa">→</span><span class="fs g">Выдача в долг</span><span class="fa">→</span><span class="fs k">Платежи по графику</span><span class="fa">→</span><span class="fs">Закрыта</span></div>
+      <div class="alt"><span class="fs">Просрочка</span><span class="fa">→</span><span>«Долги»: корзины 1–30 / 31–60 / 61–90 / 90+; уведомления менеджеру и бухгалтеру; пени — по настройке</span></div></div></div>
+    <div class="lane"><div class="lane-h"><div class="row-ic c-sky"><svg class="i"><use href="#bank"/></svg></div><div><b>4. Банковский лизинг</b><small>Айыл Банк, Элдик, РКФР</small></div></div>
+      <div><div class="flow"><span class="fs k">Продажа</span><span class="fa">→</span><span class="fs k">Аванс клиента</span><span class="fa">→</span><span class="fs">Досье: документы</span><span class="fa">→</span><span class="fs">Решение банка</span><span class="fa">→</span><span class="fs">Договор с банком</span><span class="fa">→</span><span class="fs k">Оплата банка</span><span class="fa">→</span><span class="fs g">Выдача</span></div>
+      <div class="alt"><span class="fs">Банк отказал</span><span class="fa">→</span><span>причина обязательна → сменить банк · сменить способ оплаты · отменить продажу; аванс ждёт решения</span></div></div></div>
+    <div class="lane"><div class="lane-h"><div class="row-ic c-teal"><svg class="i"><use href="#landmark"/></svg></div><div><b>5. Гослизинг 6%</b><small>Минсельхоз через банк</small></div></div>
+      <div><div class="flow"><span class="fs k">Продажа</span><span class="fa">→</span><span class="fs">Заявка в программу</span><span class="fa">→</span><span class="fs">Ожидание транша</span><span class="fa">→</span><span class="fs k">Оплата банка</span><span class="fa">→</span><span class="fs g">Выдача</span></div>
+      <div class="alt"><span class="fs w">Транш задерживается</span><span class="fa">→</span><span>резерв 60 дней; дальше владелец решает: продлить или продать машину другому</span></div></div></div>
+    <div class="lane"><div class="lane-h"><div class="row-ic c-terra"><svg class="i"><use href="#box"/></svg></div><div><b>6. Запчасти и сервис</b><small>без VIN, быстро</small></div></div>
+      <div><div class="flow"><span class="fs k">Позиции</span><span class="fa">→</span><span class="fs k">Оплата</span><span class="fa">→</span><span class="fs g">Списание со склада</span></div>
+      <div class="alt"><span class="fs">Не хватает на складе</span><span class="fa">→</span><span>продажа не оформляется; можно «под заказ» со сроком</span></div></div></div>
+  </div>
+</section>
+
+<!-- ═════════════ СКЛАД И ЛОГИСТИКА ═════════════ -->
+<section class="screen" id="s-stock" data-title="Техника" data-crumb="Склад и логистика">
+  <div class="ph"><div><h2>Техника</h2><p>Каждая машина по VIN: откуда пришла, сколько стоила, где сейчас, кому продана</p></div>
+    <div class="act"><button class="btn" data-toast="Импорт упаковочного листа: VIN, № двигателя, модель. Дубли VIN не загружаются"><svg class="i"><use href="#upload"/></svg>Импорт VIN</button><button class="btn pri" data-toast="Принять поставку: выбрать поставку → отметить пришедшие машины → себестоимость посчитается сама"><svg class="i"><use href="#plus"/></svg>Принять поставку</button></div></div>
+  <div class="card" style="margin-bottom:14px">
+    <h3>Логистика: что едет к нам <a class="more" data-toast="Откроется «Логистика»: заказы заводу и поставки">Вся логистика →</a></h3>
+    <div class="pipe">
+      <div class="ship-col"><h4><span class="badge b-mute">Заказано</span> 4</h4><div class="ship"><div class="tt">ЗК-0021 <span class="sm-txt">¥ 812 000</span></div><div class="ss">4 × CFG1204-B · оплачено 30%</div></div></div>
+      <div class="ship-col"><h4><span class="badge b-info">Отгружено</span> 3</h4><div class="ship"><div class="tt">ПСТ-0013</div><div class="ss">3 машины · Чанчжоу → Урумчи<br>ETA 22.11</div></div></div>
+      <div class="ship-col"><h4><span class="badge b-info">В пути</span> 0</h4><div class="sm-txt" style="padding:8px">Пусто</div></div>
+      <div class="ship-col"><h4><span class="badge b-warn">Таможня</span> 6</h4><div class="ship" style="border-color:var(--bad)"><div class="tt">ПСТ-0012 <span class="badge b-bad">+4 дня</span></div><div class="ss">6 машин · Торугарт · ETA 01.11<br>Расходы: фрахт $7 200, брокер 85 000 с</div></div></div>
+      <div class="ship-col"><h4><span class="badge b-good">Принято</span> за месяц</h4><div class="ship"><div class="tt">ПСТ-0011</div><div class="ss">5 машин · 21.10 · себестоимость посчитана</div></div></div>
+    </div>
+  </div>
+  <div class="tabs"><a class="on">Все<span>31</span></a><a>Готова к продаже<span>8</span></a><a>На складе<span>3</span></a><a>Резерв<span>4</span></a><a>В пути / таможня<span>9</span></a><a>Заказана<span>4</span></a><a>Продана / выдана<span>203</span></a></div>
+  <div class="t-wrap">
+    <table class="tbl">
+      <thead><tr><th>VIN</th><th>Модель</th><th>Статус</th><th>Где</th><th class="r">Дней на складе</th><th class="r">Себестоимость</th><th class="r">Цена прайса</th><th>Продажа</th></tr></thead>
+      <tbody>
+        <tr><td class="num"><b>…2214</b></td><td>CFJ2004(G4)</td><td><span class="badge b-info">Резерв до 18.11</span></td><td>Склад Бишкек</td><td class="r num ag g">12</td><td class="r num">$25 550</td><td class="r num">$29 500</td><td><a data-go="sale" style="color:var(--brand);font-weight:600">П-2026-0118</a></td></tr>
+        <tr><td class="num"><b>…1987</b></td><td>CFG1204-B</td><td><span class="badge b-good">Готова</span></td><td>Склад Бишкек</td><td class="r num ag g">21</td><td class="r num">$15 120</td><td class="r num">$17 900</td><td class="sm-txt">—</td></tr>
+        <tr><td class="num"><b>…1702</b></td><td>CFE904-H</td><td><span class="badge b-warn">PDI</span></td><td>Сервис-зона</td><td class="r num ag w">48</td><td class="r num">$11 860</td><td class="r num">$13 900</td><td class="sm-txt">—</td></tr>
+        <tr><td class="num"><b>…0941</b></td><td>CFD504-M</td><td><span class="badge b-good">Готова</span></td><td>Филиал Ош</td><td class="r num ag b">118</td><td class="r num">$6 340</td><td class="r num">$7 600</td><td class="sm-txt">—</td></tr>
+        <tr><td class="num"><b>…3305</b></td><td>CFK2404(G4)</td><td><span class="badge b-warn">Таможня</span></td><td>Торугарт · ПСТ-0012</td><td class="r sm-txt">—</td><td class="r num sm-txt">$30 100 предв.</td><td class="r num">$34 500</td><td><a data-go="sale" style="color:var(--brand);font-weight:600">П-2026-0115</a> <span class="sm-txt">под заказ</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="sm-txt" style="margin-top:8px">«предв.» — себестоимость предварительная, пока не внесены все расходы поставки. Наличие на сайте считается из этой таблицы автоматически.</p>
+</section>
+
+<!-- ═════════════ КАССА И ДОЛГИ ═════════════ -->
+<section class="screen" id="s-money" data-title="Касса и платежи" data-crumb="Финансы">
+  <div class="ph"><div><h2>Касса и платежи</h2><p>Все деньги компании: приход, расход и остатки по кассам и счетам</p></div>
+    <div class="act"><button class="btn" data-toast="Перевод между кассами: две связанные записи, курс обязателен при разной валюте"><svg class="i"><use href="#swap"/></svg>Перевод</button><button class="btn" data-toast="Расход: категория, сумма, касса, привязка (поставка / реклама / машина)"><span class="out">−</span> Расход</button><button class="btn pri" data-toast="Приход: основание (продажа / аванс / прочее), касса, сумма, курс"><svg class="i"><use href="#plus"/></svg>Приход</button></div></div>
+  <div class="grid g4" style="margin-bottom:14px">
+    <div class="card kpi k-green"><div class="acc"><div class="t"><span class="row-ic c-green" style="width:28px;height:28px"><svg class="i" style="width:15px;height:15px"><use href="#wallet"/></svg></span>Касса · наличные</div><div class="v num">1 240 000 с</div><div class="sm-txt">сегодня +215 000</div></div></div>
+    <div class="card kpi k-sky"><div class="acc"><div class="t"><span class="row-ic c-sky" style="width:28px;height:28px"><svg class="i" style="width:15px;height:15px"><use href="#bank"/></svg></span>Айыл Банк · р/с KGS</div><div class="v num">8 930 500 с</div><div class="sm-txt">выписка сверена 04.11</div></div></div>
+    <div class="card kpi k-lilac"><div class="acc"><div class="t"><span class="row-ic c-lilac" style="width:28px;height:28px"><svg class="i" style="width:15px;height:15px"><use href="#bank"/></svg></span>Optima · валютный USD</div><div class="v num">$42 300</div><div class="sm-txt">≈ 3 699 135 с</div></div></div>
+    <div class="card kpi k-sun"><div class="acc"><div class="t"><span class="row-ic c-sun" style="width:28px;height:28px"><svg class="i" style="width:15px;height:15px"><use href="#wallet"/></svg></span>Касса · USD</div><div class="v num">$6 200</div><div class="sm-txt">≈ 542 190 с</div></div></div>
+  </div>
+  <div class="grid g-main">
+    <div class="t-wrap">
+      <table class="tbl">
+        <thead><tr><th>Дата</th><th>Основание</th><th>Контрагент</th><th>Касса</th><th class="r">Сумма</th><th></th></tr></thead>
+        <tbody>
+          <tr><td>05.11</td><td>Продажа П-2026-0116 · платёж 2/12</td><td>Мамытов Б.</td><td>Касса KGS</td><td class="r num in">+ 108 000 с</td><td><span class="badge b-good">Проведён</span></td></tr>
+          <tr><td>05.11</td><td>Расход поставки ПСТ-0012 · брокер</td><td>ОсОО «Бройлер Брокер»</td><td>Айыл Банк</td><td class="r num out">− 85 000 с</td><td><span class="badge b-good">Проведён</span></td></tr>
+          <tr><td>04.11</td><td>Продажа П-2026-0118 · аванс</td><td>Токтогулов А.</td><td>Айыл Банк</td><td class="r num in">+ 515 955 с</td><td><span class="badge b-good">Проведён</span></td></tr>
+          <tr><td>03.11</td><td>Оплата заводу ЗК-0021 (30%)</td><td>Changfa Group</td><td>Optima USD</td><td class="r num out">− $35 400</td><td><span class="badge b-good">¥ 243 600 · курс 6,88</span></td></tr>
+          <tr style="opacity:.6"><td>02.11</td><td><s>Расход: реклама Instagram</s> · ошибочная сумма</td><td>Meta</td><td>Касса USD</td><td class="r num"><s>− $400</s></td><td><span class="badge b-mute">Сторно</span></td></tr>
+          <tr><td>01.11</td><td>Аренда склада · ноябрь</td><td>ИП Касымов</td><td>Айыл Банк</td><td class="r num out">− 160 000 с</td><td><span class="badge b-good">Проведён</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="card">
+      <h3>Долги: кто нам должен <a class="more" data-toast="Откроются «Долги» с фильтрами по корзинам">Все →</a></h3>
+      <div class="bucket"><span>Не просрочено</span><div class="bar"><i style="width:82%;background:var(--brand)"></i></div><span class="num r strong" style="text-align:right">4 980 000</span></div>
+      <div class="bucket"><span>1–30 дней</span><div class="bar"><i style="width:6%;background:var(--sun)"></i></div><span class="num strong" style="text-align:right">300 000</span></div>
+      <div class="bucket"><span>31–60 дней</span><div class="bar"><i style="width:9%;background:var(--terra)"></i></div><span class="num strong" style="text-align:right">540 000</span></div>
+      <div class="bucket"><span>61–90 дней</span><div class="bar"><i style="width:0%"></i></div><span class="num strong" style="text-align:right">0</span></div>
+      <div class="bucket"><span>Больше 90</span><div class="bar"><i style="width:5%;background:var(--bad)"></i></div><span class="num strong" style="text-align:right">300 000</span></div>
+      <hr class="sp">
+      <div class="list">
+        <div class="row"><div class="row-ic c-sky"><svg class="i"><use href="#bank"/></svg></div><div><div class="t">Айыл Банк</div><div class="s">2 продажи · ждём до 18.11</div></div><div class="end num strong">3 900 000 с</div></div>
+        <div class="row"><div class="row-ic c-terra"><svg class="i"><use href="#users"/></svg></div><div><div class="t">Асанов Талант</div><div class="s">рассрочка · 41 день просрочки</div></div><div class="end num strong down">540 000 с</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ═════════════ КАТАЛОГ ═════════════ -->
+<section class="screen" id="s-catalog" data-title="Каталог техники" data-crumb="Маркетинг">
+  <div class="ph"><div><h2>Каталог техники</h2><p>Что видят клиенты на atadan.kg. Цену меняете здесь, наличие считается со склада</p></div>
+    <div class="act"><button class="btn" data-toast="Открыть сайт в новой вкладке"><svg class="i"><use href="#globe"/></svg>Открыть сайт</button><button class="btn" data-toast="Импорт моделей и цен из XLSX: предпросмотр, затем загрузка"><svg class="i"><use href="#upload"/></svg>Импорт цен</button><button class="btn pri" data-toast="Новая модель: название, класс, л.с., цена, фото, характеристики. Без цены и фото — только черновик"><svg class="i"><use href="#plus"/></svg>Добавить модель</button></div></div>
+  <div class="filters"><span class="chip on">Все <b>41</b></span><span class="chip"><span class="tag c-teal" style="height:18px">●</span>Универсальные 14</span><span class="chip"><span class="tag c-sky" style="height:18px">●</span>Средний класс 17</span><span class="chip"><span class="tag c-sun" style="height:18px">●</span>Тяжёлый класс 10</span><span class="chip">Скрытые 2</span><div class="search" style="width:240px;height:32px;border-radius:10px;margin-left:auto"><svg class="i"><use href="#search"/></svg>Модель</div></div>
+  <div class="t-wrap">
+    <table class="tbl">
+      <thead><tr><th></th><th>Модель</th><th>Класс</th><th class="r">Мощность</th><th>Цена на сайте</th><th>Наличие (со склада) <span title="Считается автоматически">🔒</span></th><th>Акция</th><th>На сайте</th></tr></thead>
+      <tbody>
+        <tr><td><div class="thumb c-sun"><svg class="i"><use href="#tractor"/></svg></div></td><td><b>CFK2404(G4)</b><div class="sm-txt">обновлено 01.11 · Айгерим</div></td><td><span class="tag c-sun">Тяжёлый</span></td><td class="r num">240 л.с.</td><td><div class="price-in" data-toast="Цена меняется сразу на сайте. Оформленные продажи не меняются, черновики предложат обновить">$34 500 <svg class="i" style="width:14px"><use href="#pen"/></svg></div></td><td><span class="badge b-info">В пути · ~22.11</span></td><td class="sm-txt">—</td><td><span class="sw"></span></td></tr>
+        <tr><td><div class="thumb c-sun"><svg class="i"><use href="#tractor"/></svg></div></td><td><b>CFJ2004(G4)</b><div class="sm-txt">обновлено 14.10</div></td><td><span class="tag c-sun">Тяжёлый</span></td><td class="r num">200 л.с.</td><td><div class="price-in">$29 500 <svg class="i" style="width:14px"><use href="#pen"/></svg></div></td><td><span class="badge b-good">В наличии 2</span></td><td><span class="tag c-terra">−5% до 30.11</span></td><td><span class="sw"></span></td></tr>
+        <tr><td><div class="thumb c-sky"><svg class="i"><use href="#tractor"/></svg></div></td><td><b>CFG1204-B</b></td><td><span class="tag c-sky">Средний</span></td><td class="r num">120 л.с.</td><td><div class="price-in">$17 900 <svg class="i" style="width:14px"><use href="#pen"/></svg></div></td><td><span class="badge b-good">В наличии 3</span></td><td class="sm-txt">—</td><td><span class="sw"></span></td></tr>
+        <tr><td><div class="thumb c-sky"><svg class="i"><use href="#tractor"/></svg></div></td><td><b>CFE904-H</b></td><td><span class="tag c-sky">Средний</span></td><td class="r num">90 л.с.</td><td><div class="price-in">$13 900 <svg class="i" style="width:14px"><use href="#pen"/></svg></div></td><td><span class="badge b-warn">Подготовка 1</span></td><td class="sm-txt">—</td><td><span class="sw"></span></td></tr>
+        <tr><td><div class="thumb c-teal"><svg class="i"><use href="#tractor"/></svg></div></td><td><b>CFD504-M</b></td><td><span class="tag c-teal">Универсальный</span></td><td class="r num">50 л.с.</td><td><div class="price-in">$7 600 <svg class="i" style="width:14px"><use href="#pen"/></svg></div></td><td><span class="badge b-good">В наличии 1</span></td><td class="sm-txt">—</td><td><span class="sw"></span></td></tr>
+        <tr><td><div class="thumb c-teal"><svg class="i"><use href="#tractor"/></svg></div></td><td><b>CFB504-X</b><div class="sm-txt err">нет фото · нельзя опубликовать</div></td><td><span class="tag c-teal">Универсальный</span></td><td class="r num">50 л.с.</td><td><div class="price-in">— <svg class="i" style="width:14px"><use href="#pen"/></svg></div></td><td><span class="badge b-mute">Под заказ</span></td><td class="sm-txt">—</td><td><span class="sw off"></span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ═════════════ НАСТРОЙКИ ═════════════ -->
+<section class="screen" id="s-settings" data-title="Настройки" data-crumb="Система">
+  <div class="grid" style="grid-template-columns:330px minmax(0,1fr);align-items:start">
+    <div>
+      <div class="gt">Профиль и аккаунт</div>
+      <div class="grouped">
+        <div class="row"><div class="row-ic c-green"><svg class="i"><use href="#users"/></svg></div>Мой профиль<svg class="i chev end"><use href="#chev"/></svg></div>
+        <div class="row"><div class="row-ic c-sun"><svg class="i"><use href="#key"/></svg></div>Изменить пароль<svg class="i chev end"><use href="#chev"/></svg></div>
+        <div class="row"><div class="row-ic c-terra"><svg class="i"><use href="#logout"/></svg></div>Сеансы и выход<svg class="i chev end"><use href="#chev"/></svg></div>
+      </div>
+      <div class="gt">Приложение</div>
+      <div class="grouped">
+        <div class="row"><div class="row-ic c-lilac"><svg class="i"><use href="#palette"/></svg></div>Тема и вид<span class="end sm-txt">Лес</span><svg class="i chev"><use href="#chev"/></svg></div>
+        <div class="row"><div class="row-ic c-sky"><svg class="i"><use href="#bell"/></svg></div>Уведомления<svg class="i chev end"><use href="#chev"/></svg></div>
+      </div>
+      <div class="gt">Компания</div>
+      <div class="grouped">
+        <div class="row"><div class="row-ic c-teal"><svg class="i"><use href="#users"/></svg></div>Сотрудники<span class="end sm-txt">7</span><svg class="i chev"><use href="#chev"/></svg></div>
+        <div class="row"><div class="row-ic c-sun"><svg class="i"><use href="#key"/></svg></div>Роли и доступы<svg class="i chev end"><use href="#chev"/></svg></div>
+        <div class="row"><div class="row-ic c-green"><svg class="i"><use href="#bank"/></svg></div>Реквизиты, кассы и счета<svg class="i chev end"><use href="#chev"/></svg></div>
+        <div class="row"><div class="row-ic c-sky"><svg class="i"><use href="#swap"/></svg></div>Курсы валют<span class="end sm-txt">НБКР авто</span><svg class="i chev"><use href="#chev"/></svg></div>
+        <div class="row"><div class="row-ic c-terra"><svg class="i"><use href="#list"/></svg></div>Справочники: причины отказа, категории расходов<svg class="i chev end"><use href="#chev"/></svg></div>
+      </div>
+      <div class="gt">Данные</div>
+      <div class="grouped">
+        <div class="row on"><div class="row-ic c-lilac"><svg class="i"><use href="#swap"/></svg></div><b>Экспорт и импорт</b><svg class="i chev end"><use href="#chev"/></svg></div>
+        <div class="row"><div class="row-ic c-teal"><svg class="i"><use href="#list"/></svg></div>Журнал действий<svg class="i chev end"><use href="#chev"/></svg></div>
+      </div>
+    </div>
+    <div class="grid">
+      <div class="card">
+        <h3>Тема</h3>
+        <div class="themes">
+          <div class="th on" data-th="forest"><div class="pv"><i style="width:28%;background:#0b2e1f"></i><i style="flex:1;background:#eef4f0"></i><i style="width:18%;background:#146b3a"></i></div>Лес</div>
+          <div class="th" data-th="field"><div class="pv"><i style="width:28%;background:#fff;border-right:1px solid #e5e1d3"></i><i style="flex:1;background:#f6f4ec"></i><i style="width:18%;background:#167a42"></i></div>Поле</div>
+          <div class="th" data-th="night"><div class="pv"><i style="width:28%;background:#050c09"></i><i style="flex:1;background:#0f1b15"></i><i style="width:18%;background:#3fbd76"></i></div>Ночь</div>
+        </div>
+      </div>
+      <div class="grid g2">
+        <div class="card">
+          <h3><span class="row-ic c-green" style="width:28px;height:28px"><svg class="i" style="width:15px;height:15px"><use href="#download"/></svg></span>Экспорт</h3>
+          <div class="field"><label class="lbl2">Что выгрузить</label><select class="input"><option>Продажи (с позициями и платежами)</option></select></div>
+          <div class="grid g2" style="gap:10px"><div class="field"><label class="lbl2">Период</label><select class="input"><option>2026 год</option></select></div><div class="field"><label class="lbl2">Формат</label><select class="input"><option>Excel (XLSX)</option></select></div></div>
+          <button class="btn pri" style="width:100%;justify-content:center" data-toast="Файл скачается; в журнал запишется: кто, что и когда выгрузил">Скачать</button>
+          <hr class="sp">
+          <div class="row" style="display:flex;gap:12px;align-items:center"><div class="row-ic c-lilac"><svg class="i"><use href="#shield"/></svg></div><div><div class="strong">Полная резервная копия</div><div class="sm-txt">все данные и файлы · ZIP · только владелец<br>последняя: 01.11.2026, 128 МБ</div></div><button class="btn sm" style="margin-left:auto" data-toast="Создаём копию… ссылка придёт в уведомления">Создать</button></div>
+        </div>
+        <div class="card">
+          <h3><span class="row-ic c-sky" style="width:28px;height:28px"><svg class="i" style="width:15px;height:15px"><use href="#upload"/></svg></span>Импорт</h3>
+          <div class="steps" style="margin-bottom:12px"><div class="step done"><i>✓</i></div><div class="step-line done" style="width:18px"></div><div class="step done"><i>✓</i></div><div class="step-line done" style="width:18px"></div><div class="step done"><i>✓</i></div><div class="step-line done" style="width:18px"></div><div class="step cur"><i>4</i>Предпросмотр</div><div class="step-line" style="width:18px"></div><div class="step"><i>5</i></div></div>
+          <div class="sm-txt" style="margin-bottom:8px">Файл: <b style="color:var(--text)">клиенты_2025.xlsx</b> · тип: Клиенты · дубли по телефону: <b style="color:var(--text)">обновить</b></div>
+          <div class="grid" style="grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px">
+            <div class="card" style="padding:10px;text-align:center"><div class="num strong in" style="font-size:18px">120</div><div class="sm-txt">создать</div></div>
+            <div class="card" style="padding:10px;text-align:center"><div class="num strong" style="font-size:18px;color:var(--info)">14</div><div class="sm-txt">обновить</div></div>
+            <div class="card" style="padding:10px;text-align:center"><div class="num strong down" style="font-size:18px">3</div><div class="sm-txt">ошибки</div></div>
+          </div>
+          <div class="t-wrap" style="margin-bottom:10px"><table class="tbl"><tbody>
+            <tr><td class="sm-txt">стр. 17</td><td class="err">Телефон «0555 12» — неверный формат</td></tr>
+            <tr><td class="sm-txt">стр. 42</td><td class="err">Регион «Чуй» не найден — выберите из списка</td></tr>
+            <tr><td class="sm-txt">стр. 88</td><td class="err">Пустое имя</td></tr>
+          </tbody></table></div>
+          <div style="display:flex;gap:8px"><button class="btn sm" data-toast="Скачать файл только с ошибочными строками">Скачать ошибки</button><button class="btn pri sm" style="margin-left:auto" data-toast="Загрузка 134 строк. Импорт №17 можно откатить целиком 7 дней">Загрузить 134 строки</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ═════════════ ТЕЛЕФОН ═════════════ -->
+<div class="full" id="s-phone">
+  <div class="phones">
+
+    <div class="phone-wrap"><p>Главная</p><div class="phone">
+      <div class="p-status"><span>9:41</span><span>●●● 5G ▮</span></div>
+      <div class="p-top"><div class="av" style="width:32px;height:32px">Б</div><h1>Главная</h1><button class="tap"><svg class="i"><use href="#search"/></svg></button><button class="tap"><svg class="i"><use href="#bell"/></svg><span class="dot">5</span></button></div>
+      <div class="p-body">
+        <div class="m-kpi">
+          <div class="card kpi k-sun"><div class="ic c-sun"><svg class="i"><use href="#cart"/></svg></div><div class="lbl">Выручка</div><div class="val num">18,45 млн</div><div class="hint"><span class="up">▲ 12%</span></div></div>
+          <div class="card kpi k-green"><div class="ic c-green"><svg class="i"><use href="#trend"/></svg></div><div class="lbl">Маржа</div><div class="val num">12,5%</div><div class="hint num">2,31 млн с</div></div>
+          <div class="card kpi k-sky"><div class="ic c-sky"><svg class="i"><use href="#tractor"/></svg></div><div class="lbl">На складе</div><div class="val num">14 шт.</div><div class="hint">9 в пути</div></div>
+          <div class="card kpi k-terra"><div class="ic c-terra"><svg class="i"><use href="#scale"/></svg></div><div class="lbl">Нам должны</div><div class="val num">6,12 млн</div><div class="hint down">0,84 просроч.</div></div>
+        </div>
+        <div class="gt">Требует внимания</div>
+        <div class="grouped">
+          <div class="row"><div class="row-ic c-sun"><svg class="i"><use href="#percent"/></svg></div><div><div class="strong" style="font-size:13.5px">2 согласования</div><div class="sm-txt">скидка больше 5%</div></div><svg class="i chev end"><use href="#chev"/></svg></div>
+          <div class="row"><div class="row-ic c-terra"><svg class="i"><use href="#inbox"/></svg></div><div><div class="strong" style="font-size:13.5px">3 заявки без ответа</div><div class="sm-txt">дольше 15 минут</div></div><svg class="i chev end"><use href="#chev"/></svg></div>
+          <div class="row"><div class="row-ic c-sky"><svg class="i"><use href="#truck"/></svg></div><div><div class="strong" style="font-size:13.5px">ПСТ-0012 опаздывает</div><div class="sm-txt">+4 дня · Торугарт</div></div><svg class="i chev end"><use href="#chev"/></svg></div>
+        </div>
+      </div>
+      <div class="p-nav"><a class="on"><svg class="i"><use href="#home"/></svg>Главная</a><a><svg class="i"><use href="#briefcase"/></svg>Работа</a><div class="p-plus"><span><svg class="i"><use href="#plus"/></svg></span></div><a><svg class="i"><use href="#mega"/></svg>Маркетинг</a><a><svg class="i"><use href="#gear"/></svg>Настройки</a></div>
+    </div></div>
+
+    <div class="phone-wrap"><p>Работа → Продажи</p><div class="phone">
+      <div class="p-status"><span>9:41</span><span>●●● 5G ▮</span></div>
+      <div class="p-top"><button class="tap"><svg class="i" style="transform:rotate(180deg)"><use href="#chev"/></svg></button><h1>Продажи</h1><button class="tap"><svg class="i"><use href="#search"/></svg></button><button class="tap"><svg class="i"><use href="#bell"/></svg><span class="dot">5</span></button></div>
+      <div class="p-body">
+        <div class="m-tabs"><span class="on">Все 128</span><span>Ждём оплату 9</span><span>В долг 3</span></div>
+        <div class="m-card"><div class="l1"><span>Токтогулов Асан</span><span class="num">$29 500</span></div><div class="l2">П-0118 · CFJ2004(G4) · 04.11</div><div class="l3"><span class="tag c-sky">Лизинг</span><div class="prog" style="flex:1"><i style="width:20%"></i></div><span class="sm-txt num">20%</span></div></div>
+        <div class="m-card"><div class="l1"><span>Мамытов Бакыт</span><span class="num">$14 300</span></div><div class="l2">П-0116 · CFE904-H · 02.11</div><div class="l3"><span class="tag c-lilac">Рассрочка</span><div class="prog" style="flex:1"><i style="width:38%;background:var(--lilac)"></i></div><span class="sm-txt num">38%</span></div></div>
+        <div class="m-card"><div class="l1"><span>ОсОО «Агро-Талас»</span><span class="num">$69 000</span></div><div class="l2">П-0115 · 2 × CFK2404 · 31.10</div><div class="l3"><span class="tag c-teal">Гослизинг</span><div class="prog" style="flex:1"><i style="width:10%;background:var(--teal)"></i></div><span class="sm-txt num">10%</span></div></div>
+        <div class="m-card"><div class="l1"><span>Жээнбеков Улан</span><span class="num">$9 800</span></div><div class="l2">П-0114 · CFD604-Z · 29.10</div><div class="l3"><span class="tag c-sun">Предоплата</span><div class="prog" style="flex:1"><i style="width:50%;background:var(--sun)"></i></div><span class="sm-txt num">50%</span></div></div>
+      </div>
+      <div class="p-nav"><a><svg class="i"><use href="#home"/></svg>Главная</a><a class="on"><svg class="i"><use href="#briefcase"/></svg>Работа</a><div class="p-plus"><span><svg class="i"><use href="#plus"/></svg></span></div><a><svg class="i"><use href="#mega"/></svg>Маркетинг</a><a><svg class="i"><use href="#gear"/></svg>Настройки</a></div>
+    </div></div>
+
+    <div class="phone-wrap"><p>Кнопка «＋»</p><div class="phone">
+      <div class="p-status"><span>9:41</span><span>●●● 5G ▮</span></div>
+      <div class="p-top"><div class="av" style="width:32px;height:32px">Б</div><h1>Главная</h1></div>
+      <div class="p-body"><div class="m-kpi"><div class="card" style="height:90px"></div><div class="card" style="height:90px"></div></div></div>
+      <div class="sheet-bg"></div>
+      <div class="sheet">
+        <div class="grip"></div>
+        <h2>Что сделать?</h2>
+        <div class="grouped">
+          <div class="row"><div class="row-ic c-green"><svg class="i"><use href="#cart"/></svg></div><div><div class="strong" style="font-size:14px">Новая продажа</div><div class="sm-txt">клиент, техника, оплата</div></div></div>
+          <div class="row"><div class="row-ic c-sun"><svg class="i"><use href="#wallet"/></svg></div><div><div class="strong" style="font-size:14px">Записать платёж</div><div class="sm-txt">по продаже или прочий</div></div></div>
+          <div class="row"><div class="row-ic c-terra"><svg class="i"><use href="#receipt"/></svg></div><div><div class="strong" style="font-size:14px">Добавить расход</div><div class="sm-txt">сумма, категория, чек</div></div></div>
+          <div class="row"><div class="row-ic c-sky"><svg class="i"><use href="#truck"/></svg></div><div><div class="strong" style="font-size:14px">Принять технику</div><div class="sm-txt">по поставке, VIN</div></div></div>
+          <div class="row"><div class="row-ic c-teal"><svg class="i"><use href="#inbox"/></svg></div><div><div class="strong" style="font-size:14px">Новая заявка</div><div class="sm-txt">звонок или визит</div></div></div>
+          <div class="row"><div class="row-ic c-lilac"><svg class="i"><use href="#tractor"/></svg></div><div><div class="strong" style="font-size:14px">Модель в каталог</div><div class="sm-txt">цена, фото, описание</div></div></div>
+        </div>
+      </div>
+    </div></div>
+
+    <div class="phone-wrap"><p>Карточка продажи</p><div class="phone">
+      <div class="p-status"><span>9:41</span><span>●●● 5G ▮</span></div>
+      <div class="p-top"><button class="tap"><svg class="i" style="transform:rotate(180deg)"><use href="#chev"/></svg></button><h1>П-2026-0118</h1><button class="tap">⋯</button></div>
+      <div class="p-body">
+        <span class="badge b-warn">Ждём оплату банка</span>
+        <div class="m-card" style="margin-top:10px"><div class="l1"><span>Токтогулов Асан</span></div><div class="l2">КФХ «Ак-Суу» · +996 555 12-34-56</div></div>
+        <div class="m-card"><div class="l1"><span>CFJ2004(G4)</span><span class="num">$29 500</span></div><div class="l2 num">VIN …2214 · резерв до 18.11</div></div>
+        <div class="m-card">
+          <div class="l1"><span>Оплата</span><span class="sm-txt">Айыл Банк</span></div>
+          <div class="prog" style="height:8px;margin:10px 0"><i style="width:20%"></i></div>
+          <dl class="kv"><dt>Оплачено</dt><dd class="num in">$5 900</dd><dt>Осталось</dt><dd class="num" style="color:var(--warn)">$23 600</dd><dt>Ждём</dt><dd>≈ 18.11</dd></dl>
+        </div>
+        <div class="m-card"><div class="l1"><span>Досье банка</span><span class="sm-txt">5 из 6</span></div><div class="l2">не хватает: договор поставки с банком</div></div>
+      </div>
+      <div class="m-sticky"><button class="btn pri"><svg class="i"><use href="#plus"/></svg>Записать платёж</button></div>
+      <div class="p-nav"><a><svg class="i"><use href="#home"/></svg>Главная</a><a class="on"><svg class="i"><use href="#briefcase"/></svg>Работа</a><div class="p-plus"><span><svg class="i"><use href="#plus"/></svg></span></div><a><svg class="i"><use href="#mega"/></svg>Маркетинг</a><a><svg class="i"><use href="#gear"/></svg>Настройки</a></div>
+    </div></div>
+
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<!-- ───────── иконки (по мотивам Lucide) ───────── -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="home" viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/><path d="M10 21v-6h4v6"/></symbol>
+  <symbol id="plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="inbox" viewBox="0 0 24 24"><path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z"/></symbol>
+  <symbol id="cart" viewBox="0 0 24 24"><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/><path d="M2 3h3l2.7 12.4a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 7H6"/></symbol>
+  <symbol id="users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0"/><path d="M16 4a4 4 0 0 1 0 8M22 21a7 7 0 0 0-4-6.3"/></symbol>
+  <symbol id="tractor" viewBox="0 0 24 24"><circle cx="7" cy="16" r="4"/><circle cx="18.5" cy="17.5" r="2.5"/><path d="M7 12V6h5l2 6h5v3"/><path d="M12 6V3h2"/><path d="M11 16h5"/></symbol>
+  <symbol id="box" viewBox="0 0 24 24"><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="m3 8 9 5 9-5M12 13v8"/></symbol>
+  <symbol id="truck" viewBox="0 0 24 24"><path d="M2 6h12v10H2zM14 9h4l4 4v3h-8"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="18" r="2"/></symbol>
+  <symbol id="wallet" viewBox="0 0 24 24"><path d="M20 7H5a2 2 0 0 1 0-4h13v4"/><path d="M3 5v14a2 2 0 0 0 2 2h15V7"/><circle cx="16" cy="14" r="1.3"/></symbol>
+  <symbol id="scale" viewBox="0 0 24 24"><path d="M12 3v18M5 21h14M3 7h18"/><path d="m6 7-3 7a3 3 0 0 0 6 0zM18 7l-3 7a3 3 0 0 0 6 0z"/></symbol>
+  <symbol id="receipt" viewBox="0 0 24 24"><path d="M5 2v20l3-2 2 2 2-2 2 2 2-2 3 2V2l-3 2-2-2-2 2-2-2-2 2z"/><path d="M9 8h6M9 12h6M9 16h4"/></symbol>
+  <symbol id="trend" viewBox="0 0 24 24"><path d="m3 17 6-6 4 4 8-8"/><path d="M15 7h6v6"/></symbol>
+  <symbol id="chart" viewBox="0 0 24 24"><path d="M3 3v18h18"/><path d="M8 17v-5M13 17V8M18 17v-9"/></symbol>
+  <symbol id="news" viewBox="0 0 24 24"><path d="M4 4h13v16H6a2 2 0 0 1-2-2z"/><path d="M17 8h3v10a2 2 0 0 1-2 2"/><path d="M8 8h5M8 12h5M8 16h3"/></symbol>
+  <symbol id="percent" viewBox="0 0 24 24"><path d="M19 5 5 19"/><circle cx="6.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="17.5" r="2.5"/></symbol>
+  <symbol id="bank" viewBox="0 0 24 24"><path d="M3 10 12 4l9 6"/><path d="M5 10v8M9.5 10v8M14.5 10v8M19 10v8M3 21h18"/></symbol>
+  <symbol id="landmark" viewBox="0 0 24 24"><path d="M3 21h18M5 21V11M19 21V11M9 21v-6h6v6"/><path d="M2 11 12 3l10 8"/></symbol>
+  <symbol id="globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></symbol>
+  <symbol id="gear" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></symbol>
+  <symbol id="bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+  <symbol id="search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="chev" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+  <symbol id="download" viewBox="0 0 24 24"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></symbol>
+  <symbol id="upload" viewBox="0 0 24 24"><path d="M12 21V9M7 14l5-5 5 5M5 3h14"/></symbol>
+  <symbol id="split" viewBox="0 0 24 24"><path d="M16 3h5v5M8 3H3v5M21 3l-7 7M3 3l7 7v11"/></symbol>
+  <symbol id="cal" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></symbol>
+  <symbol id="alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></symbol>
+  <symbol id="ok" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="print" viewBox="0 0 24 24"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></symbol>
+  <symbol id="key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="4.5"/><path d="m10.7 12.3 9.3-9.3M16 7l3 3M18 5l2 2"/></symbol>
+  <symbol id="route" viewBox="0 0 24 24"><circle cx="6" cy="19" r="3"/><circle cx="18" cy="5" r="3"/><path d="M9 19h8.5a3.5 3.5 0 0 0 0-7h-11a3.5 3.5 0 0 1 0-7H15"/></symbol>
+  <symbol id="swap" viewBox="0 0 24 24"><path d="M7 4 3 8l4 4M3 8h14M17 20l4-4-4-4M21 16H7"/></symbol>
+  <symbol id="pen" viewBox="0 0 24 24"><path d="M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5z"/></symbol>
+  <symbol id="logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="palette" viewBox="0 0 24 24"><circle cx="13.5" cy="6.5" r="1"/><circle cx="17.5" cy="10.5" r="1"/><circle cx="8.5" cy="7.5" r="1"/><circle cx="6.5" cy="12.5" r="1"/><path d="M12 2a10 10 0 0 0 0 20 1.7 1.7 0 0 0 1.7-1.7c0-.4-.2-.8-.4-1.1-.3-.3-.4-.7-.4-1.1a1.7 1.7 0 0 1 1.7-1.7h2A5.6 5.6 0 0 0 22 10.8C22 5.9 17.5 2 12 2"/></symbol>
+  <symbol id="list" viewBox="0 0 24 24"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></symbol>
+  <symbol id="shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="briefcase" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></symbol>
+  <symbol id="mega" viewBox="0 0 24 24"><path d="m3 11 18-5v12L3 14z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></symbol>
+</svg>
+
+<script>
+const screens=["home","sales","newsale","sale","paths","stock","money","catalog","settings"];
+const toastEl=document.getElementById("toast");let tt;
+function toast(t){toastEl.textContent=t;toastEl.classList.add("show");clearTimeout(tt);tt=setTimeout(()=>toastEl.classList.remove("show"),3600)}
+function go(id){
+  document.querySelectorAll(".mock-bar [data-go]").forEach(b=>b.classList.toggle("on",b.dataset.go===id));
+  const full=id==="login"||id==="phone";
+  document.getElementById("app").style.display=full?"none":"flex";
+  document.getElementById("s-login").classList.toggle("on",id==="login");
+  document.getElementById("s-phone").classList.toggle("on",id==="phone");
+  if(full){scrollTo(0,0);return}
+  document.querySelectorAll(".screen").forEach(s=>s.classList.toggle("on",s.id==="s-"+id));
+  const s=document.getElementById("s-"+id);
+  document.getElementById("title").innerHTML=(s.dataset.crumb?`<span class="crumb">${s.dataset.crumb} / </span>`:"")+s.dataset.title;
+  document.querySelectorAll(".side .nav").forEach(n=>{const also=(n.dataset.also||"").split(" ");n.classList.toggle("on",n.dataset.go===id||also.includes(id))});
+  scrollTo(0,0);
+}
+function theme(t){document.body.dataset.theme=t;document.querySelectorAll("[data-th]").forEach(b=>b.classList.toggle("on",b.dataset.th===t))}
+document.addEventListener("click",e=>{
+  const g=e.target.closest("[data-go]");if(g){e.preventDefault();go(g.dataset.go);return}
+  const th=e.target.closest("[data-th]");if(th){theme(th.dataset.th);return}
+  const t=e.target.closest("[data-toast]");if(t){e.preventDefault();toast(t.dataset.toast)}
+});
+go("home");
+</script>
+</body>
+</html>

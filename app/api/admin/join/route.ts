@@ -1,10 +1,10 @@
 import { ensureDb,getRawDb } from "../../../../db";
 import { hashPassword } from "../../../lib/admin-auth";
-import { cleanText,digest,fail,HttpError,jsonBody,rateLimit,sameOrigin } from "../../../lib/security";
+import { cleanText,clientIp,digest,fail,HttpError,jsonBody,rateLimit,sameOrigin } from "../../../lib/security";
 export async function POST(request:Request){
   try{
     sameOrigin(request);await ensureDb();const b=await jsonBody(request,5000),db=getRawDb();
-    await rateLimit(`join:${request.headers.get("cf-connecting-ip")||"local"}`,10,900);
+    await rateLimit(`join:${clientIp(request)}`,10,900);
     const token=cleanText(b.token,64,true);if(!/^[a-f0-9]{64}$/.test(token))throw new HttpError(400,"Недействительное приглашение");
     const hash=await digest(token),now=Math.floor(Date.now()/1000);
     const invite=await db.prepare("SELECT email,role,permissions_json FROM staff_invites WHERE token_hash=? AND used_at IS NULL AND revoked=0 AND expires_at>?").bind(hash,now).first<{email:string;role:"manager"|"accountant"|"marketer";permissions_json:string}>();
