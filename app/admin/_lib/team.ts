@@ -185,6 +185,8 @@ export async function saveProfile(actor: Actor, input: { name: string; phone: st
 export const NOTIFY_KEYS: { key: string; label: string; hint: string; roles?: StaffRole[] }[] = [
   { key: "leads", label: "Новые заявки с сайта", hint: "Сразу, как клиент оставил заявку" },
   { key: "payments", label: "Оплаты по моим продажам", hint: "Когда бухгалтер или касса провели оплату по вашей продаже" },
+  { key: "reserve", label: "Резерв заканчивается", hint: "За 3 дня до конца резерва и в последний день" },
+  { key: "service", label: "Сервис", hint: "Новое обращение и пропущенный срок ремонта" },
   { key: "approvals", label: "Нужно согласование", hint: "Цена ниже себестоимости, выдача в рассрочку", roles: ["owner", "director"] },
   { key: "logistics", label: "Поставки", hint: "Поставка опаздывает, недостача при приёмке" },
   { key: "parts", label: "Запчасти заканчиваются", hint: "Остаток ниже минимального" },

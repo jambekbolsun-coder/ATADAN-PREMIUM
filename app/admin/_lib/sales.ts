@@ -43,8 +43,8 @@ export const LEAD_REJECT_REASONS: Record<string, string> = {
 };
 
 /** Правила продаж. Позже будут редактироваться в Настройки → Компания (site_settings: sales_policy). */
-export type SalesPolicy = { reserveDays: number; stateLeasingReserveDays: number; maxReserveDays: number; belowCost: "owner" | "nobody" };
-const DEFAULT_POLICY: SalesPolicy = { reserveDays: 14, stateLeasingReserveDays: 60, maxReserveDays: 90, belowCost: "owner" };
+export type SalesPolicy = { reserveDays: number; stateLeasingReserveDays: number; maxReserveDays: number; belowCost: "owner" | "nobody"; warrantyMonths: number; warrantyHours: number };
+const DEFAULT_POLICY: SalesPolicy = { reserveDays: 14, stateLeasingReserveDays: 60, maxReserveDays: 90, belowCost: "owner", warrantyMonths: 12, warrantyHours: 1000 };
 
 export async function salesPolicy(): Promise<SalesPolicy> {
   const row = await getRawDb().prepare("SELECT value FROM site_settings WHERE key='sales_policy'").first<{ value: string }>();
@@ -56,6 +56,8 @@ export async function salesPolicy(): Promise<SalesPolicy> {
       stateLeasingReserveDays: Math.min(max, Math.max(1, Number(v.stateLeasingReserveDays) || DEFAULT_POLICY.stateLeasingReserveDays)),
       maxReserveDays: max,
       belowCost: v.belowCost === "nobody" ? "nobody" : "owner",
+      warrantyMonths: Math.min(120, Math.max(0, Number(v.warrantyMonths ?? DEFAULT_POLICY.warrantyMonths) || 0)),
+      warrantyHours: Math.min(20000, Math.max(0, Number(v.warrantyHours ?? DEFAULT_POLICY.warrantyHours) || 0)),
     };
   } catch {
     return DEFAULT_POLICY;

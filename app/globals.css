@@ -2699,3 +2699,25 @@ html,body{max-width:100%;overflow-x:hidden}img,video,iframe{max-width:100%}.admi
 @media (min-width:1366px){.header-actions>.header-search{display:flex!important;min-width:150px;width:clamp(150px,12vw,195px)}.header-search-trigger{display:none!important}}
 @media (min-width:1440px){.catalog-grid{grid-template-columns:repeat(4,minmax(0,1fr))}}
 @media (max-width:639px){.admin-header-tools>a{display:none}.admin-header-tools{gap:6px}.admin-header h1{font-size:clamp(18px,5vw,24px)}.admin-content{padding:12px}.admin-panel{padding:16px}.notification-list article{grid-template-columns:36px minmax(0,1fr)}.notification-list time{grid-column:2}.record-editor{width:100%}.chat-workspace{grid-template-columns:1fr}.chat-sidebar{max-height:280px}.admin-table-wrap table,.table-scroll table,.data-table-wrap table{min-width:640px}}
+
+/* Запчасти на сайте */
+.public-parts{padding-block:56px 90px}
+.public-parts-filter{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:28px}
+.public-parts-filter select,.public-parts-filter input{min-height:46px;padding:0 14px;border:1px solid #cddccf;border-radius:12px;background:#fff;color:#11371f;font:inherit;min-width:220px}
+.public-parts-reset{align-self:center;color:#286f39;font-weight:800;font-size:.85rem}
+.public-parts-group h2{margin:26px 0 12px;color:#0c2d19;font-size:1.5rem;letter-spacing:-.02em}
+.public-parts-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.public-parts-grid article{position:relative;padding:14px;border:1px solid #d2dfd3;border-radius:18px;background:linear-gradient(145deg,#fff,#f0f6f1);display:flex;flex-direction:column;gap:6px}
+.public-parts-grid img,.public-parts-noimg{width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:12px;background:#e8f1e9;display:grid;place-items:center;color:#7aa982}
+.public-parts-grid h3{margin:6px 0 0;color:#11371f;font-size:1.05rem;line-height:1.25}
+.public-parts-grid p{margin:0;color:#63736a;font-size:.8rem;line-height:1.5}
+.public-parts-grid b{margin-top:auto;color:#0c2d19;font-size:1.15rem}
+.public-parts-sku{font-variant-numeric:tabular-nums}
+.public-parts-stock,.public-parts-order{position:absolute;top:22px;left:22px;padding:4px 9px;border-radius:999px;font-size:.68rem;font-weight:800}
+.public-parts-stock{background:#2f7d4f;color:#fff}.public-parts-order{background:#fff;color:#7a5b00;border:1px solid #ecd9a2}
+.public-parts-empty{padding:28px;border-radius:16px;background:#eef5ef;color:#3d5044}
+.public-parts-ask{margin-top:34px;padding:24px;border-radius:20px;background:#0f2a18;color:#e9f3ea;display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between}
+.public-parts-ask p{margin:0;max-width:640px;line-height:1.6}
+@media(max-width:1100px){.public-parts-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:760px){.public-parts-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.public-parts-filter select,.public-parts-filter input{min-width:0;flex:1 1 100%}}
+@media(max-width:440px){.public-parts-grid{grid-template-columns:1fr}}

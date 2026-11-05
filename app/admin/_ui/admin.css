@@ -444,3 +444,12 @@ a.ax-list-row:hover { background: var(--surface-2); border-radius: 10px; }
 .ax-langs { display: flex; gap: 6px; margin-bottom: 10px; }
 .ax-langs button { padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--muted); font-size: 13px; }
 .ax-langs button[aria-pressed="true"] { background: var(--brand); border-color: var(--brand); color: #fff; font-weight: 650; }
+
+/* Печать страниц админки (отчёт, карточки): без меню и кнопок */
+@media print {
+  .ax-bottom, .ax-side, .ax-top, .ax-act, .ax-tabs, form[role="search"], .ax-sticky-actions, nextjs-portal { display: none !important; }
+  .ax-app { display: block !important; }
+  .ax-main { padding: 0 !important; margin: 0 !important; }
+  .ax, .ax-card { background: #fff !important; color: #000 !important; box-shadow: none !important; }
+  .ax-card { border: 1px solid #ccc !important; break-inside: avoid; }
+}

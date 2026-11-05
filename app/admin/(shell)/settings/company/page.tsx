@@ -60,6 +60,8 @@ export default async function Company() {
             <Field label="Пеня в день, %" htmlFor="p-rate"><input id="p-rate" name="ratePerDay" className="ax-input num" inputMode="decimal" defaultValue={penalty.ratePerDay} /></Field>
             <Field label="Дней без пени" htmlFor="p-grace" hint="Льготный срок после даты платежа"><input id="p-grace" name="graceDays" className="ax-input num" inputMode="numeric" defaultValue={penalty.graceDays} /></Field>
             <Field label="Пеня не больше, % от долга" htmlFor="p-max"><input id="p-max" name="maxPercent" className="ax-input num" inputMode="decimal" defaultValue={penalty.maxPercent} /></Field>
+            <Field label="Гарантия, месяцев" htmlFor="p-wm" hint="С даты выдачи машины"><input id="p-wm" name="warrantyMonths" className="ax-input num" inputMode="numeric" defaultValue={sales.warrantyMonths} /></Field>
+            <Field label="Гарантия, моточасов" htmlFor="p-wh" hint="Что наступит раньше; 0 - без ограничения"><input id="p-wh" name="warrantyHours" className="ax-input num" inputMode="numeric" defaultValue={sales.warrantyHours} /></Field>
           </div>
           {!owner ? <p className="ax-small" style={{ margin: 0 }}>Правила меняет только владелец.</p> : null}
         </SettingsForm>

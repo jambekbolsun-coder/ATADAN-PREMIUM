@@ -49,7 +49,7 @@ export async function saveCompany(actor: Actor, input: Company & { version: numb
   });
 }
 
-export async function savePolicy(actor: Actor, input: { reserveDays: string; stateLeasingReserveDays: string; belowCost: string; ratePerDay: string; graceDays: string; maxPercent: string }) {
+export async function savePolicy(actor: Actor, input: { reserveDays: string; stateLeasingReserveDays: string; belowCost: string; ratePerDay: string; graceDays: string; maxPercent: string; warrantyMonths: string; warrantyHours: string }) {
   if (actor.role !== "owner") throw new HttpError(403, "Правила продаж меняет только владелец");
   const reserveDays = num(input.reserveDays, "Резерв, дней", { min: 1, max: 90, int: true })!;
   const stateLeasingReserveDays = num(input.stateLeasingReserveDays, "Резерв для гослизинга, дней", { min: 1, max: 90, int: true })!;
@@ -58,7 +58,9 @@ export async function savePolicy(actor: Actor, input: { reserveDays: string; sta
     graceDays: num(input.graceDays, "Дней без пени", { max: 60, int: true })!,
     maxPercent: num(input.maxPercent, "Пеня не больше, %", { max: 100 })!,
   };
-  const value = { reserveDays, stateLeasingReserveDays, maxReserveDays: 90, belowCost: input.belowCost === "nobody" ? "nobody" : "owner", penalty };
+  const warrantyMonths = num(input.warrantyMonths, "Гарантия, месяцев", { max: 120, int: true })!;
+  const warrantyHours = num(input.warrantyHours, "Гарантия, моточасов", { max: 20000, int: true, optional: true }) ?? 0;
+  const value = { reserveDays, stateLeasingReserveDays, maxReserveDays: 90, belowCost: input.belowCost === "nobody" ? "nobody" : "owner", warrantyMonths, warrantyHours, penalty };
   await getRawDb().transaction(async (client) => {
     const q = query(client);
     const [row] = await q<{ version: number }>("SELECT version FROM site_settings WHERE key='sales_policy' FOR UPDATE");

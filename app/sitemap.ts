@@ -12,6 +12,7 @@ const staticPages=[
   ["/catalog",0.9,"daily"],
   ["/finance",0.8,"weekly"],
   ["/service",0.8,"weekly"],
+  ["/parts",0.7,"daily"],
   ["/news",0.8,"daily"],
   ["/about",0.6,"monthly"],
   ["/contacts",0.7,"monthly"],

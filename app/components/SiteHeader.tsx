@@ -12,6 +12,7 @@ import { useSiteSettings } from "./SiteSettings";
 const nav = [
   ["nav.catalog", "/catalog"],
   ["nav.service", "/service"],
+  ["nav.parts", "/parts"],
   ["nav.finance", "/finance"],
   ["nav.news", "/news"],
   ["nav.about", "/about"],

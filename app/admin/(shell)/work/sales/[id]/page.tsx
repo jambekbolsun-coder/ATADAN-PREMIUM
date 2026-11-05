@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { FileText } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getUsdKgsRate } from "../../../../../lib/exchange-rate";
 import { requireSection, seesCost } from "../../../../_lib/session";
@@ -54,6 +55,8 @@ export default async function SaleCard({ params, searchParams }: PageProps<"/adm
         title={<>Продажа {sale.number} <Badge tone={st.tone}>{st.label}</Badge></>}
         subtitle={<>Оформлена {date(sale.sold_at)} · менеджер {sale.manager ?? "не указан"}{sale.reserve_until && sale.status === "booked" ? ` · резерв до ${date(sale.reserve_until)}` : ""}</>}
         actions={
+          <>
+          {sale.status !== "cancelled" ? <Link className="ax-btn" href={`/admin/print/sale/${sale.id}?doc=contract`} target="_blank"><FileText size={16} aria-hidden />Документы</Link> : null}
           <SaleActions
             saleId={sale.id}
             status={sale.status}
@@ -74,6 +77,7 @@ export default async function SaleCard({ params, searchParams }: PageProps<"/adm
             canBankPay={actor.role !== "manager"}
             reserveUntil={sale.reserve_until}
           />
+          </>
         }
       />
       {sp.created ? <div style={{ marginBottom: 12 }}><Notice tone="good">Продажа оформлена. Машины зарезервированы, график платежей создан.</Notice></div> : null}

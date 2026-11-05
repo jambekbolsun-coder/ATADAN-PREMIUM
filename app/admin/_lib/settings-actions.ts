@@ -68,5 +68,5 @@ export async function companyAction(_p: ActionResult | null, form: FormData): Pr
 }
 export async function policyAction(_p: ActionResult | null, form: FormData): Promise<ActionResult> {
   const actor = await requireStaff("/admin/settings/company");
-  return run(() => company.savePolicy(actor, { reserveDays: f(form, "reserveDays"), stateLeasingReserveDays: f(form, "stateLeasingReserveDays"), belowCost: f(form, "belowCost"), ratePerDay: f(form, "ratePerDay"), graceDays: f(form, "graceDays"), maxPercent: f(form, "maxPercent") }), "Правила сохранены", "/admin/settings/company");
+  return run(() => company.savePolicy(actor, { reserveDays: f(form, "reserveDays"), stateLeasingReserveDays: f(form, "stateLeasingReserveDays"), belowCost: f(form, "belowCost"), ratePerDay: f(form, "ratePerDay"), graceDays: f(form, "graceDays"), maxPercent: f(form, "maxPercent"), warrantyMonths: f(form, "warrantyMonths"), warrantyHours: f(form, "warrantyHours") }), "Правила сохранены", "/admin/settings/company");
 }

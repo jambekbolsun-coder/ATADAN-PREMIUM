@@ -36,29 +36,29 @@ const FIN_ROLES: StaffRole[] = ["owner", "director", "accountant"];
 
 export const NAV: NavItem[] = [
   // ── Работа · Отдел продаж
-  { href: "/admin/work/leads", label: "Заявки", icon: "inbox", tone: "terra", space: "work", group: "Отдел продаж", perms: ["site-leads", "deals"], hint: "Новые обращения с сайта, WhatsApp и звонков", legacy: "/admin/legacy/marketing/site-leads" },
-  { href: "/admin/work/sales", label: "Продажи", icon: "cart", tone: "green", space: "work", group: "Отдел продаж", perms: ["sales", "deals"], hint: "Кто купил, что, за сколько и как оплатил", legacy: "/admin/legacy/company/sales" },
-  { href: "/admin/work/clients", label: "Клиенты", icon: "users", tone: "sky", space: "work", group: "Отдел продаж", perms: ["client-base"], hint: "Покупатели, их техника, долги и история", legacy: "/admin/legacy/company/client-base" },
+  { href: "/admin/work/leads", label: "Заявки", icon: "inbox", tone: "terra", space: "work", group: "Отдел продаж", perms: ["site-leads", "deals"], hint: "Новые обращения с сайта, WhatsApp и звонков" },
+  { href: "/admin/work/sales", label: "Продажи", icon: "cart", tone: "green", space: "work", group: "Отдел продаж", perms: ["sales", "deals"], hint: "Кто купил, что, за сколько и как оплатил" },
+  { href: "/admin/work/clients", label: "Клиенты", icon: "users", tone: "sky", space: "work", group: "Отдел продаж", perms: ["client-base"], hint: "Покупатели, их техника, долги и история" },
   // ── Работа · Склад и логистика
-  { href: "/admin/work/stock", label: "Техника", icon: "tractor", tone: "teal", space: "work", group: "Склад и логистика", perms: ["inventory-units"], hint: "Каждая машина по VIN: статус, место, себестоимость", legacy: "/admin/legacy/company/inventory-units" },
+  { href: "/admin/work/stock", label: "Техника", icon: "tractor", tone: "teal", space: "work", group: "Склад и логистика", perms: ["inventory-units"], hint: "Каждая машина по VIN: статус, место, себестоимость" },
   { href: "/admin/work/parts", label: "Запчасти", icon: "box", tone: "sun", space: "work", group: "Склад и логистика", perms: ["inventory-units"], hint: "Остатки, приход, списание, минимальный остаток" },
-  { href: "/admin/work/logistics", label: "Логистика", icon: "truck", tone: "sky", space: "work", group: "Склад и логистика", perms: ["purchases", "shipments", "suppliers"], hint: "Заказы заводу, поставки, таможня, приём на склад", legacy: "/admin/legacy/company/shipments" },
-  { href: "/admin/work/service", label: "Сервис и гарантия", icon: "wrench", tone: "lilac", space: "work", group: "Склад и логистика", perms: ["service-cases"], hint: "Обращения по технике, гарантийные случаи", legacy: "/admin/legacy/company/service-cases" },
+  { href: "/admin/work/logistics", label: "Логистика", icon: "truck", tone: "sky", space: "work", group: "Склад и логистика", perms: ["purchases", "shipments", "suppliers"], hint: "Заказы заводу, поставки, таможня, приём на склад" },
+  { href: "/admin/work/service", label: "Сервис и гарантия", icon: "wrench", tone: "lilac", space: "work", group: "Склад и логистика", perms: ["service-cases"], hint: "Обращения по технике, гарантийные случаи" },
   // ── Работа · Финансы
-  { href: "/admin/work/cash", label: "Касса и платежи", icon: "wallet", tone: "green", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Все деньги: приход, расход, остатки касс и счетов", legacy: "/admin/legacy/company/payments" },
-  { href: "/admin/work/debts", label: "Долги", icon: "scale", tone: "terra", space: "work", group: "Финансы", perms: ["debts"], hint: "Кто нам должен: клиенты и банки, просрочки", legacy: "/admin/legacy/company/debts" },
-  { href: "/admin/work/expenses", label: "Расходы", icon: "receipt", tone: "sun", space: "work", group: "Финансы", perms: ["expenses"], hint: "Аренда, реклама, таможня, логистика и прочее", legacy: "/admin/legacy/company/expenses" },
-  { href: "/admin/work/margin", label: "Маржа", icon: "trend", tone: "teal", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Прибыль по продаже, модели и менеджеру", legacy: "/admin/legacy/control/control-models" },
-  { href: "/admin/work/payroll", label: "Зарплаты", icon: "banknote", tone: "lilac", space: "work", group: "Финансы", perms: ["payroll"], hint: "Начисления и выплаты сотрудникам", legacy: "/admin/legacy/company/payroll" },
-  { href: "/admin/work/reports", label: "Отчёты", icon: "chart", tone: "sky", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Продажи, склад, деньги и маркетинг за период", legacy: "/admin/legacy/control/control-plan" },
+  { href: "/admin/work/cash", label: "Касса и платежи", icon: "wallet", tone: "green", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Все деньги: приход, расход, остатки касс и счетов" },
+  { href: "/admin/work/debts", label: "Долги", icon: "scale", tone: "terra", space: "work", group: "Финансы", perms: ["debts"], hint: "Кто нам должен: клиенты и банки, просрочки" },
+  { href: "/admin/work/expenses", label: "Расходы", icon: "receipt", tone: "sun", space: "work", group: "Финансы", perms: ["expenses"], hint: "Аренда, реклама, таможня, логистика и прочее" },
+  { href: "/admin/work/margin", label: "Маржа", icon: "trend", tone: "teal", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Прибыль по продаже, модели и менеджеру" },
+  { href: "/admin/work/payroll", label: "Зарплаты", icon: "banknote", tone: "lilac", space: "work", group: "Финансы", perms: ["payroll"], hint: "Начисления и выплаты сотрудникам" },
+  { href: "/admin/work/reports", label: "Отчёты", icon: "chart", tone: "sky", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Продажи, склад, деньги и маркетинг за период" },
   // ── Маркетинг
-  { href: "/admin/marketing/catalog", label: "Каталог техники", icon: "tractor", tone: "green", space: "marketing", perms: ["catalog"], hint: "Модели на сайте: цены, фото, видимость", legacy: "/admin/legacy/marketing/catalog" },
+  { href: "/admin/marketing/catalog", label: "Каталог техники", icon: "tractor", tone: "green", space: "marketing", perms: ["catalog"], hint: "Модели на сайте: цены, фото, видимость" },
   { href: "/admin/marketing/parts", label: "Каталог запчастей", icon: "box", tone: "sun", space: "marketing", perms: ["catalog"], hint: "Карточки запчастей для сайта" },
-  { href: "/admin/marketing/news", label: "Публикации", icon: "news", tone: "sky", space: "marketing", perms: ["news"], hint: "АгроЖурнал: черновики и опубликованные статьи", legacy: "/admin/legacy/marketing/news" },
-  { href: "/admin/marketing/promotions", label: "Акции", icon: "percent", tone: "terra", space: "marketing", perms: ["promotions"], hint: "Скидки на модели и запчасти на даты", legacy: "/admin/legacy/marketing/promotions" },
-  { href: "/admin/marketing/leasing", label: "Лизинг", icon: "bank", tone: "lilac", space: "marketing", perms: ["leasing", "leasing-models"], hint: "Банки, ставки и взносы для калькулятора на сайте", legacy: "/admin/legacy/marketing/leasing" },
-  { href: "/admin/marketing/pages", label: "Страницы сайта", icon: "globe", tone: "teal", space: "marketing", perms: ["public-service", "faq", "site-settings"], hint: "Сервис, FAQ, контакты и общие настройки сайта", legacy: "/admin/legacy/marketing/site-settings" },
-  { href: "/admin/marketing/analytics", label: "Аналитика сайта", icon: "chart", tone: "sky", space: "marketing", perms: ["site-analytics"], hint: "Посещения, интерес к моделям, заявки по источникам", legacy: "/admin/legacy/marketing/site-analytics" },
+  { href: "/admin/marketing/news", label: "Публикации", icon: "news", tone: "sky", space: "marketing", perms: ["news"], hint: "АгроЖурнал: черновики и опубликованные статьи" },
+  { href: "/admin/marketing/promotions", label: "Акции", icon: "percent", tone: "terra", space: "marketing", perms: ["promotions"], hint: "Скидки на модели и запчасти на даты" },
+  { href: "/admin/marketing/leasing", label: "Лизинг", icon: "bank", tone: "lilac", space: "marketing", perms: ["leasing", "leasing-models"], hint: "Банки, ставки и взносы для калькулятора на сайте" },
+  { href: "/admin/marketing/pages", label: "Страницы сайта", icon: "globe", tone: "teal", space: "marketing", perms: ["public-service", "faq", "site-settings"], hint: "Сервис, FAQ, контакты и общие настройки сайта" },
+  { href: "/admin/marketing/analytics", label: "Аналитика сайта", icon: "chart", tone: "sky", space: "marketing", perms: ["site-analytics"], hint: "Посещения, интерес к моделям, заявки по источникам" },
 ];
 
 /** Экраны настроек. Профиль, тема, уведомления и сеансы есть у всех. */
@@ -80,10 +80,10 @@ export const SETTINGS: { title: string; items: NavItem[] }[] = [
   {
     title: "Компания",
     items: [
-      { href: "/admin/settings/team", label: "Сотрудники", icon: "users", tone: "teal", space: "settings", perms: ["team"], hint: "Приглашения, роли, блокировка", legacy: "/admin/legacy/company/team" },
+      { href: "/admin/settings/team", label: "Сотрудники", icon: "users", tone: "teal", space: "settings", perms: ["team"], hint: "Приглашения, роли, блокировка" },
       { href: "/admin/settings/company", label: "Реквизиты, кассы и курсы", icon: "building", tone: "green", space: "settings", roles: ["owner", "director"], hint: "Реквизиты для документов, кассы и счета, курсы валют, пени, резерв" },
       { href: "/admin/settings/data", label: "Экспорт и импорт", icon: "swap", tone: "lilac", space: "settings", roles: ["owner", "director", "accountant", "marketer"], hint: "Выгрузка в Excel, загрузка из файла, резервная копия" },
-      { href: "/admin/settings/audit", label: "Журнал действий", icon: "list", tone: "terra", space: "settings", perms: ["audit"], hint: "Кто, что и когда изменил", legacy: "/admin/legacy/company/audit" },
+      { href: "/admin/settings/audit", label: "Журнал действий", icon: "list", tone: "terra", space: "settings", perms: ["audit"], hint: "Кто, что и когда изменил" },
     ],
   },
 ];
@@ -145,9 +145,9 @@ export const PLUS_ACTIONS: PlusAction[] = [
   { key: "receive", label: "Принять технику", hint: "Поставка пришла на склад", icon: "truck", tone: "sky", href: "/admin/work/logistics?tab=shipments", perms: ["shipments", "purchases"] },
   { key: "lead", label: "Новая заявка", hint: "Звонок или визит в офис", icon: "inbox", tone: "teal", href: "/admin/work/leads/new", perms: ["site-leads", "deals"] },
   { key: "model", label: "Модель в каталог", hint: "Цена, фото, характеристики", icon: "tractor", tone: "lilac", href: "/admin/marketing/catalog/new", perms: ["catalog"] },
-  { key: "part", label: "Запчасть", hint: "Артикул, цена, к каким моделям", icon: "box", tone: "sun", href: "/admin/marketing/parts/new", perms: ["catalog"] },
+  { key: "part", label: "Запчасть", hint: "Артикул, цена, к каким моделям", icon: "box", tone: "sun", href: "/admin/work/parts/new", perms: ["catalog"] },
   { key: "post", label: "Публикация", hint: "Статья в АгроЖурнал", icon: "news", tone: "sky", href: "/admin/marketing/news/new", perms: ["news"] },
-  { key: "invite", label: "Пригласить сотрудника", hint: "QR-приглашение на 24 часа", icon: "users", tone: "teal", href: "/admin/settings/team/invite", perms: ["team"] },
+  { key: "invite", label: "Пригласить сотрудника", hint: "Ссылка-приглашение на 24 часа", icon: "users", tone: "teal", href: "/admin/settings/team", perms: ["team"] },
 ];
 
 export function visiblePlus(viewer: Viewer) {

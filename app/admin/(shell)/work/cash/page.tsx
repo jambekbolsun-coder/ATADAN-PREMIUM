@@ -8,7 +8,7 @@ import { MovementDialog, NewAccountDialog, ReverseButton, TransferDialog } from 
 
 export const metadata = { title: "Касса и платежи" };
 const cur = (c: string) => (c === "USD" || c === "CNY" ? c : "KGS") as Currency;
-const LINK: Record<string, string> = { purchase_order: "/admin/work/logistics/orders/", shipment: "/admin/work/logistics/shipments/" };
+const LINK: Record<string, string> = { purchase_order: "/admin/work/logistics/orders/", shipment: "/admin/work/logistics/shipments/", payroll: "/admin/work/payroll?entry=" };
 
 export default async function Cash({ searchParams }: PageProps<"/admin/work/cash">) {
   const { actor } = await requireSection("/admin/work/cash");

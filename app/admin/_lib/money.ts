@@ -61,7 +61,7 @@ export async function listTransactions(f: { accountId?: string; direction?: stri
   if (f.to && /^\d{4}-\d{2}-\d{2}$/.test(f.to)) { where.push("t.occurred_at < ?::date + 1"); args.push(f.to); }
   if (f.q) { where.push("(lower(t.description) LIKE ? OR lower(t.counterparty) LIKE ?)"); const like = `%${f.q.toLowerCase().replace(/[%_\\]/g, "")}%`; args.push(like, like); }
   if (f.expensesOnly) {
-    where.push(`t.direction='out' AND t.transfer_id IS NULL AND t.reversed_by IS NULL AND t.link_type IS NULL AND t.category <> 'Сторно' AND t.category NOT IN (${[...SYSTEM_CATEGORIES].map(() => "?").join(",")})`);
+    where.push(`t.direction='out' AND t.transfer_id IS NULL AND t.reversed_by IS NULL AND (t.link_type IS NULL OR t.link_type='payroll') AND t.category <> 'Сторно' AND t.category NOT IN (${[...SYSTEM_CATEGORIES].map(() => "?").join(",")})`);
     args.push(...SYSTEM_CATEGORIES);
   }
   const size = 50;
@@ -79,7 +79,7 @@ export async function listTransactions(f: { accountId?: string; direction?: stri
 export async function expensesByCategory(from: string, to: string) {
   const { results } = await getRawDb().prepare(`SELECT t.category, a.currency, COALESCE(SUM(t.amount_minor),0)::bigint AS total, COUNT(*)::int AS n
     FROM account_transactions t JOIN financial_accounts a ON a.id=t.account_id
-    WHERE t.direction='out' AND t.transfer_id IS NULL AND t.reversed_by IS NULL AND t.link_type IS NULL AND t.category <> 'Сторно' AND t.occurred_at >= ?::date AND t.occurred_at < ?::date + 1
+    WHERE t.direction='out' AND t.transfer_id IS NULL AND t.reversed_by IS NULL AND (t.link_type IS NULL OR t.link_type='payroll') AND t.category <> 'Сторно' AND t.occurred_at >= ?::date AND t.occurred_at < ?::date + 1
       AND t.category NOT IN (${[...SYSTEM_CATEGORIES].map(() => "?").join(",")})
     GROUP BY t.category, a.currency ORDER BY total DESC`).bind(from, to, ...SYSTEM_CATEGORIES).all<{ category: string; currency: string; total: number; n: number }>();
   return results.map((r) => ({ ...r, total: Number(r.total) }));

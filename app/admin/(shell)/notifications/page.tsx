@@ -9,10 +9,10 @@ export const metadata = { title: "Уведомления" };
 
 type Row = { id: string; title: string; body: string; priority: string; target_url: string | null; read_at: string | null; created_at: string };
 
-/** Старые ссылки уведомлений (/admin/company/…) работают через прежнюю админку. */
+/** Старые ссылки уведомлений (/admin/company/…) сами перенаправляются в новые разделы. */
 function target(url: string | null) {
   if (!url || !url.startsWith("/admin")) return null;
-  return url.replace(/^\/admin\/(company|control)\//, "/admin/legacy/$1/");
+  return url;
 }
 
 async function markAllRead() {
