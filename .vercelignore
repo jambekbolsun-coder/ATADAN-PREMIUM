@@ -2,10 +2,10 @@ node_modules
 .git
 .vinext
 .next
-dist
+/dist
 .wrangler
-outputs
-work
+/outputs
+/work
 *.tar.gz
 .agents
 skills-lock.json
