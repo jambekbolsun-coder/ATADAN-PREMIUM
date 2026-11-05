@@ -6,7 +6,7 @@
  * CRM-сделки больше не нужны для продажи.
  *
  * Миграция только добавляет таблицы и колонки, ничего не удаляет. Старые продажи
- * (sales_v2 + payments_v2) один раз переносятся сюда (блок legacy ниже), со ссылкой на исходную сделку.
+ * (sales_v2 + payments_v2) переносятся сюда при каждом запуске, только недостающее (блок синхронизации ниже), со ссылкой на исходную сделку.
  * Деньги в minor units (центы/тыйыны). Курс fx_rate - сколько сомов за 1 единицу валюты.
  */
 export const SALES_DEPT_SCHEMA_SQL = `
@@ -119,44 +119,63 @@ ALTER TABLE leads ADD COLUMN IF NOT EXISTS assigned_to TEXT;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS handled_at TIMESTAMPTZ;
 ALTER TABLE leads ADD COLUMN IF NOT EXISTS reject_reason TEXT NOT NULL DEFAULT '';
 
-DO $$
-BEGIN
-  IF NOT EXISTS(SELECT 1 FROM schema_migrations WHERE id='sales-dept-legacy-20261105') THEN
-    -- 1) Старые продажи (sales_v2) становятся продажами отдела продаж, валюта KGS, курс 1.
-    INSERT INTO sale_orders(id,number,customer_id,manager_id,status,currency,fx_rate,payment_method,total_minor,list_total_minor,cost_kgs_minor,delivered_at,legacy_deal_id,sold_at,created_by,created_at,updated_at)
-    SELECT 'legacy-'||s.id,
-      'П-'||to_char(s.sold_at,'YYYY')||'-С'||lpad((row_number() OVER (PARTITION BY to_char(s.sold_at,'YYYY') ORDER BY s.sold_at, s.id))::text,4,'0'),
-      s.customer_id, d.assigned_to,
-      CASE WHEN s.delivered_at IS NULL THEN 'booked'
-           WHEN COALESCE(p.paid,0) >= s.sale_amount_minor THEN 'closed' ELSE 'delivered' END,
-      'KGS', 1, 'full', s.sale_amount_minor, s.sale_amount_minor, s.cost_minor, s.delivered_at, s.deal_id, s.sold_at, s.created_by, s.created_at, s.updated_at
-    FROM sales_v2 s
-    LEFT JOIN crm_deals d ON d.id=s.deal_id
-    LEFT JOIN (SELECT deal_id, SUM(amount_minor) paid FROM payments_v2 WHERE status='posted' AND archived=0 GROUP BY deal_id) p ON p.deal_id=s.deal_id
-    WHERE s.archived=0 AND s.sale_amount_minor>0
-      AND NOT EXISTS (SELECT 1 FROM sale_orders o WHERE o.legacy_deal_id=s.deal_id);
+-- Синхронизация со старой CRM. Выполняется при каждом запуске и только добавляет недостающее:
+-- пока живой сайт работает на старом коде, новые продажи и платежи оттуда тоже попадают в отдел продаж.
+-- 1) Старые продажи (sales_v2) -> продажи отдела продаж, валюта KGS, курс 1. Номера П-ГГГГ-С0001 продолжают последний.
+WITH fresh AS (
+  SELECT s.*, to_char(s.sold_at,'YYYY') AS yr, row_number() OVER (PARTITION BY to_char(s.sold_at,'YYYY') ORDER BY s.sold_at, s.id) AS rn
+  FROM sales_v2 s
+  WHERE s.archived=0 AND s.sale_amount_minor>0
+    AND NOT EXISTS (SELECT 1 FROM sale_orders o WHERE o.legacy_deal_id=s.deal_id)
+), last_num AS (
+  SELECT substring(number from 3 for 4) AS yr, MAX(CAST(substring(number from '-С([0-9]+)$') AS INTEGER)) AS m
+  FROM sale_orders WHERE number ~ '^П-[0-9]{4}-С[0-9]+$' GROUP BY 1
+)
+INSERT INTO sale_orders(id,number,customer_id,manager_id,status,currency,fx_rate,payment_method,total_minor,list_total_minor,cost_kgs_minor,delivered_at,legacy_deal_id,sold_at,created_by,created_at,updated_at)
+SELECT 'legacy-'||f.id,
+  'П-'||f.yr||'-С'||lpad((COALESCE(l.m,0)+f.rn)::text,4,'0'),
+  f.customer_id, d.assigned_to, 'booked', 'KGS', 1, 'full', f.sale_amount_minor, f.sale_amount_minor, f.cost_minor, f.delivered_at, f.deal_id, f.sold_at, f.created_by, f.created_at, f.updated_at
+FROM fresh f
+LEFT JOIN last_num l ON l.yr=f.yr
+LEFT JOIN crm_deals d ON d.id=f.deal_id
+ON CONFLICT DO NOTHING;
 
-    INSERT INTO sale_order_items(id,sale_id,kind,inventory_unit_id,tractor_slug,title,qty,price_minor,list_price_minor,cost_kgs_minor,active)
-    SELECT 'legacy-item-'||s.id, 'legacy-'||s.id, 'unit', s.inventory_unit_id, i.tractor_slug, i.model||' · VIN '||i.vin, 1, s.sale_amount_minor, s.sale_amount_minor, s.cost_minor, 1
-    FROM sales_v2 s JOIN inventory_units_v2 i ON i.id=s.inventory_unit_id
-    WHERE s.archived=0 AND EXISTS (SELECT 1 FROM sale_orders o WHERE o.id='legacy-'||s.id)
-      AND NOT EXISTS (SELECT 1 FROM sale_order_items x WHERE x.inventory_unit_id=s.inventory_unit_id AND x.active=1);
+INSERT INTO sale_order_items(id,sale_id,kind,inventory_unit_id,tractor_slug,title,qty,price_minor,list_price_minor,cost_kgs_minor,active)
+SELECT 'legacy-item-'||s.id, 'legacy-'||s.id, 'unit', s.inventory_unit_id, i.tractor_slug, i.model||' · VIN '||i.vin, 1, s.sale_amount_minor, s.sale_amount_minor, s.cost_minor, 1
+FROM sales_v2 s JOIN inventory_units_v2 i ON i.id=s.inventory_unit_id
+WHERE s.archived=0 AND EXISTS (SELECT 1 FROM sale_orders o WHERE o.id='legacy-'||s.id)
+  AND NOT EXISTS (SELECT 1 FROM sale_order_items x WHERE x.id='legacy-item-'||s.id)
+  AND NOT EXISTS (SELECT 1 FROM sale_order_items x WHERE x.inventory_unit_id=s.inventory_unit_id AND x.active=1);
 
-    -- 2) Проведённые платежи по этим сделкам. Проводка в кассе уже есть - ссылаемся на неё, новую не создаём.
-    INSERT INTO sale_payments(id,sale_id,direction,payer,account_id,currency,amount_minor,fx_rate,amount_sale_minor,amount_kgs_minor,paid_at,method,reference,status,transaction_id,legacy_payment_id,created_by,created_at)
-    SELECT 'legacy-'||p.id, o.id, 'in', 'client', p.account_id, 'KGS', p.amount_minor, 1, p.amount_minor, p.amount_minor, p.paid_at, p.method, p.reference, 'posted',
-      (SELECT t.id FROM account_transactions t WHERE t.payment_id=p.id AND t.direction='in' ORDER BY t.created_at LIMIT 1), p.id, p.created_by, p.created_at
-    FROM payments_v2 p JOIN sale_orders o ON o.legacy_deal_id=p.deal_id
-    WHERE p.status='posted' AND p.archived=0
-      AND NOT EXISTS (SELECT 1 FROM sale_payments x WHERE x.legacy_payment_id=p.id);
+-- 2) Проведённые платежи старой CRM. Проводка в кассе уже есть: ссылаемся на неё, новую не создаём.
+INSERT INTO sale_payments(id,sale_id,direction,payer,account_id,currency,amount_minor,fx_rate,amount_sale_minor,amount_kgs_minor,paid_at,method,reference,status,transaction_id,legacy_payment_id,created_by,created_at)
+SELECT 'legacy-'||p.id, o.id, 'in', 'client', p.account_id, 'KGS', p.amount_minor, 1, p.amount_minor, p.amount_minor, p.paid_at, p.method, p.reference, 'posted',
+  (SELECT t.id FROM account_transactions t WHERE t.payment_id=p.id AND t.direction='in' ORDER BY t.created_at LIMIT 1), p.id, p.created_by, p.created_at
+FROM payments_v2 p JOIN sale_orders o ON o.legacy_deal_id=p.deal_id
+WHERE p.status='posted' AND p.archived=0
+  AND NOT EXISTS (SELECT 1 FROM sale_payments x WHERE x.legacy_payment_id=p.id);
 
-    INSERT INTO sale_events(id,sale_id,type,detail)
-    SELECT 'legacy-event-'||o.id, o.id, 'migrated', 'Перенесено из прежней CRM-сделки '||o.legacy_deal_id
-    FROM sale_orders o WHERE o.legacy_deal_id IS NOT NULL
-      AND NOT EXISTS (SELECT 1 FROM sale_events e WHERE e.id='legacy-event-'||o.id);
+-- Платёж, сторнированный в старой CRM, сторнирован и здесь.
+UPDATE sale_payments x SET status='void', void_reason='Сторнирован в прежней CRM'
+FROM payments_v2 p WHERE x.legacy_payment_id=p.id AND x.status='posted' AND (p.status<>'posted' OR p.archived<>0);
 
-    INSERT INTO schema_migrations(id) VALUES('sales-dept-legacy-20261105');
-  END IF;
-END $$;
+-- 3) Выдача из старой CRM и статус продажи по фактической оплате.
+UPDATE sale_orders o SET delivered_at=s.delivered_at
+FROM sales_v2 s WHERE o.legacy_deal_id=s.deal_id AND o.delivered_at IS NULL AND s.delivered_at IS NOT NULL;
+UPDATE sale_orders o SET status = CASE
+    WHEN o.delivered_at IS NULL THEN 'booked'
+    WHEN COALESCE((SELECT SUM(CASE WHEN p.direction='in' THEN p.amount_sale_minor ELSE -p.amount_sale_minor END) FROM sale_payments p WHERE p.sale_id=o.id AND p.status='posted'),0) >= o.total_minor THEN 'closed'
+    ELSE 'delivered' END
+WHERE o.legacy_deal_id IS NOT NULL AND o.status<>'cancelled'
+  AND o.status <> CASE
+    WHEN o.delivered_at IS NULL THEN 'booked'
+    WHEN COALESCE((SELECT SUM(CASE WHEN p.direction='in' THEN p.amount_sale_minor ELSE -p.amount_sale_minor END) FROM sale_payments p WHERE p.sale_id=o.id AND p.status='posted'),0) >= o.total_minor THEN 'closed'
+    ELSE 'delivered' END;
+
+INSERT INTO sale_events(id,sale_id,type,detail)
+SELECT 'legacy-event-'||o.id, o.id, 'migrated', 'Перенесено из прежней CRM-сделки '||o.legacy_deal_id
+FROM sale_orders o WHERE o.legacy_deal_id IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM sale_events e WHERE e.id='legacy-event-'||o.id);
+
 INSERT INTO schema_migrations(id) VALUES('sales-dept-20261105') ON CONFLICT(id) DO NOTHING;
 `;
