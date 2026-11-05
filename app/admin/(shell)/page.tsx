@@ -5,6 +5,9 @@ import { loadDashboard, sourceLabel } from "../_lib/dashboard";
 import { money, moneyShort, monthLong, monthShort, percent, date as fmtDate, plural } from "../_lib/format";
 import { Badge, ButtonLink, Card, Empty, IconTile, PageHeader, Stat } from "../_ui/ui";
 import { canSee, NAV } from "../_lib/nav";
+import { METHOD } from "../_lib/sales";
+
+const METHOD_COLOR: Record<string, string> = { full: "brand", prepay: "sun", installment: "lilac", bank_leasing: "sky", state_leasing: "teal" };
 
 export const metadata = { title: "Главная" };
 
@@ -32,6 +35,7 @@ export default async function Home() {
   };
   const max = Math.max(1, ...d.months.map((m) => m.total));
   const leadsTotal = d.sources.reduce((s, x) => s + x.leads, 0);
+  const methodsTotal = d.methods.reduce((s, x) => s + x.total, 0) || 1;
   const now = new Date();
   const mine = d.scope === "mine";
 
@@ -110,6 +114,18 @@ export default async function Home() {
                 )}
               </Card>
             ) : null}
+            {d.methods.length ? (
+              <Card title="Как платят клиенты · 90 дней">
+                <div className="ax-stack" aria-hidden>
+                  {d.methods.map((m) => <i key={m.key} style={{ width: `${(m.total / methodsTotal) * 100}%`, background: `var(--${METHOD_COLOR[m.key] ?? "sky"})` }} />)}
+                </div>
+                <div className="ax-legend">
+                  {d.methods.map((m) => (
+                    <span key={m.key}><i style={{ background: `var(--${METHOD_COLOR[m.key] ?? "sky"})` }} />{METHOD[m.key as keyof typeof METHOD]?.short ?? m.key} · <b className="num">{Math.round((m.total / methodsTotal) * 100)}%</b></span>
+                  ))}
+                </div>
+              </Card>
+            ) : null}
             <Card title="Откуда клиенты · 30 дней" more={can("/admin/marketing/analytics") ? { href: "/admin/marketing/analytics", label: "Аналитика" } : undefined}>
               {d.sources.length ? (
                 <>
@@ -139,14 +155,17 @@ export default async function Home() {
                 <div className="ax-table-wrap" style={{ border: 0, borderRadius: 0 }}>
                   <table className="ax-table">
                     <tbody>
-                      {d.recent.map((r) => (
-                        <tr key={r.id}>
-                          <td><Link href={`/admin/work/sales/${r.id}`} className="ax-strong">{r.customer}</Link><div className="ax-small">{r.model}</div></td>
-                          <td className="ax-small">{fmtDate(r.sold_at)}</td>
-                          <td className="r num ax-strong">{money(r.amount)}</td>
-                          <td>{r.delivered ? <Badge tone="good">Выдана</Badge> : <Badge tone="warn">Не выдана</Badge>}</td>
-                        </tr>
-                      ))}
+                      {d.recent.map((r) => {
+                        const st = r.status === "closed" ? { t: "Закрыта", tone: "good" as const } : r.status === "delivered" ? { t: "Выдана в долг", tone: "info" as const } : r.paid >= r.amount ? { t: "Оплачена, к выдаче", tone: "good" as const } : { t: "Ждём оплату", tone: "warn" as const };
+                        return (
+                          <tr key={r.id}>
+                            <td><Link href={`/admin/work/sales/${r.id}`} className="ax-strong">{r.customer}</Link><div className="ax-small">{r.number} · {r.items}</div></td>
+                            <td className="ax-small">{fmtDate(r.sold_at)}</td>
+                            <td className="r num ax-strong">{money(r.amount, r.currency)}</td>
+                            <td><Badge tone={st.tone}>{st.t}</Badge></td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

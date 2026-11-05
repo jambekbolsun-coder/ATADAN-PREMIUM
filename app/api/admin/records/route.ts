@@ -117,6 +117,8 @@ export async function POST(request: Request) {
     const body = await jsonBody(request, 140_000);
     const action = cleanText(body.action, 20, true);
     const kind = cleanText(body.kind, 60, true);
+    // Продажи и платежи по ним ведёт отдел продаж новой админки: здесь их больше не создаём, чтобы данные не разошлись.
+    if ((kind === "payments" || kind === "sales") && action !== "archive") throw new HttpError(409, "Продажи и платежи теперь в разделе «Продажи»: /admin/work/sales");
     if (!allKinds.has(kind) || !canAccess(actor, kind, true)) throw new HttpError(403, "Нет права изменять этот раздел");
     const db = getRawDb();
 

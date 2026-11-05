@@ -130,6 +130,7 @@ export async function POST(request: Request) {
       const id=cleanText(body.id,100,true),deal=await visibleDeal(actor,id);
       const moving=action==="move_deal";
       const stage=cleanText(body.stage,30,true),amount=moving?deal.amount_minor:minor(body.amount);
+      if(stage==="won"&&deal.stage!=="won")throw new HttpError(409,"Продажи теперь оформляются в разделе «Продажи»: /admin/work/sales/new");
       const probability=moving?deal.probability:Math.max(0,Math.min(100,Math.round(Number(body.probability)||0)));
       const nextStepValue=moving?"":cleanText(body.nextStepAt??"",50),nextStepDate=nextStepValue?new Date(nextStepValue):null;
       if(nextStepDate&&!Number.isFinite(nextStepDate.getTime()))throw new HttpError(400,"Проверьте дату следующего шага");

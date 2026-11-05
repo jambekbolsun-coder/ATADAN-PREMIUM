@@ -2,6 +2,7 @@ import { attachDatabasePool } from "@vercel/functions";
 import { Pool, types, type PoolClient } from "pg";
 import { POSTGRES_SCHEMA_SQL } from "./postgres-schema";
 import { ADMIN_V2_SCHEMA_SQL } from "./admin-v2-schema";
+import { SALES_DEPT_SCHEMA_SQL } from "./sales-dept-schema";
 
 types.setTypeParser(types.builtins.INT8, Number);
 types.setTypeParser(types.builtins.NUMERIC, Number);
@@ -147,6 +148,7 @@ export async function ensureDb() {
       const lockedProbe = await client.query("SELECT to_regclass('public.product_overrides') AS table_name");
       if (!lockedProbe.rows[0]?.table_name) await client.query(POSTGRES_SCHEMA_SQL);
       await client.query(ADMIN_V2_SCHEMA_SQL);
+      await client.query(SALES_DEPT_SCHEMA_SQL);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
