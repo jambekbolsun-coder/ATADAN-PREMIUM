@@ -11,7 +11,7 @@ import type { Actor } from "../../lib/admin-auth";
 import { canUseSection } from "../../lib/admin-auth";
 import { HttpError } from "../../lib/security";
 import type { Locale, NewsCategory, NewsPost } from "../../types";
-import { audit, mediaUrl, query, slugOf, text } from "./db-kit";
+import { audit, mediaUrl, query, safeJson, slugOf, text } from "./db-kit";
 
 export const POST_STATUS: Record<string, { label: string; tone: "good" | "warn" | "mute" }> = {
   published: { label: "Опубликовано", tone: "good" },
@@ -36,10 +36,10 @@ export async function listPosts(): Promise<AdminPost[]> {
   for (const p of seedNews) {
     const c = ch.get(p.slug);
     if (c?.is_deleted) { ch.delete(p.slug); continue; }
-    out.push({ ...(c ? { ...p, ...(JSON.parse(c.data_json) as NewsPost) } : p), custom: false, views: v.get(p.slug) ?? 0 });
+    out.push({ ...(c ? { ...p, ...safeJson<Partial<NewsPost>>(c.data_json, {}) } : p), custom: false, views: v.get(p.slug) ?? 0 });
     ch.delete(p.slug);
   }
-  for (const c of ch.values()) if (!c.is_deleted) { const p = JSON.parse(c.data_json) as NewsPost; out.push({ ...p, custom: true, views: v.get(p.slug) ?? 0 }); }
+  for (const c of ch.values()) if (!c.is_deleted) { const p = safeJson<NewsPost | null>(c.data_json, null); if (p?.slug && p.title?.ru) out.push({ ...p, publishedAt: p.publishedAt ?? "", custom: true, views: v.get(p.slug) ?? 0 }); }
   const rank = (s: string) => (s === "draft" ? 0 : s === "published" ? 1 : 2);
   return out.sort((a, b) => rank(a.status) - rank(b.status) || Number(b.featured) - Number(a.featured) || b.publishedAt.localeCompare(a.publishedAt));
 }

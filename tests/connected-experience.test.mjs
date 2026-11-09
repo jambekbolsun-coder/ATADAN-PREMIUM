@@ -96,7 +96,8 @@ test("classic wordmark, owner-only admin PWA and reference-style loaders are wir
   assert.match(css, /#79c94b/i);
   assert.match(layout, /atadan-app-192\.png/);
   assert.doesNotMatch(layout, /manifest:\s*"\/manifest\.webmanifest"/);
-  assert.doesNotMatch(adminLayout, /manifest:/);
+  assert.match(adminLayout, /manifest:"\/admin\/manifest\.webmanifest"/);
+  assert.match(adminLayout, /appleWebApp:/);
   assert.doesNotMatch(chrome, /PwaRegistration admin|<PwaRegistration/);
   assert.match(chrome, /<PublicPwaCleanup\/>/);
   assert.match(dashboard, /<AdminInstallButton role=\{data\.actor\.role\}\/>>?/);
@@ -104,10 +105,10 @@ test("classic wordmark, owner-only admin PWA and reference-style loaders are wir
   assert.match(pwa, /beforeinstallprompt/);
   assert.match(pwa, /\/admin\/manifest\.webmanifest/);
   assert.match(pwa, /\/admin-sw\.js/);
-  assert.match(adminManifest, /start_url:"\/admin\/"/);
-  assert.match(adminManifest, /ATADAN CRM/);
-  assert.match(adminManifest, /actor\.role!=="owner"/);
-  assert.match(adminWorker, /atadan-admin-v1/);
+  assert.match(adminManifest, /start_url: "\/admin"/);
+  assert.match(adminManifest, /application\/manifest\+json/);
+  assert.doesNotMatch(adminManifest, /requireActor/);
+  assert.doesNotMatch(adminWorker, /cache\.addAll|cache\.put/);
   assert.match(css, /body:has\(\.admin-shell\.admin-shell-unified\).*overflow:hidden/);
   assert.match(css, /\.admin-shell-unified \.admin-main\{height:100dvh.*overflow-y:auto/);
   assert.doesNotMatch(customerCss, /assist-whatsapp\s*\{\s*display:\s*none/);

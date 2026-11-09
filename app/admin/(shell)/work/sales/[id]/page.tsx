@@ -5,7 +5,8 @@ import { getUsdKgsRate } from "../../../../../lib/exchange-rate";
 import { requireSection, seesCost } from "../../../../_lib/session";
 import { DOSSIER, DOSSIER_LABEL, getSale, isBoss, isCompany, METHOD, moneyAccounts, sellableUnits, statusLabel, toKgs } from "../../../../_lib/sales";
 import { date, dateTime, money } from "../../../../_lib/format";
-import { Badge, Card, Notice, PageHeader, Progress, Tag } from "../../../../_ui/ui";
+import { Badge, ButtonLink, Card, Notice, PageHeader, Progress, Tag } from "../../../../_ui/ui";
+import { canLogistics } from "../../../../_lib/stock";
 import { SaleActions, PaymentRowActions, DossierToggle, AttachUnit } from "./sale-actions";
 
 export const metadata = { title: "Продажа" };
@@ -28,7 +29,7 @@ export default async function SaleCard({ params, searchParams }: PageProps<"/adm
   const leasing = sale.payment_method.endsWith("leasing");
   const active = items.filter((i) => i.active);
   const pendingModel = active.filter((i) => i.kind === "model_order");
-  const notOnStock = active.filter((i) => i.inventory_unit_id && !["stock", "reserved"].includes(i.unit_status ?? ""));
+  const notOnStock = active.filter((i) => i.inventory_unit_id && !["stock", "reserved", "sold"].includes(i.unit_status ?? ""));
   const canSeeCost = seesCost(actor);
   const marginKgs = toKgs(sale.total_minor, cur, sale.fx_rate) - sale.cost_kgs_minor;
   let dossier: Record<string, boolean> = {};
@@ -80,7 +81,8 @@ export default async function SaleCard({ params, searchParams }: PageProps<"/adm
           </>
         }
       />
-      {sp.created ? <div style={{ marginBottom: 12 }}><Notice tone="good">Продажа оформлена. Машины зарезервированы, график платежей создан.</Notice></div> : null}
+      {canLogistics(actor) && sale.status !== "cancelled" ? <div style={{ marginBottom: 12 }}><ButtonLink href={`/admin/work/logistics/deliveries/new?sale=${sale.id}`} size="sm">Организовать доставку</ButtonLink></div> : null}
+      {sp.created ? <div style={{ marginBottom: 12 }}><Notice tone={sp.partial ? "warn" : "good"}>{sp.partial ? "Продажа оформлена, но оплату или выдачу провести не удалось. Завершите их здесь." : "Продажа оформлена."}</Notice></div> : null}
 
       <div className="ax-card" style={{ marginBottom: 14, padding: "14px 18px" }}>
         <ol className="ax-steps" style={{ listStyle: "none", margin: 0, padding: 0 }}>
@@ -126,7 +128,7 @@ export default async function SaleCard({ params, searchParams }: PageProps<"/adm
                       <td>
                         {i.inventory_unit_id ? <Link href={`/admin/work/stock/${i.inventory_unit_id}`} className="ax-strong">{i.title}</Link> : <b>{i.title}</b>}
                         <div className="ax-small">{i.kind === "unit" ? `машина · ${i.unit_status === "delivered" ? "выдана" : i.unit_status === "reserved" ? "в резерве" : i.unit_status ?? ""}` : i.kind === "model_order" ? "под заказ: VIN ещё не привязан" : i.kind === "part" ? "запчасть" : "услуга"}</div>
-                        {i.kind === "model_order" && i.active && sale.status === "booked" ? <AttachUnit saleId={sale.id} itemId={i.id} units={units.filter((u) => u.tractor_slug === i.tractor_slug)} /> : null}
+                        {i.kind === "model_order" && i.active && sale.status === "booked" ? <AttachUnit saleId={sale.id} itemId={i.id} units={units.filter((u) => u.tractor_slug === i.tractor_slug).map((u) => ({ id: u.id, vin: u.vin, model: u.model, status: u.status }))} /> : null}
                       </td>
                       <td className="r num">{i.qty}</td>
                       <td className="r num">{money(i.price_minor, cur)}</td>

@@ -37,7 +37,7 @@ test("public catalogue contains no parts surface or demo publisher",async()=>{
   await assert.rejects(readFile(new URL("../scripts/publish-sample-parts.mjs",import.meta.url),"utf8"));
 });
 
-test("SEO routes remain public while PWA installation is restricted to the admin owner",async()=>{
+test("SEO routes remain public and the admin manifest carries no private data",async()=>{
   const [robots,sitemap,adminManifest,adminLayout]=await Promise.all([
     readFile(new URL("../app/robots.ts",import.meta.url),"utf8"),
     readFile(new URL("../app/sitemap.ts",import.meta.url),"utf8"),
@@ -48,9 +48,7 @@ test("SEO routes remain public while PWA installation is restricted to the admin
   assert.match(sitemap,/getCatalog\(\).*getNewsPosts\(\).*service_pages/s);
   await assert.rejects(readFile(new URL("../app/manifest.ts",import.meta.url),"utf8"));
   await assert.rejects(readFile(new URL("../public/sw.js",import.meta.url),"utf8"));
-  assert.match(adminManifest,/start_url:"\/admin\/"/);
-  assert.match(adminManifest,/requireActor\(request\)/);
-  assert.match(adminManifest,/actor\.role!=="owner"/);
-  assert.match(adminManifest,/private, no-store/);
+  assert.match(adminManifest,/start_url: "\/admin"/);
+  assert.doesNotMatch(adminManifest,/requireActor|getRawDb/);
   assert.match(adminLayout,/index:false,follow:false/);
 });

@@ -61,7 +61,7 @@ export async function listTransactions(f: { accountId?: string; direction?: stri
   if (f.to && /^\d{4}-\d{2}-\d{2}$/.test(f.to)) { where.push("t.occurred_at < ?::date + 1"); args.push(f.to); }
   if (f.q) { where.push("(lower(t.description) LIKE ? OR lower(t.counterparty) LIKE ?)"); const like = `%${f.q.toLowerCase().replace(/[%_\\]/g, "")}%`; args.push(like, like); }
   if (f.expensesOnly) {
-    where.push(`t.direction='out' AND t.transfer_id IS NULL AND t.reversed_by IS NULL AND (t.link_type IS NULL OR t.link_type='payroll') AND t.category <> 'Сторно' AND t.category NOT IN (${[...SYSTEM_CATEGORIES].map(() => "?").join(",")})`);
+    where.push(`t.direction='out' AND t.transfer_id IS NULL AND t.reversed_by IS NULL AND (t.link_type IS NULL OR t.link_type IN ('payroll','delivery')) AND t.category <> 'Сторно' AND t.category NOT IN (${[...SYSTEM_CATEGORIES].map(() => "?").join(",")})`);
     args.push(...SYSTEM_CATEGORIES);
   }
   const size = 50;
@@ -79,7 +79,7 @@ export async function listTransactions(f: { accountId?: string; direction?: stri
 export async function expensesByCategory(from: string, to: string) {
   const { results } = await getRawDb().prepare(`SELECT t.category, a.currency, COALESCE(SUM(t.amount_minor),0)::bigint AS total, COUNT(*)::int AS n
     FROM account_transactions t JOIN financial_accounts a ON a.id=t.account_id
-    WHERE t.direction='out' AND t.transfer_id IS NULL AND t.reversed_by IS NULL AND (t.link_type IS NULL OR t.link_type='payroll') AND t.category <> 'Сторно' AND t.occurred_at >= ?::date AND t.occurred_at < ?::date + 1
+    WHERE t.direction='out' AND t.transfer_id IS NULL AND t.reversed_by IS NULL AND (t.link_type IS NULL OR t.link_type IN ('payroll','delivery')) AND t.category <> 'Сторно' AND t.occurred_at >= ?::date AND t.occurred_at < ?::date + 1
       AND t.category NOT IN (${[...SYSTEM_CATEGORIES].map(() => "?").join(",")})
     GROUP BY t.category, a.currency ORDER BY total DESC`).bind(from, to, ...SYSTEM_CATEGORIES).all<{ category: string; currency: string; total: number; n: number }>();
   return results.map((r) => ({ ...r, total: Number(r.total) }));
@@ -159,7 +159,7 @@ export async function reverseMovement(actor: Actor, txId: string, reason: string
     const group = t.transfer_id ? await q<typeof t>("SELECT id, account_id, direction, amount_minor, category, reversed_by, transfer_id, link_type FROM account_transactions WHERE transfer_id=? AND reversed_by IS NULL FOR UPDATE", t.transfer_id) : [t];
     for (const row of group) {
       const rid = id();
-      await q("INSERT INTO account_transactions(id,account_id,direction,amount_minor,category,occurred_at,description,created_by) VALUES(?,?,?,?, 'Сторно', CURRENT_TIMESTAMP, ?, ?)", rid, row.account_id, row.direction === "in" ? "out" : "in", row.amount_minor, `Сторно «${row.category}»: ${why}`, actor.id);
+      await q("INSERT INTO account_transactions(id,account_id,direction,amount_minor,category,occurred_at,description,transfer_id,created_by) VALUES(?,?,?,?, 'Сторно', CURRENT_TIMESTAMP, ?, ?, ?)", rid, row.account_id, row.direction === "in" ? "out" : "in", row.amount_minor, `Сторно «${row.category}»: ${why}`, row.transfer_id, actor.id);
       await q("UPDATE account_transactions SET reversed_by=? WHERE id=?", rid, row.id);
     }
     await audit(q, actor, "cash.reverse", t.id, why);
@@ -192,7 +192,7 @@ export async function penaltyPolicy(): Promise<PenaltyPolicy> {
   }
 }
 
-export type DebtRow = { id: string; number: string; customer_id: string; customer: string; phone: string; currency: "USD" | "KGS"; fx_rate: number; status: string; payment_method: string; bank_name: string; manager: string | null; total_minor: number; paid_minor: number; left_minor: number; due_minor: number; overdue_minor: number; oldest_due: string | null; days_overdue: number; next_due: string | null; bank_part: number; has_schedule: boolean };
+export type DebtRow = { id: string; number: string; customer_id: string; customer: string; phone: string; currency: "USD" | "KGS"; fx_rate: number; status: string; payment_method: string; bank_name: string; manager: string | null; total_minor: number; paid_minor: number; left_minor: number; due_minor: number; overdue_minor: number; oldest_due: string | null; days_overdue: number; next_due: string | null; bank_part: number; has_schedule: boolean; overdue_rows: { amount: number; days: number }[] };
 
 export async function listDebts(actor: Actor) {
   const own = canMoney(actor) ? "" : "AND o.manager_id=?";
@@ -217,16 +217,32 @@ export async function listDebts(actor: Actor) {
         CASE WHEN NOT b.has_schedule AND b.due_minor > 0 THEN b.delivered_on END) AS oldest_due
     FROM base b WHERE b.total_minor - b.paid_minor > 0 ORDER BY overdue_minor DESC, b.number`).bind(...(own ? [actor.id] : [])).all<DebtRow>();
   const today = new Date(new Date().toISOString().slice(0, 10)).getTime();
+  const daysSince = (d: string) => Math.max(0, Math.round((today - new Date(d).getTime()) / 86400000));
+  const ids = results.map((r) => r.id);
+  const schedule = ids.length ? (await getRawDb().prepare(`SELECT sale_id, payer, due_date::text AS due, amount_minor FROM sale_schedule WHERE sale_id IN (${ids.map(() => "?").join(",")}) ORDER BY due_date`).bind(...ids).all<{ sale_id: string; payer: string; due: string; amount_minor: number }>()).results : [];
   return results.map((r) => {
-    const days = r.oldest_due ? Math.max(0, Math.round((today - new Date(r.oldest_due).getTime()) / 86400000)) : 0;
-    return { ...r, total_minor: Number(r.total_minor), paid_minor: Number(r.paid_minor), left_minor: Number(r.left_minor), due_minor: Number(r.due_minor), overdue_minor: Number(r.overdue_minor), bank_part: Number(r.bank_part), fx_rate: Number(r.fx_rate), has_schedule: Boolean(r.has_schedule), days_overdue: Number(r.overdue_minor) > 0 ? days : 0 };
+    const days = r.oldest_due ? daysSince(r.oldest_due) : 0;
+    // пеню начисляем на каждый просроченный платёж клиента отдельно и только после выдачи машины (так в договоре)
+    const overdueRows: { amount: number; days: number }[] = [];
+    if (r.status === "delivered") {
+      let covered = Number(r.paid_minor);
+      for (const row of schedule.filter((x) => x.sale_id === r.id)) {
+        const amount = Number(row.amount_minor), owed = Math.max(0, amount - covered);
+        covered = Math.max(0, covered - amount);
+        if (owed > 0 && row.payer === "client" && new Date(row.due).getTime() < today) overdueRows.push({ amount: owed, days: daysSince(row.due) });
+      }
+      if (!r.has_schedule && Number(r.overdue_minor) > 0) overdueRows.push({ amount: Number(r.overdue_minor), days });
+    }
+    return { ...r, overdue_rows: overdueRows, total_minor: Number(r.total_minor), paid_minor: Number(r.paid_minor), left_minor: Number(r.left_minor), due_minor: Number(r.due_minor), overdue_minor: Number(r.overdue_minor), bank_part: Number(r.bank_part), fx_rate: Number(r.fx_rate), has_schedule: Boolean(r.has_schedule), days_overdue: Number(r.overdue_minor) > 0 ? days : 0 };
   });
 }
 
-export function penaltyFor(d: Pick<DebtRow, "overdue_minor" | "days_overdue">, p: PenaltyPolicy) {
-  const days = Math.max(0, d.days_overdue - p.graceDays);
-  if (!days || !d.overdue_minor || !p.ratePerDay) return 0;
-  return Math.min(Math.round((d.overdue_minor * p.ratePerDay * days) / 100), Math.round((d.overdue_minor * p.maxPercent) / 100));
+export function penaltyFor(d: Pick<DebtRow, "overdue_rows">, p: PenaltyPolicy) {
+  if (!p.ratePerDay) return 0;
+  return d.overdue_rows.reduce((sum, row) => {
+    const days = Math.max(0, row.days - p.graceDays);
+    return sum + (days ? Math.min(Math.round((row.amount * p.ratePerDay * days) / 100), Math.round((row.amount * p.maxPercent) / 100)) : 0);
+  }, 0);
 }
 
 export function bucketOf(days: number) {
@@ -253,7 +269,7 @@ export async function marginReport(from: string, to: string) {
   const [sales, models, managers] = await Promise.all([
     db.prepare(`SELECT o.id, o.number, o.sold_at, c.name AS customer, s.display_name AS manager, o.status, (o.total_minor*${kgs})::bigint AS revenue_kgs, o.cost_kgs_minor AS cost_kgs,
         COALESCE((SELECT string_agg(i.title, ', ') FROM sale_order_items i WHERE i.sale_id=o.id AND i.active=1),'') AS items,
-        (o.status='booked' OR EXISTS (SELECT 1 FROM sale_order_items i WHERE i.sale_id=o.id AND i.active=1 AND i.kind IN ('model_order','unit') AND i.cost_kgs_minor=0)) AS preliminary
+        (o.status='booked' OR EXISTS (SELECT 1 FROM sale_order_items i WHERE i.sale_id=o.id AND i.active=1 AND (i.kind='model_order' OR (i.kind='unit' AND i.cost_kgs_minor=0)))) AS preliminary
       FROM sale_orders o JOIN crm_customers c ON c.id=o.customer_id LEFT JOIN staff s ON s.id=o.manager_id
       WHERE o.status<>'cancelled' AND o.sold_at >= ?::date AND o.sold_at < ?::date + 1 ORDER BY o.sold_at DESC`).bind(from, to).all<MarginSale>(),
     db.prepare(`SELECT COALESCE(i.tractor_slug, i.kind) AS key, MIN(CASE WHEN i.kind IN ('unit','model_order') THEN split_part(i.title,' · ',1) ELSE CASE i.kind WHEN 'part' THEN 'Запчасти' ELSE 'Услуги' END END) AS label,

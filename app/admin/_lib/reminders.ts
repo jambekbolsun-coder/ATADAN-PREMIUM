@@ -4,6 +4,7 @@
  *
  *  - резерв машины заканчивается через 1-3 дня → менеджеру продажи;
  *  - резерв закончился, машина не выдана → менеджеру и руководству;
+ *  - резерв истёк больше 3 дней назад и оплаты нет → продажа снимается, техника возвращается на склад;
  *  - просрочка платежа на 1, 3, 7, 14, 30-й день и дальше каждые 30 дней → менеджеру;
  *    сводка «сколько просрочено» → бухгалтеру и руководству;
  *  - поставка не пришла к ожидаемой дате (на следующий день) → логистике;
@@ -13,12 +14,14 @@ import { getRawDb } from "../../../db";
 import type { Actor } from "../../lib/admin-auth";
 import { notify, query } from "./db-kit";
 import { listDebts } from "./money";
+import { expireReserves } from "./sales";
 
 const SYSTEM = { id: "system", role: "owner", permissions: [] } as unknown as Actor;
 const money = (minor: number, cur: string) => `${Math.round(minor / 100).toLocaleString("ru-RU")} ${cur === "USD" ? "$" : "с"}`;
 
 export async function runDaily(today = new Date().toISOString().slice(0, 10)) {
   const db = getRawDb();
+  if (await db.prepare("SELECT 1 FROM cron_runs WHERE job='daily' AND ran_on=?::date").bind(today).first()) return { skipped: true, today };
   const debts = await listDebts(SYSTEM);
   return db.transaction(async (client) => {
     const q = query(client);
@@ -26,6 +29,14 @@ export async function runDaily(today = new Date().toISOString().slice(0, 10)) {
     if (!started.length) return { skipped: true, today };
     let sent = 0;
     const send = async (n: Parameters<typeof notify>[1]) => { await notify(q, n); sent++; };
+
+    // резерв истёк без оплаты: освобождаем технику
+    const [owner] = await q<{ id: string }>("SELECT id FROM staff WHERE role='owner' ORDER BY created_at LIMIT 1");
+    const expired = owner ? await expireReserves(q, today, owner.id) : [];
+    for (const r of expired) {
+      await send({ topic: "reserve", priority: "high", title: `Продажа ${r.number} снята: резерв истёк`, body: `${r.customer}. Оплаты не было, техника вернулась на склад`, url: `/admin/work/sales/${r.id}`, roles: ["owner", "director"], entity: { type: "sale", id: r.id } });
+      if (r.manager_id) await send({ topic: "reserve", priority: "high", title: `Продажа ${r.number} снята: резерв истёк`, body: r.customer, url: `/admin/work/sales/${r.id}`, to: [r.manager_id], entity: { type: "sale", id: r.id } });
+    }
 
     // резерв
     const reserves = await q<{ id: string; number: string; manager_id: string | null; reserve_until: string; left: number; customer: string }>(`
@@ -36,8 +47,10 @@ export async function runDaily(today = new Date().toISOString().slice(0, 10)) {
       if (r.left >= 1) {
         if (r.manager_id) await send({ topic: "reserve", title: `Резерв по ${r.number} заканчивается через ${r.left} дн.`, body: `${r.customer}. Продлите резерв или поторопите оплату`, url: `/admin/work/sales/${r.id}`, to: [r.manager_id], entity: { type: "sale", id: r.id } });
       } else if (r.left === 0 || r.left === -1) {
-        await send({ topic: "reserve", priority: "high", title: `Резерв по ${r.number} ${r.left === 0 ? "заканчивается сегодня" : "закончился"}`, body: `${r.customer}. Машина не выдана: продлите резерв или отмените продажу`, url: `/admin/work/sales/${r.id}`, roles: ["owner", "director"], entity: { type: "sale", id: r.id } });
+        await send({ topic: "reserve", priority: "high", title: `Резерв по ${r.number} ${r.left === 0 ? "заканчивается сегодня" : "закончился"}`, body: `${r.customer}. Машина не выдана: продлите резерв. Без оплаты через 3 дня она вернётся на склад`, url: `/admin/work/sales/${r.id}`, roles: ["owner", "director"], entity: { type: "sale", id: r.id } });
         if (r.manager_id) await send({ topic: "reserve", priority: "high", title: `Резерв по ${r.number} ${r.left === 0 ? "заканчивается сегодня" : "закончился"}`, body: r.customer, url: `/admin/work/sales/${r.id}`, to: [r.manager_id], entity: { type: "sale", id: r.id } });
+      } else if (r.left % 3 === 0) {
+        await send({ topic: "reserve", title: `Резерв по ${r.number} просрочен на ${-r.left} дн.`, body: `${r.customer}. Деньги получены или идёт лизинг, машина всё ещё не выдана`, url: `/admin/work/sales/${r.id}`, roles: ["owner", "director"], ...(r.manager_id ? { to: [r.manager_id] } : {}), entity: { type: "sale", id: r.id } });
       }
     }
 
@@ -62,7 +75,7 @@ export async function runDaily(today = new Date().toISOString().slice(0, 10)) {
     const svc = await q<{ id: string; number: string; assigned_to: string | null }>("SELECT id, number, assigned_to FROM service_tickets WHERE status NOT IN ('done','closed','rejected') AND due_at = ?::date - 1", today);
     for (const t of svc) await send({ topic: "service", priority: "high", title: `Срок по обращению ${t.number} прошёл`, url: `/admin/work/service/${t.id}`, ...(t.assigned_to ? { to: [t.assigned_to] } : { roles: ["owner", "director"] }), entity: { type: "service", id: t.id } });
 
-    await q("UPDATE cron_runs SET detail=? WHERE job='daily' AND ran_on=?::date", `резервов ${reserves.length}, просрочек ${overdue.length}, поставок ${late.length}, сервис ${svc.length}`, today);
-    return { skipped: false, today, reserves: reserves.length, overdue: overdue.length, late: late.length, service: svc.length, sent };
+    await q("UPDATE cron_runs SET detail=? WHERE job='daily' AND ran_on=?::date", `снято ${expired.length}, резервов ${reserves.length}, просрочек ${overdue.length}, поставок ${late.length}, сервис ${svc.length}`, today);
+    return { skipped: false, today, expired: expired.length, reserves: reserves.length, overdue: overdue.length, late: late.length, service: svc.length, sent };
   });
 }

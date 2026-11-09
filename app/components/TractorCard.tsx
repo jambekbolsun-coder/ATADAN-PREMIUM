@@ -18,7 +18,7 @@ export function TractorCard({ tractor, featured = false }: { tractor: Tractor; f
     <article className={`tractor-card ${featured ? "featured" : ""}`}>
       <Link href={`/catalog/${tractor.slug}`} className="tractor-card-image" aria-label={`Подробнее о ${tractor.model}`}>
         <span className={`stock-badge ${tractor.inStock ? "available" : "order"}`}>{tractor.inStock ? t("product.inStock") : t("product.onOrder")}</span>
-        {discount ? <span className="promotion-badge"><small>{tractor.promotionLabel || t("product.promo")}</small><strong>−{discount}%</strong></span> : null}
+        {discount && tractor.price ? <span className="promotion-badge"><small>{tractor.promotionLabel || t("product.promo")}</small><strong>−{discount}%</strong></span> : null}
         <Image src={tractor.image} alt={`Трактор Changfa ${tractor.model}`} width={620} height={470} sizes="(max-width: 760px) 92vw, (max-width: 1200px) 46vw, 31vw" />
       </Link>
       <div className="tractor-card-body">

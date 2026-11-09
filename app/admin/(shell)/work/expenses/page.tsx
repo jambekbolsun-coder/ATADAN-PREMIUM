@@ -15,7 +15,7 @@ export default async function Expenses({ searchParams }: PageProps<"/admin/work/
   const sp = await searchParams;
   const { from, to } = periodFrom(sp);
   const category = typeof sp.category === "string" && EXPENSE_CATEGORIES.includes(sp.category) ? sp.category : "";
-  const page = Math.max(1, Number(sp.page) || 1);
+  const page = Math.max(1, Math.min(500, Number(sp.page) || 1));
   const [groups, tx, accounts] = await Promise.all([
     expensesByCategory(from, to),
     listTransactions({ expensesOnly: true, category, from, to, page }),

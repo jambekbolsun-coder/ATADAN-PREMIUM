@@ -6,6 +6,7 @@ import { HttpError } from "../../lib/security";
 import { requireStaff } from "./session";
 import * as stock from "./stock";
 import * as money from "./money";
+import * as catalog from "./catalog-admin";
 import type { ActionResult } from "./sales-actions";
 
 async function run(work: () => Promise<unknown>, success: string, paths: string[]): Promise<ActionResult> {
@@ -86,7 +87,27 @@ export async function allocationAction(shipmentId: string, _p: ActionResult | nu
 // ── машина
 export async function updateUnitAction(unitId: string, _p: ActionResult | null, form: FormData): Promise<ActionResult> {
   const actor = await requireStaff();
-  return run(() => stock.updateUnit(actor, unitId, { engine: f(form, "engine"), year: f(form, "year"), color: f(form, "color"), gtd: f(form, "gtd"), certificate: f(form, "certificate"), passport: f(form, "passport"), location: f(form, "location"), listPrice: f(form, "listPrice") }), "Данные машины сохранены", [`/admin/work/stock/${unitId}`, "/admin/work/stock"]);
+  return run(() => stock.updateUnit(actor, unitId, { engine: f(form, "engine"), year: f(form, "year"), color: f(form, "color"), gtd: f(form, "gtd"), certificate: f(form, "certificate"), passport: f(form, "passport"), location: f(form, "location"), listPrice: f(form, "listPrice"), vin: f(form, "vin"), slug: f(form, "slug") }), "Данные машины сохранены", [`/admin/work/stock/${unitId}`, "/admin/work/stock"]);
+}
+export async function shipmentInfoAction(shipmentId: string, _p: ActionResult | null, form: FormData): Promise<ActionResult> {
+  const actor = await requireStaff();
+  return run(() => stock.setShipmentInfo(actor, shipmentId, { route: f(form, "route"), transport: f(form, "transport"), origin: f(form, "origin"), destination: f(form, "destination"), carrier: f(form, "carrier"), driverName: f(form, "driverName"), driverPhone: f(form, "driverPhone"), departure: f(form, "departure"), eta: f(form, "eta") }), "Сохранено", ["/admin/work/logistics", `/admin/work/logistics/shipments/${shipmentId}`]);
+}
+export async function unitCostAction(unitId: string, _p: ActionResult | null, form: FormData): Promise<ActionResult> {
+  const actor = await requireStaff();
+  return run(() => stock.setUnitCost(actor, unitId, f(form, "cost")), "Себестоимость сохранена", ["/admin/work/stock", `/admin/work/stock/${unitId}`, "/admin/work/margin"]);
+}
+export async function createUnitsAction(rows: { slug: string; vin: string; engine?: string; year?: string; color?: string; location?: string; cost?: string; price?: string }[]): Promise<ActionResult> {
+  const actor = await requireStaff();
+  const r = await run(() => stock.createUnits(actor, rows), "Машины поставлены на склад", ["/admin/work/stock", "/admin/marketing/catalog", "/"]);
+  if (r.ok) redirect("/admin/work/stock");
+  return r;
+}
+export async function savePricesAction(rows: catalog.PriceChange[], note: string): Promise<ActionResult> {
+  const actor = await requireStaff();
+  const r = await run(() => catalog.savePrices(actor, rows, note), "Прайс сохранён", ["/admin/work/prices", "/admin/marketing/catalog"]);
+  if (r.ok) revalidatePath("/", "layout");
+  return r;
 }
 export async function pdiAction(unitId: string): Promise<ActionResult> {
   const actor = await requireStaff();

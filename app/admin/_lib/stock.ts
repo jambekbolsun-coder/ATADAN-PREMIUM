@@ -43,6 +43,8 @@ export const ALLOCATION: Record<string, string> = { value: "Пропорцион
 
 export const isBoss = (a: Pick<Actor, "role">) => a.role === "owner" || a.role === "director";
 export const canLogistics = (a: Actor) => isBoss(a) || a.role === "accountant" || ["purchases", "shipments", "suppliers"].some((p) => a.permissions.includes(p as never));
+/** Приход без поставки, правка VIN и себестоимости машины: владелец, директор, бухгалтер. */
+export const canIntake = (a: Actor) => isBoss(a) || a.role === "accountant";
 export const canStockEdit = (a: Actor) => isBoss(a) || a.role === "manager" || a.role === "accountant" || a.permissions.includes("inventory-units");
 
 type Q = <T = Record<string, unknown>>(sql: string, ...args: unknown[]) => Promise<T[]>;
@@ -94,8 +96,8 @@ export async function recalcShipment(q: Q, shipmentId: string) {
   const [sh] = await q<{ id: string; purchase_order_id: string; allocation_method: string }>("SELECT id, purchase_order_id, allocation_method FROM shipments_v2 WHERE id=?", shipmentId);
   if (!sh) return;
   const rate = await poRate(q, sh.purchase_order_id);
-  const units = await q<{ id: string; status: string; unit_price_minor: number | null; manual_cost_minor: number | null; purchase_cost_minor: number }>(
-    "SELECT u.id, u.status, l.unit_price_minor, u.manual_cost_minor, u.purchase_cost_minor FROM inventory_units_v2 u LEFT JOIN purchase_order_lines l ON l.id=u.purchase_order_line_id WHERE u.shipment_id=? AND u.archived=0 ORDER BY u.vin",
+  const units = await q<{ id: string; status: string; unit_price_minor: number | null; manual_cost_minor: number | null; purchase_cost_minor: number; cost_override_minor: number | null }>(
+    "SELECT u.id, u.status, l.unit_price_minor, u.manual_cost_minor, u.purchase_cost_minor, u.cost_override_minor FROM inventory_units_v2 u LEFT JOIN purchase_order_lines l ON l.id=u.purchase_order_line_id WHERE u.shipment_id=? AND u.archived=0 ORDER BY u.vin",
     shipmentId,
   );
   if (!units.length) return;
@@ -114,7 +116,8 @@ export async function recalcShipment(q: Q, shipmentId: string) {
     if (u.status === "delivered") continue;
     // старая машина без позиции заказа и без расходов поставки: себестоимость не трогаем
     if (!u.unit_price_minor && extra === 0) continue;
-    await q("UPDATE inventory_units_v2 SET purchase_cost_minor=?, allocated_cost_minor=?, landed_cost_minor=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", purchase[i], share, purchase[i] + share, u.id);
+    await q("UPDATE inventory_units_v2 SET purchase_cost_minor=?, allocated_cost_minor=?, landed_cost_minor=COALESCE(cost_override_minor, ?), updated_at=CURRENT_TIMESTAMP WHERE id=?", purchase[i], share, purchase[i] + share, u.id);
+    if (u.cost_override_minor !== null) continue; // себестоимость задана вручную: продажи не пересчитываем
     // продажа ещё не выдана: обновляем себестоимость позиции и продажи
     const items = await q<{ id: string; sale_id: string }>("SELECT i.id, i.sale_id FROM sale_order_items i JOIN sale_orders o ON o.id=i.sale_id WHERE i.inventory_unit_id=? AND i.active=1 AND o.status='booked'", u.id);
     for (const it of items) {
@@ -144,7 +147,7 @@ export const UNIT_VIEWS = [
 
 const UNIT_SELECT = `SELECT u.id, u.vin, u.model, u.tractor_slug, u.status, u.location, u.received_at,
     CASE WHEN u.received_at IS NOT NULL AND u.status IN ('stock','reserved') THEN (CURRENT_DATE - u.received_at::date) END AS days,
-    u.purchase_cost_minor, u.landed_cost_minor, u.list_price_minor, u.pdi_done_at, u.damage_note, u.written_off_at,
+    u.purchase_cost_minor, COALESCE(NULLIF(u.landed_cost_minor,0), NULLIF(u.purchase_cost_minor,0), (SELECT pc.cost_minor FROM product_costs pc WHERE pc.slug=u.tractor_slug), 0) AS landed_cost_minor, u.list_price_minor, u.pdi_done_at, u.damage_note, u.written_off_at,
     o.id AS sale_id, o.number AS sale_number, c.name AS customer, s.tracking_number AS shipment
   FROM inventory_units_v2 u
   LEFT JOIN sale_order_items i ON i.inventory_unit_id=u.id AND i.active=1
@@ -223,10 +226,10 @@ export async function getOrder(poId: string) {
 
 export async function getShipment(shipmentId: string) {
   const db = getRawDb();
-  const shipment = await db.prepare(`SELECT s.*, s.eta::text AS eta, o.order_number, o.currency, p.name AS supplier FROM shipments_v2 s JOIN purchase_orders_v2 o ON o.id=s.purchase_order_id JOIN suppliers_v2 p ON p.id=o.supplier_id WHERE s.id=?`).bind(shipmentId).first<Record<string, unknown> & { id: string; status: string; tracking_number: string | null; purchase_order_id: string; allocation_method: string; eta: string | null; order_number: string; currency: string; supplier: string }>();
+  const shipment = await db.prepare(`SELECT s.*, s.eta::text AS eta, to_char(s.departure_at AT TIME ZONE 'Asia/Bishkek','YYYY-MM-DD"T"HH24:MI') AS departure_local, o.order_number, o.currency, p.name AS supplier FROM shipments_v2 s JOIN purchase_orders_v2 o ON o.id=s.purchase_order_id JOIN suppliers_v2 p ON p.id=o.supplier_id WHERE s.id=?`).bind(shipmentId).first<Record<string, unknown> & { id: string; status: string; tracking_number: string | null; purchase_order_id: string; allocation_method: string; eta: string | null; order_number: string; currency: string; supplier: string }>();
   if (!shipment) return null;
   const [units, costs] = await Promise.all([
-    db.prepare("SELECT u.id, u.vin, u.model, u.status, u.engine_number, u.purchase_cost_minor, u.allocated_cost_minor, u.landed_cost_minor, u.manual_cost_minor, u.received_at, u.damage_note FROM inventory_units_v2 u WHERE u.shipment_id=? AND u.archived=0 ORDER BY u.model, u.vin").bind(shipmentId).all<{ id: string; vin: string; model: string; status: string; engine_number: string; purchase_cost_minor: number; allocated_cost_minor: number; landed_cost_minor: number; manual_cost_minor: number | null; received_at: string | null; damage_note: string }>(),
+    db.prepare("SELECT u.id, u.vin, u.model, u.status, u.engine_number, u.purchase_cost_minor, u.allocated_cost_minor, u.landed_cost_minor, u.manual_cost_minor, u.received_at, u.damage_note, (SELECT c.name || ' ' || c.phone FROM sale_orders o JOIN crm_customers c ON c.id=o.customer_id WHERE o.id=u.reserved_sale_id) AS client FROM inventory_units_v2 u WHERE u.shipment_id=? AND u.archived=0 ORDER BY u.model, u.vin").bind(shipmentId).all<{ client: string | null; id: string; vin: string; model: string; status: string; engine_number: string; purchase_cost_minor: number; allocated_cost_minor: number; landed_cost_minor: number; manual_cost_minor: number | null; received_at: string | null; damage_note: string }>(),
     db.prepare("SELECT c.*, c.fx_rate::float AS fx_rate, a.name AS account FROM shipment_costs c LEFT JOIN financial_accounts a ON a.id=c.account_id WHERE c.shipment_id=? ORDER BY c.paid_at").bind(shipmentId).all<{ id: string; category: string; currency: string; amount_minor: number; fx_rate: number; amount_kgs_minor: number; account: string | null; paid_at: string; note: string; status: string; void_reason: string }>(),
   ]);
   return {
@@ -469,6 +472,20 @@ export async function voidShipmentCost(actor: Actor, costId: string, reason: str
   });
 }
 
+/** Перевозчик, водитель и маршрут поставки с завода. */
+export async function setShipmentInfo(actor: Actor, shipmentId: string, input: { route?: string; transport?: string; origin?: string; destination?: string; carrier?: string; driverName?: string; driverPhone?: string; departure?: string; eta?: string }) {
+  assertLogistics(actor);
+  const departure = text(input.departure, 16), eta = text(input.eta, 10);
+  if (departure && !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(departure)) throw new HttpError(400, "Проверьте дату и время отправления");
+  if (eta && !/^\d{4}-\d{2}-\d{2}$/.test(eta)) throw new HttpError(400, "Проверьте ожидаемую дату");
+  return getRawDb().transaction(async (client) => {
+    const q = query(client);
+    const done = await q<{ tracking_number: string | null }>(`UPDATE shipments_v2 SET route=?, transport=?, origin=?, destination=?, carrier=?, driver_name=?, driver_phone=?, departure_at=?::timestamp AT TIME ZONE 'Asia/Bishkek', eta=?::date, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING tracking_number`, text(input.route, 200), text(input.transport, 120), text(input.origin, 200), text(input.destination, 200), text(input.carrier, 160), text(input.driverName, 120), text(input.driverPhone, 40), departure || null, eta || null, actor.id, shipmentId);
+    if (!done.length) throw new HttpError(404, "Поставка не найдена");
+    await audit(q, actor, "shipment.info", shipmentId, String(done[0].tracking_number ?? ""));
+  });
+}
+
 export async function setAllocation(actor: Actor, shipmentId: string, method: string, manual: Record<string, string>) {
   assertLogistics(actor);
   if (!ALLOCATION[method]) throw new HttpError(400, "Выберите способ распределения");
@@ -488,15 +505,88 @@ export async function setAllocation(actor: Actor, shipmentId: string, method: st
 }
 
 // ───────────────────────── операции: машина ─────────────────────────
-export async function updateUnit(actor: Actor, unitId: string, input: { engine?: string; year?: string; color?: string; gtd?: string; certificate?: string; passport?: string; location?: string; listPrice?: string }) {
+type NewUnit = { slug: string; vin: string; engine?: string; year?: string; color?: string; location?: string; cost?: string; price?: string };
+
+/** Приход машин, которые уже стоят на складе, без заказа заводу. */
+export async function createUnits(actor: Actor, input: NewUnit[]) {
+  if (!canIntake(actor)) throw new HttpError(403, "Приход оформляют владелец, директор и бухгалтер");
+  if (!Array.isArray(input) || !input.length) throw new HttpError(400, "Добавьте хотя бы одну машину");
+  if (input.length > 200) throw new HttpError(400, "За один раз не больше 200 машин");
+  const models = new Map((await catalogModels()).map((m) => [m.slug, m]));
+  const seen = new Set<string>();
+  const rows = input.map((u, i) => {
+    const m = models.get(text(u.slug, 100));
+    if (!m) throw new HttpError(400, `Строка ${i + 1}: выберите модель`);
+    const vin = normalizeVin(u.vin);
+    if (seen.has(vin)) throw new HttpError(400, `Строка ${i + 1}: VIN ${vin} повторяется`);
+    seen.add(vin);
+    const year = u.year ? Math.round(Number(u.year)) : null;
+    if (year !== null && !(year >= 2000 && year <= 2100)) throw new HttpError(400, `Строка ${i + 1}: проверьте год`);
+    return { m, vin, year, engine: text(u.engine, 60), color: text(u.color, 40), location: text(u.location, 120), cost: u.cost ? toMinor(u.cost, `Строка ${i + 1}, себестоимость`, { allowZero: true }) : 0, price: u.price ? toMinor(u.price, `Строка ${i + 1}, цена`, { allowZero: true }) : 0 };
+  });
+  return getRawDb().transaction(async (client) => {
+    const q = query(client);
+    const existing = await q<{ vin: string }>(`SELECT vin FROM inventory_units_v2 WHERE upper(vin) IN (${rows.map(() => "?").join(",")})`, ...rows.map((r) => r.vin));
+    if (existing.length) throw new HttpError(409, `Эти VIN уже есть в системе: ${existing.map((e) => e.vin).join(", ")}`);
+    for (const r of rows) {
+      const uid = id();
+      await q("INSERT INTO inventory_units_v2(id,vin,tractor_slug,model,status,purchase_cost_minor,landed_cost_minor,list_price_minor,location,engine_number,year,color,received_at,created_by,updated_by) VALUES(?,?,?,?,'stock',?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?,?)", uid, r.vin, r.m.slug, r.m.model, r.cost, r.cost, r.price, r.location, r.engine, r.year, r.color, actor.id, actor.id);
+      await unitEvent(q, actor, uid, null, "stock", "Приход на склад вручную");
+    }
+    await audit(q, actor, "unit.intake", "stock", `Приход вручную: ${rows.length} машин`);
+    return rows.length;
+  });
+}
+
+/** Себестоимость конкретной машины вручную. Пусто: снова считается из поставки и прайса. */
+export async function setUnitCost(actor: Actor, unitId: string, value: string) {
+  if (!canIntake(actor)) throw new HttpError(403, "Себестоимость меняют владелец, директор и бухгалтер");
+  const raw = String(value ?? "").trim();
+  const cost = raw ? toMinor(raw, "Себестоимость", { allowZero: true }) : null;
+  return getRawDb().transaction(async (client) => {
+    const q = query(client);
+    const [u] = await q<{ id: string; vin: string; purchase_cost_minor: number; allocated_cost_minor: number; status: string }>("SELECT id, vin, purchase_cost_minor, allocated_cost_minor, status FROM inventory_units_v2 WHERE id=? AND archived=0 FOR UPDATE", unitId);
+    if (!u) throw new HttpError(404, "Машина не найдена");
+    const landed = cost ?? Number(u.purchase_cost_minor) + Number(u.allocated_cost_minor);
+    await q("UPDATE inventory_units_v2 SET cost_override_minor=?, landed_cost_minor=?, updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", cost, landed, actor.id, u.id);
+    const items = await q<{ id: string; sale_id: string }>("SELECT i.id, i.sale_id FROM sale_order_items i JOIN sale_orders o ON o.id=i.sale_id WHERE i.inventory_unit_id=? AND i.active=1 AND o.status='booked'", u.id);
+    for (const it of items) {
+      await q("UPDATE sale_order_items SET cost_kgs_minor=? WHERE id=?", landed, it.id);
+      await q("UPDATE sale_orders SET cost_kgs_minor=(SELECT COALESCE(SUM(cost_kgs_minor*qty),0) FROM sale_order_items WHERE sale_id=? AND active=1) WHERE id=?", it.sale_id, it.sale_id);
+    }
+    await audit(q, actor, "unit.cost", u.id, `VIN ${u.vin}: себестоимость ${cost === null ? "по поставке" : `${cost / 100} с`}`);
+  });
+}
+
+export async function updateUnit(actor: Actor, unitId: string, input: { engine?: string; year?: string; color?: string; gtd?: string; certificate?: string; passport?: string; location?: string; listPrice?: string; vin?: string; slug?: string }) {
   if (!canStockEdit(actor)) throw new HttpError(403, "Нет прав на изменение техники");
+  const models = input.slug ? new Map((await catalogModels()).map((m) => [m.slug, m])) : null;
   return getRawDb().transaction(async (client) => {
     const q = query(client);
     const [u] = await q<{ id: string; vin: string }>("SELECT id, vin FROM inventory_units_v2 WHERE id=? FOR UPDATE", unitId);
     if (!u) throw new HttpError(404, "Машина не найдена");
     const year = input.year ? Math.round(Number(input.year)) : null;
     if (year !== null && !(year >= 2000 && year <= 2100)) throw new HttpError(400, "Проверьте год выпуска");
-    const listPrice = input.listPrice ? toMinor(input.listPrice, "Цена прайса", { allowZero: true }) : null;
+    const listPrice = input.listPrice && isBoss(actor) ? toMinor(input.listPrice, "Цена прайса", { allowZero: true }) : null;
+    if (input.vin && canIntake(actor)) {
+      const vin = normalizeVin(input.vin);
+      if (vin !== u.vin) {
+        if ((await q("SELECT 1 FROM inventory_units_v2 WHERE upper(vin)=? AND id<>?", vin, u.id)).length) throw new HttpError(409, `VIN ${vin} уже есть в системе`);
+        await q("UPDATE inventory_units_v2 SET vin=? WHERE id=?", vin, u.id);
+        await q("UPDATE sale_order_items SET title=replace(title, ?, ?) WHERE inventory_unit_id=?", u.vin, vin, u.id);
+        await audit(q, actor, "unit.vin", u.id, `VIN ${u.vin} заменён на ${vin}`);
+      }
+    }
+    if (input.slug && canIntake(actor) && models) {
+      const m = models.get(text(input.slug, 100));
+      if (!m) throw new HttpError(400, "Выберите модель из каталога");
+      const [cur] = await q<{ tractor_slug: string }>("SELECT tractor_slug FROM inventory_units_v2 WHERE id=?", u.id);
+      if (cur.tractor_slug !== m.slug) {
+        if ((await q("SELECT 1 FROM sale_order_items WHERE inventory_unit_id=? AND active=1", u.id)).length) throw new HttpError(409, "Машина уже в продаже: модель менять нельзя");
+        await q("UPDATE inventory_units_v2 SET tractor_slug=?, model=? WHERE id=?", m.slug, m.model, u.id);
+        await audit(q, actor, "unit.model", u.id, `Модель заменена на ${m.model}`);
+      }
+    }
     await q(
       "UPDATE inventory_units_v2 SET engine_number=?, year=?, color=?, gtd_number=?, certificate_number=?, passport_number=?, location=?, list_price_minor=COALESCE(?,list_price_minor), updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?",
       text(input.engine, 60), year, text(input.color, 40), text(input.gtd, 60), text(input.certificate, 60), text(input.passport, 60), text(input.location, 120), listPrice, actor.id, u.id,

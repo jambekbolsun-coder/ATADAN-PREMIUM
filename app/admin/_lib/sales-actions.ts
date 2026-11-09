@@ -39,6 +39,17 @@ export async function createSaleAction(payload: sales.NewSaleInput): Promise<Act
   redirect(`/admin/work/sales/${(created as { id: string }).id}?created=1`);
 }
 
+export async function quickSaleAction(payload: sales.QuickSaleInput): Promise<ActionResult> {
+  const actor = await requireStaff("/admin/work/sales/quick");
+  let created: { id: string; partial: boolean } | null = null;
+  const result = await run(async () => {
+    created = await sales.quickSale(actor, payload);
+  }, "Продажа оформлена", ["/admin/work/sales", "/admin/work/stock", "/admin/work/cash"]);
+  if (!result.ok || !created) return result;
+  const c = created as { id: string; partial: boolean };
+  redirect(`/admin/work/sales/${c.id}?created=1${c.partial ? "&partial=1" : ""}`);
+}
+
 export async function addPaymentAction(saleId: string, _prev: ActionResult | null, form: FormData): Promise<ActionResult> {
   const actor = await requireStaff();
   return run(
@@ -66,7 +77,7 @@ export async function bankDecisionAction(saleId: string, _prev: ActionResult | n
 
 export async function changeMethodAction(saleId: string, _prev: ActionResult | null, form: FormData): Promise<ActionResult> {
   const actor = await requireStaff();
-  return run(() => sales.changeMethod(actor, saleId, f(form, "method") as sales.PaymentMethod, f(form, "bankName")), "Способ оплаты изменён", [`/admin/work/sales/${saleId}`]);
+  return run(() => sales.changeMethod(actor, saleId, f(form, "method") as sales.PaymentMethod, f(form, "bankName"), f(form, "months")), "Способ оплаты изменён", [`/admin/work/sales/${saleId}`]);
 }
 
 export async function allowDebtAction(saleId: string): Promise<ActionResult> {
@@ -89,6 +100,10 @@ export async function extendReserveAction(saleId: string, _prev: ActionResult | 
   return run(() => sales.extendReserve(actor, saleId, f(form, "until"), f(form, "reason")), "Резерв продлён", [`/admin/work/sales/${saleId}`]);
 }
 
+export async function returnSaleAction(saleId: string, _prev: ActionResult | null, form: FormData): Promise<ActionResult> {
+  const actor = await requireStaff();
+  return run(() => sales.returnSale(actor, saleId, f(form, "reason")), "Техника возвращена на склад", [`/admin/work/sales/${saleId}`, "/admin/work/sales", "/admin/work/stock"]);
+}
 export async function cancelSaleAction(saleId: string, _prev: ActionResult | null, form: FormData): Promise<ActionResult> {
   const actor = await requireStaff();
   return run(() => sales.cancelSale(actor, saleId, f(form, "reason")), "Продажа отменена, резерв снят", [`/admin/work/sales/${saleId}`, "/admin/work/sales", "/admin/work/stock"]);
@@ -126,6 +141,7 @@ export type CustomerHit = { id: string; name: string; phone: string; region: str
 /** Поиск клиента в форме продажи. Менеджер видит своих клиентов и клиента по полному номеру телефона. */
 export async function searchCustomersAction(query: string): Promise<CustomerHit[]> {
   const actor = await requireStaff();
+  if (actor.role === "marketer") return [];
   const q = String(query ?? "").trim().slice(0, 60);
   if (q.length < 2) return [];
   const { getRawDb } = await import("../../../db");

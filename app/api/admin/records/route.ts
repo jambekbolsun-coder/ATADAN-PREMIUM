@@ -1,6 +1,6 @@
 import { revalidatePath } from "next/cache";
 import { getRawDb } from "../../../../db";
-import { canUseSection, requireActor, type Actor } from "../../../lib/admin-auth";
+import { canUseSection, requireActor, type Actor, assertLegacyArchive } from "../../../lib/admin-auth";
 import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
 import { normalizedRecordStatements, recordLookups } from "../../../lib/admin-record-sync";
 
@@ -65,7 +65,7 @@ function moduleName(kind: string) {
 
 export async function GET(request: Request) {
   try {
-    const actor = await requireActor(request);
+    const actor = await requireActor(request); assertLegacyArchive(actor);
     const url = new URL(request.url);
     const kind = cleanText(url.searchParams.get("kind"), 60, true);
     if (!allKinds.has(kind) || !canAccess(actor, kind, false)) throw new HttpError(403, "Нет доступа к этому разделу");
@@ -113,7 +113,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     sameOrigin(request);
-    const actor = await requireActor(request);
+    const actor = await requireActor(request); assertLegacyArchive(actor, true);
     const body = await jsonBody(request, 140_000);
     const action = cleanText(body.action, 20, true);
     const kind = cleanText(body.kind, 60, true);

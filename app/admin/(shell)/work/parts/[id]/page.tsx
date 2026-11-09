@@ -44,7 +44,7 @@ export default async function PartCard({ params, searchParams }: PageProps<"/adm
       {sp.saved ? <div style={{ marginBottom: 12 }}><Notice tone="good">Запчасть добавлена.</Notice></div> : null}
       <div className="ax-grid ax-g-main">
         <PartForm categories={PART_CATEGORIES.includes(p.category) ? PART_CATEGORIES : [p.category, ...PART_CATEGORIES]} models={models} seesCost={cost} canStock={stock}
-          initial={{ id: p.id, sku: p.sku, name: p.name, category: p.category, models: p.models, unit: p.unit, price: p.price_minor ? String(p.price_minor / 100) : "", cost: p.cost_minor ? String(p.cost_minor / 100) : "", minQty: String(p.min_qty), location: p.location, image: p.image, description: p.description, showOnSite: !!p.show_on_site, openingQty: "" }} />
+          initial={{ id: p.id, sku: p.sku, name: p.name, category: p.category, models: p.models, unit: p.unit, price: p.price_minor ? String(p.price_minor / 100) : "", cost: cost && p.cost_minor ? String(p.cost_minor / 100) : "", minQty: String(p.min_qty), location: p.location, image: p.image, description: p.description, showOnSite: !!p.show_on_site, openingQty: "" }} />
         <div className="ax-grid" style={{ alignContent: "start" }}>
           <Card title="Остаток">
             <dl className="ax-kv">

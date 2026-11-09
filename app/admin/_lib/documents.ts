@@ -59,7 +59,7 @@ export async function saleDocument(actor: Actor, saleId: string) {
     unitIds.length
       ? getRawDb().prepare(`SELECT id, vin, model, engine_number, year, color, passport_number, certificate_number FROM inventory_units_v2 WHERE id IN (${unitIds.map(() => "?").join(",")})`).bind(...unitIds).all<{ id: string; vin: string; model: string; engine_number: string; year: number | null; color: string; passport_number: string; certificate_number: string }>()
       : Promise.resolve({ results: [] }),
-    getRawDb().prepare("SELECT name, phone, email, region FROM crm_customers WHERE id=?").bind(data.sale.customer_id).first<{ name: string; phone: string; email: string; region: string }>(),
+    getRawDb().prepare("SELECT name, phone, email, region, passport, address FROM crm_customers WHERE id=?").bind(data.sale.customer_id).first<{ name: string; phone: string; email: string; region: string; passport: string; address: string }>(),
   ]);
   return { ...data, company, policy, penalty, units: new Map(units.results.map((u) => [u.id, u])), customer };
 }

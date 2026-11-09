@@ -1,5 +1,5 @@
 import { getRawDb } from "../../../../db";
-import { canUseSection, requireActor } from "../../../lib/admin-auth";
+import { canUseSection, requireActor, assertLegacyArchive , type Actor } from "../../../lib/admin-auth";
 import { auditStatement } from "../../../lib/crm";
 import {
   cleanText,
@@ -30,9 +30,11 @@ const parse = (value: string) => {
 const directKey = (left: string, right: string) =>
   [left, right].sort().join(":");
 
+function assertOwnerActor(actor: Actor) { assertLegacyArchive(actor); return actor; }
+
 export async function GET(request: Request) {
   try {
-    const actor = await requireActor(request),
+    const actor = assertOwnerActor(await requireActor(request)),
       db = getRawDb(),
       owner = ["owner", "director"].includes(actor.role),
       scope = cleanText(
@@ -240,7 +242,7 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     sameOrigin(request);
-    const actor = await requireActor(request),
+    const actor = assertOwnerActor(await requireActor(request)),
       body = await jsonBody(request, 30_000),
       db = getRawDb(),
       action = cleanText(body.action, 30, true);

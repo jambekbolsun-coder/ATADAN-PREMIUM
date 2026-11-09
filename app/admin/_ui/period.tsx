@@ -4,7 +4,7 @@ import Link from "next/link";
 export function periodFrom(sp: Record<string, string | string[] | undefined>) {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
   const ok = (v: unknown) => typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) && !Number.isNaN(Date.parse(v));
-  const now = new Date();
+  const now = new Date(Date.now() + 6 * 3_600_000); // дата по Бишкеку
   const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
   let from = ok(sp.from) ? String(sp.from) : iso(first);
   let to = ok(sp.to) ? String(sp.to) : iso(now);
@@ -14,7 +14,7 @@ export function periodFrom(sp: Record<string, string | string[] | undefined>) {
 
 function presets() {
   const iso = (d: Date) => d.toISOString().slice(0, 10);
-  const now = new Date();
+  const now = new Date(Date.now() + 6 * 3_600_000); // дата по Бишкеку
   const y = now.getUTCFullYear(), m = now.getUTCMonth();
   const q = Math.floor(m / 3) * 3;
   return [

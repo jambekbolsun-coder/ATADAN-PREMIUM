@@ -4,7 +4,7 @@ import { Ban, Banknote, CalendarClock, Check, CreditCard, KeyRound, Landmark, Ro
 import { ActionButton, ActionDialog, Field } from "../../../../_ui/forms";
 import {
   addPaymentAction, allowDebtAction, attachUnitAction, bankDecisionAction, cancelSaleAction, changeMethodAction,
-  deliverAction, extendReserveAction, refundAction, toggleDossierAction, voidPaymentAction,
+  deliverAction, extendReserveAction, refundAction, returnSaleAction, toggleDossierAction, voidPaymentAction,
 } from "../../../../_lib/sales-actions";
 
 type Account = { id: string; name: string; currency: string; account_type: string };
@@ -62,10 +62,10 @@ export function SaleActions(p: {
           {p.leasing && p.canBankPay ? (
             <Field label="Кто платит" htmlFor="pay-payer"><select id="pay-payer" name="payer" className="ax-input" defaultValue="client"><option value="client">Клиент</option><option value="bank">Банк ({p.bankName || "лизинг"})</option></select></Field>
           ) : <input type="hidden" name="payer" value="client" />}
-          <MoneyFields prefix="pay" accounts={p.accounts} saleCurrency={p.currency} fxDefault={p.fxDefault} leftMinor={p.left} />
+          <MoneyFields key={p.left} prefix="pay" accounts={p.accounts} saleCurrency={p.currency} fxDefault={p.fxDefault} leftMinor={p.left} />
           <div className="ax-grid ax-g2" style={{ gap: 12 }}>
             <Field label="Дата" htmlFor="pay-date"><input id="pay-date" name="paidAt" type="date" className="ax-input" defaultValue={today()} max={today()} required /></Field>
-            <Field label="Как оплатил" htmlFor="pay-method"><select id="pay-method" name="method" className="ax-input" defaultValue="bank_transfer"><option value="bank_transfer">Перевод</option><option value="cash">Наличные</option><option value="card">Карта</option></select></Field>
+            <Field label="Как оплатил" htmlFor="pay-method"><select id="pay-method" name="method" className="ax-input" defaultValue="cash"><option value="cash">Наличные</option><option value="bank_transfer">Перевод</option><option value="card">Карта</option></select></Field>
           </div>
           <Field label="Номер документа (необязательно)" htmlFor="pay-ref"><input id="pay-ref" name="reference" className="ax-input" placeholder="№ платёжки или квитанции" /></Field>
         </ActionDialog>
@@ -101,6 +101,7 @@ export function SaleActions(p: {
             </select>
           </Field>
           <Field label="Банк (для лизинга)" htmlFor="ch-bank"><input id="ch-bank" name="bankName" className="ax-input" defaultValue={p.bankName} /></Field>
+          <Field label="Срок (для рассрочки), месяцев" htmlFor="ch-months" hint="График остатка построится заново"><input id="ch-months" name="months" className="ax-input num" inputMode="numeric" defaultValue="12" /></Field>
         </ActionDialog>
       ) : null}
 
@@ -111,10 +112,16 @@ export function SaleActions(p: {
         </ActionDialog>
       ) : null}
 
-      {booked && p.canRefund && p.paid > 0 ? (
+      {(booked ? p.canRefund : open && p.canDebt) && p.paid > 0 ? (
         <ActionDialog label={<><RotateCcw size={17} aria-hidden />Возврат</>} title="Вернуть деньги клиенту" description={`Клиент заплатил ${money(p.paid, p.currency)}. Возврат уходит расходом из кассы.`} action={refundAction.bind(null, p.saleId)} submitLabel="Провести возврат" variant="danger">
-          <MoneyFields prefix="refund" accounts={p.accounts} saleCurrency={p.currency} fxDefault={p.fxDefault} />
+          <MoneyFields key={p.paid} prefix="refund" accounts={p.accounts} saleCurrency={p.currency} fxDefault={p.fxDefault} leftMinor={p.paid} />
           <Field label="Причина" htmlFor="rf-why"><input id="rf-why" name="reason" className="ax-input" required placeholder="Клиент отказался от покупки" /></Field>
+        </ActionDialog>
+      ) : null}
+
+      {open && !booked && p.canDebt ? (
+        <ActionDialog label={<><RotateCcw size={17} aria-hidden />Возврат техники</>} triggerClass="ax-btn-danger" title="Вернуть технику на склад" description={p.paid > 0 ? "Сначала верните деньги клиенту кнопкой «Возврат»." : "Машины вернутся на склад, продажа будет отменена. Запись останется в истории."} action={returnSaleAction.bind(null, p.saleId)} submitLabel="Вернуть на склад" variant="danger" disabled={p.paid > 0} disabledReason="Сначала верните деньги">
+          <Field label="Причина" htmlFor="rt-why"><input id="rt-why" name="reason" className="ax-input" required placeholder="Клиент вернул трактор" /></Field>
         </ActionDialog>
       ) : null}
 

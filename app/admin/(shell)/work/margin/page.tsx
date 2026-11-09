@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { getUsdKgsRate } from "../../../../lib/exchange-rate";
 import { requireSection } from "../../../_lib/session";
 import { expensesByCategory, marginReport } from "../../../_lib/money";
 import { date, money, percent } from "../../../_lib/format";
@@ -20,8 +21,9 @@ export default async function Margin({ searchParams }: PageProps<"/admin/work/ma
   const revenue = r.sales.reduce((s, x) => s + x.revenue_kgs, 0);
   const cost = r.sales.reduce((s, x) => s + x.cost_kgs, 0);
   const gross = revenue - cost;
-  const opex = expenses.filter((e) => e.currency === "KGS").reduce((s, e) => s + e.total, 0);
-  const otherCur = expenses.filter((e) => e.currency !== "KGS");
+  const usdRate = (await getUsdKgsRate())?.value ?? 87.5;
+  const opex = expenses.reduce((s, e) => s + (e.currency === "USD" ? Math.round(e.total * usdRate) : e.currency === "KGS" ? e.total : 0), 0);
+  const otherCur = expenses.filter((e) => e.currency === "CNY");
   const prelim = r.sales.filter((s) => s.preliminary).length;
 
   return (
@@ -32,7 +34,7 @@ export default async function Margin({ searchParams }: PageProps<"/admin/work/ma
         <div className="ax-card ax-kpi ax-k-sky"><div className="ax-kpi-l">Выручка</div><div className="ax-kpi-v num">{money(revenue)}</div><div className="ax-kpi-h">{r.sales.length} продаж</div></div>
         <div className="ax-card ax-kpi ax-k-terra"><div className="ax-kpi-l">Себестоимость</div><div className="ax-kpi-v num">{money(cost)}</div><div className="ax-kpi-h">закупка + доля расходов поставки</div></div>
         <div className="ax-card ax-kpi ax-k-green"><div className="ax-kpi-l">Валовая маржа</div><div className={`ax-kpi-v num ${gross < 0 ? "ax-down" : ""}`}>{money(gross)}</div><div className="ax-kpi-h">{revenue ? percent(gross, revenue) : "нет продаж"}</div></div>
-        <Link href={`/admin/work/expenses?from=${from}&to=${to}`} className="ax-card ax-kpi ax-k-sun"><div className="ax-kpi-l">Чистая прибыль</div><div className={`ax-kpi-v num ${gross - opex < 0 ? "ax-down" : ""}`}>{money(gross - opex)}</div><div className="ax-kpi-h">минус расходы {money(opex)}{otherCur.length ? " (только сомовые)" : ""} →</div></Link>
+        <Link href={`/admin/work/expenses?from=${from}&to=${to}`} className="ax-card ax-kpi ax-k-sun"><div className="ax-kpi-l">Чистая прибыль</div><div className={`ax-kpi-v num ${gross - opex < 0 ? "ax-down" : ""}`}>{money(gross - opex)}</div><div className="ax-kpi-h">минус расходы {money(opex)}{otherCur.length ? " (без юаней)" : ""} →</div></Link>
       </div>
       {prelim ? <div style={{ marginBottom: 14 }}><Notice tone="warn">{prelim} из {r.sales.length} продаж с предварительной маржой: машина ещё не выдана или себестоимость не известна (заказ под клиента, поставка не пришла). Цифра уточнится сама после приёмки и выдачи.</Notice></div> : null}
 

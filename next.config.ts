@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "en.changfanz.com", pathname: "/uploads/**" },
+      { protocol: "https", hostname: "*.public.blob.vercel-storage.com", pathname: "/**" },
     ],
   },
   async headers() {

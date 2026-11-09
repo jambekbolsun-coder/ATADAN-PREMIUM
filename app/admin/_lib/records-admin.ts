@@ -82,7 +82,7 @@ export async function saveRecord(actor: Actor, kindRaw: string, input: RecordInp
   return getRawDb().transaction(async (client) => {
     const q = query(client);
     if (data.slug) {
-      const [dup] = await q<{ id: string }>("SELECT id FROM admin_records WHERE kind=? AND archived=0 AND data_json::json->>'slug'=? AND id<>?", kind, data.slug, input.id ?? "");
+      const [dup] = await q<{ id: string }>("SELECT id FROM admin_records WHERE kind=? AND archived=0 AND data_json LIKE ? AND id<>?", kind, `%"slug":"${data.slug}"%`, input.id ?? "");
       if (dup) throw new HttpError(409, `Адрес ${data.slug} уже занят другой страницей`);
     }
     if (input.id) {

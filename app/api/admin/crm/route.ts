@@ -1,5 +1,5 @@
 import { getRawDb } from "../../../../db";
-import { canUseSection, permissionSections, requireActor } from "../../../lib/admin-auth";
+import { canUseSection, permissionSections, requireActor, assertLegacyArchive } from "../../../lib/admin-auth";
 import { auditStatement, canTransition, minor, stageLabels, stages, visibleDeal } from "../../../lib/crm";
 import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
 import { normalizePhone, structuredLossReason } from "../../../lib/business";
@@ -12,7 +12,7 @@ function recordData(value:string){try{return JSON.parse(value) as Record<string,
 
 export async function GET(request: Request) {
   try {
-    const actor=await requireActor(request); const db=getRawDb(); const owner=actor.role==="owner"||actor.role==="director";const stageOptions=await loadStages();
+    const actor=await requireActor(request); assertLegacyArchive(actor); const db=getRawDb(); const owner=actor.role==="owner"||actor.role==="director";const stageOptions=await loadStages();
     const url=new URL(request.url),mode=url.searchParams.get("mode")||"deals";const section=mode==="customers"?"client-base":mode==="tasks"?"employee-tasks":mode==="team"?"team":mode==="costs"?"finance":mode==="audit"?"audit":mode==="timeline"?"client-base":"deals";
     if(!canUseSection(actor,section))throw new HttpError(403,"Нет доступа к этому разделу");
     if(mode==="timeline"){
@@ -81,7 +81,7 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   try {
-    sameOrigin(request);const actor=await requireActor(request);const body=await jsonBody(request);const db=getRawDb();const action=String(body.action);
+    sameOrigin(request);const actor=await requireActor(request);assertLegacyArchive(actor,true);const body=await jsonBody(request);const db=getRawDb();const action=String(body.action);
     const owner=actor.role==="owner"||actor.role==="director"; const needOwner=()=>{if(!owner)throw new HttpError(403,"Доступно директору");};
     const needed=action.includes("task")?"employee-tasks":action.startsWith("staff_")?"team":action==="save_cost"?"finance":action==="update_customer"?"client-base":"deals";if(!canUseSection(actor,needed))throw new HttpError(403,"Нет доступа к этому разделу");
     async function assignee(value:unknown) {

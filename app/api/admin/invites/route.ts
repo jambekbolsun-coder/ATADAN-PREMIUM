@@ -1,10 +1,10 @@
 import { getRawDb } from "../../../../db";
-import { permissionSections, requireActor } from "../../../lib/admin-auth";
+import { permissionSections, requireActor, assertLegacyArchive } from "../../../lib/admin-auth";
 import { auditStatement } from "../../../lib/crm";
 import { cleanText, digest, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
 export async function POST(request:Request){
   try{
-    sameOrigin(request);const actor=await requireActor(request,true),body=await jsonBody(request,5000),db=getRawDb();
+    sameOrigin(request);const actor=await requireActor(request,true);assertLegacyArchive(actor,true);const body=await jsonBody(request,5000),db=getRawDb();
     const email=cleanText(body.email,200,true).toLowerCase();
     const role=cleanText(body.role??"manager",20,true);
     const permissions=Array.isArray(body.permissions)?body.permissions.filter((value):value is string=>typeof value==="string"&&(permissionSections as readonly string[]).includes(value)).slice(0,permissionSections.length):[];

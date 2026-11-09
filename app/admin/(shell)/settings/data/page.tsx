@@ -22,8 +22,8 @@ export default async function DataPage() {
   ].filter((e) => e.ok);
   const kinds = [
     { key: "parts", label: "Запчасти", endpoint: "import" as const, columns: ["Артикул", "Название", "Группа", "Ед", "Цена продажи", "Себестоимость", "Остаток", "Минимум", "Место", "На сайте"], example: ["CF4C-1012100", "Фильтр масляный", "Фильтры", "шт", "1200", "700", "15", "5", "Стеллаж 3", "да"], hint: "Ключ: артикул. Остаток ставится только новым позициям", ok: can("inventory-units") || can("catalog") || fin },
-    { key: "customers", label: "Клиенты", endpoint: "data" as const, columns: ["name", "phone", "email", "region", "source"], example: ["Асанов Талант", "+996772334455", "", "Чуй", "импорт"], hint: "Ключ: телефон. Существующие пропускаются", ok: can("client-base") },
-    { key: "inventory", label: "Техника по VIN (остатки на складе)", endpoint: "data" as const, columns: ["vin", "model", "tractorSlug", "purchaseCost", "expenses", "salePrice", "location"], example: ["LCFCFG1204N099999", "CFG1204-B", "cfg1204-b", "1150000", "120000", "1565000", "Склад Бишкек"], hint: "Ключ: VIN. Существующие пропускаются", ok: can("inventory-units") },
+    { key: "customers", label: "Клиенты", endpoint: "data" as const, columns: ["name", "phone", "email", "region", "source"], example: ["Асанов Талант", "+996772334455", "", "Чуй", "импорт"], hint: "Ключ: телефон. Если телефон уже есть, файл не загрузится: уберите эту строку", ok: can("client-base") },
+    { key: "inventory", label: "Техника по VIN (остатки на складе)", endpoint: "data" as const, columns: ["vin", "model", "tractorSlug", "purchaseCost", "expenses", "salePrice", "location"], example: ["LCFCFG1204N099999", "CFG1204-B", "cfg1204-b", "1150000", "120000", "1565000", "Склад Бишкек"], hint: "Ключ: VIN. Если VIN уже есть, файл не загрузится: уберите эту строку", ok: can("inventory-units") },
   ].filter((k) => k.ok);
 
   return (
@@ -46,7 +46,7 @@ export default async function DataPage() {
         <>
           <div style={{ height: 14 }} />
           <Card title="Полная резервная копия">
-            <p className="ax-small" style={{ marginTop: 0 }}>Все данные компании одним файлом JSON: продажи, клиенты, склад, касса, каталог, публикации, журнал. Пароли и сессии в копию не входят. Храните файл в надёжном месте: в нём вся база клиентов.</p>
+            <p className="ax-small" style={{ marginTop: 0 }}>Все данные компании одним архивом ZIP: продажи, клиенты, склад, касса, каталог, публикации, журнал. Пароли и сессии в копию не входят. Храните файл в надёжном месте: в нём вся база клиентов.</p>
             <a className="ax-btn" href="/api/admin/export?type=backup"><ShieldCheck size={16} aria-hidden />Скачать копию</a>
           </Card>
         </>

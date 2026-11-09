@@ -7,7 +7,7 @@ import { cn, Notice } from "../../../../_ui/ui";
 import { Field } from "../../../../_ui/forms";
 
 type Unit = { id: string; vin: string; model: string; tractor_slug: string; status: string; list_price_minor: number; cost_minor: number };
-type Model = { slug: string; model: string; hp: number; priceUsd: number };
+type Model = { slug: string; model: string; hp: number; priceUsd: number; priceKgs: number };
 type MethodInfo = { key: PaymentMethod; label: string; short: string; tone: string; hint: string };
 type Part = { id: string; sku: string; name: string; qty: number; unit: string; price_minor: number; cost_minor: number };
 type Item = { key: string; kind: "unit" | "model_order" | "part" | "service"; unitId?: string; partId?: string; maxQty?: number; slug?: string; title: string; qty: string; price: string; costKgs: number };
@@ -30,7 +30,7 @@ export function NewSaleForm(props: {
 
   // 1. клиент
   const [customer, setCustomer] = useState<CustomerHit | null>(null);
-  const [newCustomer, setNewCustomer] = useState({ name: lead?.name ?? "", phone: lead?.phone ?? "", region: "" });
+  const [newCustomer, setNewCustomer] = useState({ name: lead?.name ?? "", phone: lead?.phone ?? "", region: "", passport: "", address: "" });
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<CustomerHit[]>([]);
   const [searching, startSearch] = useTransition();
@@ -54,7 +54,7 @@ export function NewSaleForm(props: {
   const costKgs = items.reduce((s, i) => s + (i.costKgs / 100) * (num(i.qty) || 1), 0);
   const revenueKgs = currency === "KGS" ? total : total * rate;
   const costKnown = items.length > 0 && items.every((i) => i.kind !== "unit" || i.costKgs > 0) && items.some((i) => i.costKgs > 0);
-  const belowCost = costKgs > 0 && revenueKgs < costKgs;
+  const belowCost = items.some((i) => i.costKgs > 0 && (currency === "KGS" ? num(i.price) : num(i.price) * rate) < i.costKgs / 100);
 
   function addUnit(u: Unit) {
     if (items.some((i) => i.unitId === u.id)) return;
@@ -64,13 +64,14 @@ export function NewSaleForm(props: {
   function addModel(slug: string) {
     const m = models.find((x) => x.slug === slug);
     if (!m) return;
-    setItems((x) => [...x, { key: key(), kind: "model_order", slug, title: `${m.model} · под заказ`, qty: "1", price: String(currency === "USD" ? m.priceUsd : Math.round(m.priceUsd * rate)), costKgs: 0 }]);
+    setItems((x) => [...x, { key: key(), kind: "model_order", slug, title: `${m.model} · под заказ`, qty: "1", price: m.priceKgs ? String(Math.round(fromKgs(m.priceKgs))) : String(currency === "USD" ? m.priceUsd : Math.round(m.priceUsd * rate)), costKgs: 0 }]);
     setPicker(null);
   }
   const [partQuery, setPartQuery] = useState("");
+  const [unitQuery, setUnitQuery] = useState("");
   function addPart(p: Part) {
     if (items.some((i) => i.partId === p.id)) return;
-    setItems((x) => [...x, { key: key(), kind: "part", partId: p.id, maxQty: p.qty, title: `${p.name} · ${p.sku}`, qty: "1", price: String(Math.round(fromKgs(p.price_minor))), costKgs: p.cost_minor }]);
+    setItems((x) => [...x, { key: key(), kind: "part", partId: p.id, maxQty: p.qty, title: `${p.name} · ${p.sku}`, qty: "1", price: String(Math.round(fromKgs(p.price_minor) * 100) / 100), costKgs: p.cost_minor }]);
     setPicker(null);
   }
   function addFree(kind: "part" | "service") {
@@ -80,7 +81,7 @@ export function NewSaleForm(props: {
   function switchCurrency(next: "USD" | "KGS") {
     if (next === currency) return;
     const r = num(fx) || props.fxDefault;
-    setItems((x) => x.map((i) => ({ ...i, price: i.price ? String(Math.round(next === "KGS" ? num(i.price) * r : num(i.price) / r)) : "" })));
+    setItems((x) => x.map((i) => ({ ...i, price: i.price ? String(i.kind === "part" ? Math.round((next === "KGS" ? num(i.price) * r : num(i.price) / r) * 100) / 100 : Math.round(next === "KGS" ? num(i.price) * r : num(i.price) / r)) : "" })));
     setCurrency(next);
   }
 
@@ -133,7 +134,7 @@ export function NewSaleForm(props: {
     start(async () => {
       const r = await createSaleAction({
         customerId: customer?.id,
-        customer: customer ? undefined : newCustomer,
+        customer: customer ? { passport: newCustomer.passport, address: newCustomer.address } : newCustomer,
         leadId: lead?.id,
         currency,
         fxRate: currency === "USD" ? fx : 1,
@@ -198,6 +199,13 @@ export function NewSaleForm(props: {
                 </div>
               </>
             )}
+            <details style={{ marginTop: 10 }}>
+              <summary className="ax-small" style={{ cursor: "pointer" }}>Паспорт и адрес для договора (можно позже)</summary>
+              <div className="ax-grid ax-g2" style={{ gap: 12, marginTop: 8 }}>
+                <Field label="Паспорт" htmlFor="c-pass"><input id="c-pass" className="ax-input" value={newCustomer.passport} onChange={(e) => setNewCustomer({ ...newCustomer, passport: e.target.value })} /></Field>
+                <Field label="Адрес" htmlFor="c-addr"><input id="c-addr" className="ax-input" value={newCustomer.address} onChange={(e) => setNewCustomer({ ...newCustomer, address: e.target.value })} /></Field>
+              </div>
+            </details>
           </section>
         ) : null}
 
@@ -267,8 +275,10 @@ export function NewSaleForm(props: {
 
             {picker === "unit" ? (
               units.length ? (
+                <>
+                <input className="ax-input" style={{ marginBottom: 8 }} value={unitQuery} onChange={(e) => setUnitQuery(e.target.value)} placeholder="Поиск: модель или VIN" aria-label="Поиск машины" />
                 <ul className="ax-grouped" style={{ maxHeight: 340, overflowY: "auto" }}>
-                  {(unitsForLead.length ? [...unitsForLead, ...units.filter((u) => !unitsForLead.includes(u))] : units).map((u) => {
+                  {(unitsForLead.length ? [...unitsForLead, ...units.filter((u) => !unitsForLead.includes(u))] : units).filter((u) => !unitQuery.trim() || `${u.model} ${u.vin}`.toLowerCase().includes(unitQuery.trim().toLowerCase())).slice(0, 80).map((u) => {
                     const taken = items.some((i) => i.unitId === u.id);
                     return (
                       <li key={u.id}>
@@ -280,13 +290,14 @@ export function NewSaleForm(props: {
                     );
                   })}
                 </ul>
+                </>
               ) : <Notice tone="warn">Свободных машин нет. Продайте модель «под заказ»: VIN привяжете, когда машина придёт.</Notice>
             ) : null}
             {picker === "model" ? (
               <Field label="Модель под заказ" htmlFor="m-pick" hint="Цена подставится из прайса, её можно изменить">
                 <select id="m-pick" className="ax-input" defaultValue="" onChange={(e) => e.target.value && addModel(e.target.value)}>
                   <option value="">Выберите модель</option>
-                  {models.map((m) => <option key={m.slug} value={m.slug}>{m.model} · {m.hp} л.с. · прайс ${m.priceUsd.toLocaleString("ru-RU")}</option>)}
+                  {models.map((m) => <option key={m.slug} value={m.slug}>{m.model} · {m.hp} л.с. · прайс {m.priceKgs ? `${Math.round(m.priceKgs / 100).toLocaleString("ru-RU")} с` : `$${m.priceUsd.toLocaleString("ru-RU")}`}</option>)}
                 </select>
               </Field>
             ) : null}

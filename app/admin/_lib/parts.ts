@@ -26,6 +26,7 @@ export const MOVE_KIND: Record<string, { label: string; sign: 1 | -1 | 0; tone: 
 export const canPartsStock = (a: Actor) => isBoss(a) || a.role === "manager" || a.role === "accountant" || canUseSection(a, "inventory-units");
 export const canPartsCard = (a: Actor) => canPartsStock(a) || canUseSection(a, "catalog");
 export const seesPartCost = (a: Actor) => isBoss(a) || a.role === "accountant";
+export const canPartsPrice = (a: Actor) => isBoss(a) || canUseSection(a, "catalog");
 
 export type Part = { id: string; sku: string; name: string; category: string; models: string[]; unit: string; price_minor: number; cost_minor: number; qty: number; min_qty: number; location: string; image: string; description: string; show_on_site: number; archived: number; updated_at: string };
 type Row = Omit<Part, "models"> & { models_json: string };
@@ -73,6 +74,7 @@ export async function savePart(actor: Actor, input: PartInput) {
   const showOnSite = !!input.showOnSite;
   if (showOnSite && !price) throw new HttpError(400, "Чтобы показать на сайте, укажите цену продажи");
   const canCost = seesPartCost(actor);
+  const canPrice = canPartsPrice(actor);
 
   return getRawDb().transaction(async (client) => {
     const q = query(client);
@@ -82,6 +84,7 @@ export async function savePart(actor: Actor, input: PartInput) {
     if (input.id) {
       const [row] = await q<{ id: string }>("SELECT id FROM parts WHERE id=? FOR UPDATE", input.id);
       if (!row) throw new HttpError(404, "Запчасть не найдена");
+      if (!canPrice) { const [old] = await q<{ price_minor: number; show_on_site: number }>("SELECT price_minor, show_on_site FROM parts WHERE id=?", input.id); common[5] = Number(old.price_minor); common[10] = old.show_on_site; }
       await q("UPDATE parts SET sku=?, name=?, category=?, models_json=?, unit=?, price_minor=?, min_qty=?, location=?, image=?, description=?, show_on_site=?, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", ...common, actor.id, input.id);
       if (canCost && input.cost !== undefined && input.cost !== "") await q("UPDATE parts SET cost_minor=? WHERE id=?", toMinor(input.cost, "Себестоимость", true) ?? 0, input.id);
       await audit(q, actor, "part.update", input.id, `${sku} ${name}`);
@@ -107,6 +110,7 @@ export async function addMovement(actor: Actor, partId: string, input: { kind: s
   if (!kind) throw new HttpError(400, "Выберите тип движения");
   const qty = num(input.qty, kind === "count" ? "Фактический остаток" : "Количество", { min: kind === "count" ? 0 : 1, max: 1_000_000, int: true })!;
   const note = text(input.note, 300);
+  if (actor.role === "manager" && (kind === "writeoff" || kind === "count")) throw new HttpError(403, "Списание и инвентаризацию делает бухгалтер или руководство");
   if ((kind === "writeoff" || kind === "count") && note.length < 3) throw new HttpError(400, kind === "writeoff" ? "Укажите причину списания" : "Укажите, кто и когда пересчитал");
   return getRawDb().transaction(async (client) => {
     const q = query(client);
@@ -119,7 +123,7 @@ export async function addMovement(actor: Actor, partId: string, input: { kind: s
     if (after < 0) throw new HttpError(409, `На складе только ${p.qty}: нельзя ${MOVE_KIND[kind].label.toLowerCase()} ${qty}`);
     let unitCost = Number(p.cost_minor);
     if (kind === "in") {
-      const c = input.unitCost ? toMinor(input.unitCost, "Цена закупки за штуку", true) ?? 0 : Number(p.cost_minor);
+      const c = input.unitCost && seesPartCost(actor) ? toMinor(input.unitCost, "Цена закупки за штуку", true) ?? 0 : Number(p.cost_minor);
       unitCost = c;
       const avg = after > 0 ? Math.round((p.qty * Number(p.cost_minor) + qty * c) / after) : c;
       await q("UPDATE parts SET cost_minor=? WHERE id=?", avg, partId);

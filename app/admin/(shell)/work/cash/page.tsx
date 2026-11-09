@@ -14,7 +14,7 @@ export default async function Cash({ searchParams }: PageProps<"/admin/work/cash
   const { actor } = await requireSection("/admin/work/cash");
   const sp = await searchParams;
   const str = (k: string) => (typeof sp[k] === "string" ? String(sp[k]) : "");
-  const page = Math.max(1, Number(str("page")) || 1);
+  const page = Math.max(1, Math.min(500, Number(str("page")) || 1));
   const [accounts, tx] = await Promise.all([
     listAccounts(),
     listTransactions({ accountId: str("account"), direction: str("dir"), from: str("from"), to: str("to"), q: str("q").slice(0, 60), page }),

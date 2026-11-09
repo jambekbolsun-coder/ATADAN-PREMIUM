@@ -5,6 +5,7 @@
  *  - себестоимость и маржа только у владельца, директора и бухгалтера;
  *  - type=backup: полная копия всех данных в JSON, только владелец; без паролей, сессий и токенов.
  */
+import { strToU8, zipSync } from "fflate";
 import { getRawDb } from "../../../../db";
 import { canUseSection, requireActor, type Actor } from "../../../lib/admin-auth";
 import { fail, HttpError } from "../../../lib/security";
@@ -75,10 +76,8 @@ const DATASETS: Record<string, Dataset> = {
   },
 };
 
-/** Таблицы полной копии. Пароли, сессии, токены и служебные лимиты не выгружаются. */
-const BACKUP_TABLES = ["site_settings", "product_overrides", "product_costs", "product_price_history", "news_posts", "admin_records", "leads", "crm_customers", "crm_deals", "crm_notes", "crm_tasks",
-  "sale_orders", "sale_order_items", "sale_payments", "sale_schedule", "sale_events", "inventory_units_v2", "inventory_lifecycle_events", "suppliers_v2", "purchase_orders_v2", "purchase_order_lines",
-  "supplier_payments", "shipments_v2", "shipment_costs", "financial_accounts", "account_transactions", "parts", "part_movements", "sales_v2", "payments_v2", "service_cases_v2", "documents_v2", "audit_logs"];
+/** В полную копию не входят пароли, сессии, токены и служебные лимиты. */
+const BACKUP_EXCLUDE = new Set(["staff", "staff_sessions", "staff_invites", "password_reset_tokens", "request_limits", "lead_requests", "auth_events", "schema_migrations", "cron_runs"]);
 
 async function audit(actor: Actor, what: string, n: number) {
   await getRawDb().prepare("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)").bind(crypto.randomUUID(), actor.id, "Экспорт", what, `${n} строк`).run();
@@ -91,15 +90,18 @@ export async function GET(request: Request) {
     const day = new Date().toISOString().slice(0, 10);
     if (type === "backup") {
       if (actor.role !== "owner") throw new HttpError(403, "Полную копию выгружает только владелец");
-      const out: Record<string, unknown> = { createdAt: new Date().toISOString(), by: actor.email, tables: {} };
+      const tables = (await sql("SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name")).map((r) => String(r.table_name)).filter((t) => /^[a-z0-9_]+$/.test(t) && !BACKUP_EXCLUDE.has(t));
+      const files: Record<string, Uint8Array> = {};
       let total = 0;
-      for (const t of BACKUP_TABLES) {
-        const rows = await sql(`SELECT * FROM ${t}`).catch(() => null);
-        if (rows) { (out.tables as Record<string, unknown>)[t] = rows; total += rows.length; }
+      for (const t of tables) {
+        const rows = await sql(`SELECT * FROM ${t}`);
+        files[`${t}.json`] = strToU8(JSON.stringify(rows));
+        total += rows.length;
       }
-      (out.tables as Record<string, unknown>).staff = await sql("SELECT id, email, display_name, role, active, phone, position, permissions_json, created_at FROM staff");
+      files["staff.json"] = strToU8(JSON.stringify(await sql("SELECT id, email, display_name, role, active, phone, position, permissions_json, created_at FROM staff")));
+      files["_info.json"] = strToU8(JSON.stringify({ createdAt: new Date().toISOString(), by: actor.email, tables: tables.length + 1, rows: total }));
       await audit(actor, "Полная копия", total);
-      return new Response(JSON.stringify(out), { headers: { "Content-Type": "application/json; charset=utf-8", "Content-Disposition": `attachment; filename=atadan-backup-${day}.json`, "Cache-Control": "no-store" } });
+      return new Response(Buffer.from(zipSync(files, { level: 6 })), { headers: { "Content-Type": "application/zip", "Content-Disposition": `attachment; filename=atadan-backup-${day}.zip`, "Cache-Control": "no-store" } });
     }
     const d = DATASETS[type];
     if (!d) throw new HttpError(404, "Неизвестная выгрузка");

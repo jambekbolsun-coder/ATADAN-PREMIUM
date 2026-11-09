@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { catalogModels } from "../../../../_lib/sales";
 import { requireSection, seesCost } from "../../../../_lib/session";
-import { getUnit, UNIT_STATUS, canStockEdit } from "../../../../_lib/stock";
+import { canIntake, getUnit, UNIT_STATUS, canStockEdit } from "../../../../_lib/stock";
 import { date, dateTime, money } from "../../../../_lib/format";
 import { Badge, Card, Notice, PageHeader } from "../../../../_ui/ui";
 import { UnitActions } from "./unit-actions";
@@ -31,6 +32,11 @@ export default async function UnitCard({ params }: PageProps<"/admin/work/stock/
             damage={s("damage_note")}
             info={{ engine: s("engine_number"), year: s("year"), color: s("color"), gtd: s("gtd_number"), certificate: s("certificate_number"), passport: s("passport_number"), location: s("location"), listPrice: u.list_price_minor ? String(Number(u.list_price_minor) / 100) : "" }}
             canPrice={actor.role === "owner" || actor.role === "director"}
+            canIntake={canIntake(actor)}
+            vin={u.vin}
+            slug={String(u.tractor_slug ?? "")}
+            models={canIntake(actor) ? (await catalogModels()).map((m) => ({ slug: m.slug, model: m.model })) : []}
+            costOverride={u.cost_override_minor != null ? String(Number(u.cost_override_minor) / 100) : ""}
           />
         ) : null}
       />

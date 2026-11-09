@@ -75,4 +75,53 @@ SELECT 'svc-' || c.id,
   c.issue, c.resolution, c.responsible_id, c.opened_at, c.closed_at, c.id
 FROM service_cases_v2 c
 WHERE c.archived=0 AND NOT EXISTS (SELECT 1 FROM service_tickets t WHERE t.legacy_id=c.id);
+ALTER TABLE crm_customers ADD COLUMN IF NOT EXISTS passport TEXT NOT NULL DEFAULT '';
+ALTER TABLE crm_customers ADD COLUMN IF NOT EXISTS address TEXT NOT NULL DEFAULT '';
+ALTER TABLE inventory_units_v2 ADD COLUMN IF NOT EXISTS cost_override_minor BIGINT;
+
+ALTER TABLE shipments_v2 ADD COLUMN IF NOT EXISTS carrier TEXT NOT NULL DEFAULT '';
+ALTER TABLE shipments_v2 ADD COLUMN IF NOT EXISTS driver_name TEXT NOT NULL DEFAULT '';
+ALTER TABLE shipments_v2 ADD COLUMN IF NOT EXISTS driver_phone TEXT NOT NULL DEFAULT '';
+ALTER TABLE shipments_v2 ADD COLUMN IF NOT EXISTS origin TEXT NOT NULL DEFAULT '';
+ALTER TABLE shipments_v2 ADD COLUMN IF NOT EXISTS destination TEXT NOT NULL DEFAULT '';
+ALTER TABLE shipments_v2 ADD COLUMN IF NOT EXISTS departure_at TIMESTAMPTZ;
+
+-- Перевозки: любая доставка техники (клиенту, между складами, от таможни), кто, откуда, куда, когда, какие модели.
+CREATE TABLE IF NOT EXISTS deliveries (
+  id TEXT PRIMARY KEY,
+  number TEXT NOT NULL UNIQUE,
+  kind TEXT NOT NULL DEFAULT 'to_client' CHECK (kind IN ('to_client','from_customs','between_warehouses','other')),
+  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','in_transit','delivered','cancelled')),
+  sale_id TEXT REFERENCES sale_orders(id),
+  customer_id TEXT REFERENCES crm_customers(id),
+  client_name TEXT NOT NULL DEFAULT '',
+  client_phone TEXT NOT NULL DEFAULT '',
+  from_place TEXT NOT NULL DEFAULT '',
+  to_place TEXT NOT NULL DEFAULT '',
+  planned_at TIMESTAMPTZ NOT NULL,
+  departed_at TIMESTAMPTZ,
+  delivered_at TIMESTAMPTZ,
+  carrier TEXT NOT NULL DEFAULT '',
+  driver_name TEXT NOT NULL DEFAULT '',
+  driver_phone TEXT NOT NULL DEFAULT '',
+  vehicle TEXT NOT NULL DEFAULT '',
+  cost_minor BIGINT NOT NULL DEFAULT 0,
+  tx_id TEXT,
+  note TEXT NOT NULL DEFAULT '',
+  created_by TEXT REFERENCES staff(id),
+  updated_by TEXT REFERENCES staff(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_deliveries_status ON deliveries(status, planned_at DESC);
+CREATE TABLE IF NOT EXISTS delivery_items (
+  id TEXT PRIMARY KEY,
+  delivery_id TEXT NOT NULL REFERENCES deliveries(id),
+  tractor_slug TEXT,
+  model TEXT NOT NULL,
+  qty INTEGER NOT NULL DEFAULT 1 CHECK (qty > 0),
+  unit_id TEXT REFERENCES inventory_units_v2(id),
+  vin TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_delivery_items_delivery ON delivery_items(delivery_id);
 `;

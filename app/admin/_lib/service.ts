@@ -99,7 +99,7 @@ export async function createTicket(actor: Actor, input: { unitId: string; kind: 
     const q = query(client);
     await q("SELECT pg_advisory_xact_lock(hashtext('service-number'))");
     const year = new Date().getFullYear();
-    const [r] = await q<{ n: number | null }>("SELECT MAX(NULLIF(regexp_replace(substr(number, 8), '[^0-9]', '', 'g'), '')::int) AS n FROM service_tickets WHERE number LIKE ?", `С-${year}-%`);
+    const [r] = await q<{ n: number | null }>("SELECT MAX(NULLIF(regexp_replace(substr(number, 8), '[^0-9]', '', 'g'), '')::int) AS n FROM service_tickets WHERE number ~ ?", `^С-${year}-[0-9]+$`);
     const number = `С-${year}-${String(Number(r?.n ?? 0) + 1).padStart(3, "0")}`;
     const id = newId();
     const assigned = input.assignedTo ? text(input.assignedTo, 100) : actor.id;

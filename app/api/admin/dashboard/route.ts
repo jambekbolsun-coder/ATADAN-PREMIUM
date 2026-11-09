@@ -1,4 +1,4 @@
-import { canUseSection, requireActor } from "../../../lib/admin-auth";
+import { canUseSection, requireActor, assertLegacyArchive } from "../../../lib/admin-auth";
 import { getCatalog, suggestedPriceUsd } from "../../../lib/catalog";
 import { getNewsPosts } from "../../../lib/news";
 import { cleanText, fail, HttpError, jsonBody, safeMedia, sameOrigin } from "../../../lib/security";
@@ -60,7 +60,7 @@ function normalizedProduct(value: unknown): Tractor {
 
 export async function GET(request: Request) {
   try {
-    const actor = await requireActor(request);
+    const actor = await requireActor(request); assertLegacyArchive(actor);
     await ensureDb();
     const db = getRawDb();
     const canNews = canUseSection(actor,"news");
@@ -236,7 +236,7 @@ export async function GET(request: Request) {
 export async function PATCH(request: Request) {
   try {
     sameOrigin(request);
-    const actor = await requireActor(request);
+    const actor = await requireActor(request); assertLegacyArchive(actor, true);
     const body = await jsonBody(request, 300_000);
     const action = String(body.action ?? "");
     const db = getRawDb();

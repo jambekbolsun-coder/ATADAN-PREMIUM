@@ -12,9 +12,10 @@ import { getRawDb } from "../../../db";
 import type { Actor, PermissionSection, StaffRole } from "../../lib/admin-auth";
 import { permissionSections } from "../../lib/admin-auth";
 import { digest, HttpError } from "../../lib/security";
-import { audit, isBoss, query, text } from "./db-kit";
+import { audit, query, text } from "./db-kit";
 
-export const canTeam = (a: Actor) => isBoss(a);
+/** §7: сотрудников ведёт владелец, директор только видит список. */
+export const canTeam = (a: Actor) => a.role === "owner";
 export const STAFF_ROLES: { key: StaffRole; label: string; hint: string }[] = [
   { key: "manager", label: "Менеджер по продажам", hint: "Заявки, продажи, клиенты, склад (просмотр и резерв)" },
   { key: "accountant", label: "Бухгалтер", hint: "Касса, долги, расходы, логистика, зарплаты" },
@@ -68,7 +69,7 @@ export async function listTeam() {
 }
 
 export async function invite(actor: Actor, input: { email: string; role: string; permissions: string[] }) {
-  if (!canTeam(actor)) throw new HttpError(403, "Приглашать могут владелец и директор");
+  if (!canTeam(actor)) throw new HttpError(403, "Приглашать сотрудников может владелец");
   const email = text(input.email, 200).toLowerCase();
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new HttpError(400, "Укажите email сотрудника");
   if (!["manager", "accountant", "marketer"].includes(input.role)) throw new HttpError(400, "Выберите роль");

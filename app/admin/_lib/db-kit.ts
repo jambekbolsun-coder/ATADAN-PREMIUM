@@ -7,6 +7,10 @@ import { HttpError } from "../../lib/security";
 export type Q = <T = Record<string, unknown>>(sql: string, ...args: unknown[]) => Promise<T[]>;
 export const query = (client: PoolClient): Q => async <T,>(sql: string, ...args: unknown[]) => (await getRawDb().prepare(sql).bind(...args).execute<T>(client)).results;
 export const newId = () => crypto.randomUUID();
+/** JSON из базы: битая старая запись не должна ронять страницу. */
+export function safeJson<T>(value: string | null | undefined, fallback: T): T {
+  try { return (JSON.parse(value || "") as T) ?? fallback; } catch { return fallback; }
+}
 export const text = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
 export const isBoss = (a: Pick<Actor, "role">) => a.role === "owner" || a.role === "director";
 

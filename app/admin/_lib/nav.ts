@@ -37,17 +37,19 @@ const FIN_ROLES: StaffRole[] = ["owner", "director", "accountant"];
 export const NAV: NavItem[] = [
   // ── Работа · Отдел продаж
   { href: "/admin/work/leads", label: "Заявки", icon: "inbox", tone: "terra", space: "work", group: "Отдел продаж", perms: ["site-leads", "deals"], hint: "Новые обращения с сайта, WhatsApp и звонков" },
-  { href: "/admin/work/sales", label: "Продажи", icon: "cart", tone: "green", space: "work", group: "Отдел продаж", perms: ["sales", "deals"], hint: "Кто купил, что, за сколько и как оплатил" },
+  { href: "/admin/work/sales", label: "Продажи", icon: "cart", tone: "green", space: "work", group: "Отдел продаж", perms: ["sales", "deals", "payments", "debts"], hint: "Кто купил, что, за сколько и как оплатил" },
   { href: "/admin/work/clients", label: "Клиенты", icon: "users", tone: "sky", space: "work", group: "Отдел продаж", perms: ["client-base"], hint: "Покупатели, их техника, долги и история" },
   // ── Работа · Склад и логистика
   { href: "/admin/work/stock", label: "Техника", icon: "tractor", tone: "teal", space: "work", group: "Склад и логистика", perms: ["inventory-units"], hint: "Каждая машина по VIN: статус, место, себестоимость" },
   { href: "/admin/work/parts", label: "Запчасти", icon: "box", tone: "sun", space: "work", group: "Склад и логистика", perms: ["inventory-units"], hint: "Остатки, приход, списание, минимальный остаток" },
   { href: "/admin/work/logistics", label: "Логистика", icon: "truck", tone: "sky", space: "work", group: "Склад и логистика", perms: ["purchases", "shipments", "suppliers"], hint: "Заказы заводу, поставки, таможня, приём на склад" },
   { href: "/admin/work/service", label: "Сервис и гарантия", icon: "wrench", tone: "lilac", space: "work", group: "Склад и логистика", perms: ["service-cases"], hint: "Обращения по технике, гарантийные случаи" },
+  { href: "/admin/work/documents", label: "Документы", icon: "list", tone: "sun", space: "work", group: "Склад и логистика", perms: ["documents"], hint: "Важные документы и фото в папках на три уровня" },
   // ── Работа · Финансы
   { href: "/admin/work/cash", label: "Касса и платежи", icon: "wallet", tone: "green", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Все деньги: приход, расход, остатки касс и счетов" },
   { href: "/admin/work/debts", label: "Долги", icon: "scale", tone: "terra", space: "work", group: "Финансы", perms: ["debts"], hint: "Кто нам должен: клиенты и банки, просрочки" },
   { href: "/admin/work/expenses", label: "Расходы", icon: "receipt", tone: "sun", space: "work", group: "Финансы", perms: ["expenses"], hint: "Аренда, реклама, таможня, логистика и прочее" },
+  { href: "/admin/work/prices", label: "Прайс и себестоимость", icon: "percent", tone: "green", space: "work", group: "Финансы", perms: ["catalog", "finance"], hint: "Цены, скидки и себестоимость всех моделей в одной таблице" },
   { href: "/admin/work/margin", label: "Маржа", icon: "trend", tone: "teal", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Прибыль по продаже, модели и менеджеру" },
   { href: "/admin/work/payroll", label: "Зарплаты", icon: "banknote", tone: "lilac", space: "work", group: "Финансы", perms: ["payroll"], hint: "Начисления и выплаты сотрудникам" },
   { href: "/admin/work/reports", label: "Отчёты", icon: "chart", tone: "sky", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Продажи, склад, деньги и маркетинг за период" },
@@ -140,9 +142,12 @@ export type PlusAction = { key: string; label: string; hint: string; icon: IconK
 
 export const PLUS_ACTIONS: PlusAction[] = [
   { key: "sale", label: "Новая продажа", hint: "Клиент, техника, способ оплаты", icon: "cart", tone: "green", href: "/admin/work/sales/new", perms: ["sales", "deals"] },
+  { key: "quick-sale", label: "Быстрая продажа", hint: "Клиент, машина и оплата на одном экране", icon: "cart", tone: "green", href: "/admin/work/sales/quick", perms: ["sales", "deals"] },
   { key: "payment", label: "Приход или расход", hint: "Касса: приход, расход, перевод", icon: "wallet", tone: "sun", href: "/admin/work/cash/new", roles: ["owner", "director", "accountant"] },
   { key: "expense", label: "Добавить расход", hint: "Сумма, категория, касса", icon: "receipt", tone: "terra", href: "/admin/work/cash/new?type=out", roles: ["owner", "director", "accountant"] },
   { key: "receive", label: "Принять технику", hint: "Поставка пришла на склад", icon: "truck", tone: "sky", href: "/admin/work/logistics?tab=shipments", perms: ["shipments", "purchases"] },
+  { key: "delivery", label: "Новая перевозка", hint: "Клиент, откуда, куда, когда, модели", icon: "truck", tone: "sky", href: "/admin/work/logistics/deliveries/new", perms: ["shipments", "purchases"] },
+  { key: "document", label: "Добавить документ", hint: "Файл или фото в папку", icon: "book", tone: "sun", href: "/admin/work/documents/new", perms: ["documents"] },
   { key: "lead", label: "Новая заявка", hint: "Звонок или визит в офис", icon: "inbox", tone: "teal", href: "/admin/work/leads/new", perms: ["site-leads", "deals"] },
   { key: "model", label: "Модель в каталог", hint: "Цена, фото, характеристики", icon: "tractor", tone: "lilac", href: "/admin/marketing/catalog/new", perms: ["catalog"] },
   { key: "part", label: "Запчасть", hint: "Артикул, цена, к каким моделям", icon: "box", tone: "sun", href: "/admin/work/parts/new", perms: ["catalog"] },

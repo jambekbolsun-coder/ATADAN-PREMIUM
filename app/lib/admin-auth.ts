@@ -190,6 +190,8 @@ export type Actor = { id: string; email: string; display_name: string; role: Sta
 type ActorRow = Omit<Actor,"permissions"> & {permissions_json:string};
 const ACTOR_FIELDS = "id,email,display_name,role,active,theme,avatar,phone,position,department,skills,bio,permissions_json";
 function actorFromRow(row:ActorRow|null){if(!row)return null;let permissions:PermissionSection[]|null=null;try{const parsed=JSON.parse(row.permissions_json) as unknown;if(Array.isArray(parsed))permissions=parsed.filter((value):value is PermissionSection=>typeof value==="string"&&(permissionSections as readonly string[]).includes(value));}catch{permissions=null}permissions??=defaultPermissions[row.role];const {permissions_json:_,...actor}=row;void _;return {...actor,permissions};}
+/** Старая админка закрыта: её API доступен только владельцу как архив, изменения данных запрещены. */
+export function assertLegacyArchive(actor:Actor,write=false){if(actor.role!=="owner")throw new HttpError(403,"Этот раздел закрыт. Работайте в новой админке");if(write)throw new HttpError(409,"Старая админка работает только для просмотра. Измените это в новой админке");}
 export function canUseSection(actor:Actor,section:string){return actor.role==="owner"||actor.role==="director"||actor.permissions.includes(section as PermissionSection);}
 const STAFF_COOKIE = "atadan_staff";
 function staffToken(request: Request) { return request.headers.get("cookie")?.split(";").map(v => v.trim()).find(v => v.startsWith(`${STAFF_COOKIE}=`))?.slice(STAFF_COOKIE.length + 1); }

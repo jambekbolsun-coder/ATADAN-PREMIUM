@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "../_ui/admin.css";
 import { getRawDb } from "../../../db";
 import { AdminShell } from "../_ui/shell";
+import { InstallBanner, InstallSetup } from "../_ui/install";
 import { currentTheme } from "../_ui/theme-server";
 import { requireStaff } from "../_lib/session";
 import { canSee, NAV, roleTab, visibleNav, visiblePlus } from "../_lib/nav";
@@ -29,6 +30,8 @@ export default async function ShellLayout({ children }: LayoutProps<"/admin">) {
   ]);
   return (
     <div className="ax" data-ax-theme={theme}>
+      <script async src="/admin-install.js" />
+      <InstallSetup />
       <AdminShell
         nav={visibleNav(actor)}
         user={{ name: actor.display_name || actor.email, role: ROLE_LABEL[actor.role], avatar: actor.avatar }}
@@ -37,6 +40,7 @@ export default async function ShellLayout({ children }: LayoutProps<"/admin">) {
         unread={unread?.n ?? 0}
         counts={{ "/admin/work/leads": newLeads?.n ?? 0 }}
       >
+        <InstallBanner />
         {children}
       </AdminShell>
     </div>

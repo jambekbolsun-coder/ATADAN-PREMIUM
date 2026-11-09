@@ -11,6 +11,9 @@ export const dynamic = "force-dynamic";
 export async function GET(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (secret && request.headers.get("authorization") !== `Bearer ${secret}`) return Response.json({ error: "unauthorized" }, { status: 401 });
+  // без секрета принимаем вызов только в окне расписания: посторонний не сможет запустить напоминания раньше времени
+  const minutes = new Date().getUTCHours() * 60 + new Date().getUTCMinutes();
+  if (!secret && process.env.VERCEL && (minutes < 105 || minutes > 215)) return Response.json({ ok: false, reason: "outside schedule" }, { status: 403 });
   try {
     await ensureDb();
     const result = await runDaily();

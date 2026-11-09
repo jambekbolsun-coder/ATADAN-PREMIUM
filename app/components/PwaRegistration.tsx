@@ -54,7 +54,7 @@ export function AdminInstallButton({ role }: { role: string }) {
     manifest.dataset.adminManifest = "owner";
     document.head.append(manifest);
     if ("serviceWorker" in navigator && location.protocol === "https:") {
-      void navigator.serviceWorker.register("/admin-sw.js", { scope: "/admin/" }).catch(() => undefined);
+      void navigator.serviceWorker.register("/admin-sw.js", { scope: "/admin" }).catch(() => undefined);
     }
     return () => {
       window.removeEventListener("beforeinstallprompt", handlePrompt);

@@ -19,7 +19,7 @@ export default async function Team() {
   return (
     <div style={{ maxWidth: 980 }}>
       <PageHeader title="Сотрудники" subtitle={`${active.length} активных. Вход по приглашению; пароль сотрудник задаёт сам.`} actions={edit ? <InvitePanel roles={STAFF_ROLES} groups={groups} defaults={DEFAULT_PERMS} /> : null} />
-      {!edit ? <div style={{ marginBottom: 12 }}><Notice tone="info">Вы видите список. Приглашать, менять роли и доступы могут владелец и директор.</Notice></div> : null}
+      {!edit ? <div style={{ marginBottom: 12 }}><Notice tone="info">Вы видите список. Приглашать, менять роли и доступы может владелец.</Notice></div> : null}
 
       {invites.length ? (
         <Card title={`Ждут входа (${invites.length})`}>

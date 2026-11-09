@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { attachDatabasePool } from "@vercel/functions";
 import { Pool, types, type PoolClient } from "pg";
 import { POSTGRES_SCHEMA_SQL } from "./postgres-schema";
@@ -141,11 +142,18 @@ export function getRawDb() {
   return database;
 }
 
+/** Версия схемы = хеш всех SQL-блоков. Настройка выполняется один раз на версию, а не при каждом старте сервера. */
+const SCHEMA_BLOCKS = [ADMIN_V2_SCHEMA_SQL, SALES_DEPT_SCHEMA_SQL, STOCK_MONEY_SCHEMA_SQL, MARKETING_SCHEMA_SQL, OPS_SCHEMA_SQL];
+const SCHEMA_VERSION = `schema-${createHash("sha256").update(SCHEMA_BLOCKS.join("\n")).digest("hex").slice(0, 20)}`;
+
 export async function ensureDb() {
   if (initialized) return initialized;
   initialized = (async () => {
     const client = await pool().connect();
     try {
+      // быстрый путь: эта версия уже применена (таблицы может ещё не быть на пустой базе)
+      const applied = await client.query("SELECT 1 FROM schema_migrations WHERE id=$1", [SCHEMA_VERSION]).catch(() => null);
+      if (applied?.rowCount) return;
       await client.query("BEGIN");
       await client.query("SELECT pg_advisory_xact_lock(hashtext('atadan-schema-v2'))");
       const lockedProbe = await client.query("SELECT to_regclass('public.product_overrides') AS table_name");
@@ -155,6 +163,7 @@ export async function ensureDb() {
       await client.query(STOCK_MONEY_SCHEMA_SQL);
       await client.query(MARKETING_SCHEMA_SQL);
       await client.query(OPS_SCHEMA_SQL);
+      await client.query("INSERT INTO schema_migrations(id) VALUES($1) ON CONFLICT DO NOTHING", [SCHEMA_VERSION]);
       await client.query("COMMIT");
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);

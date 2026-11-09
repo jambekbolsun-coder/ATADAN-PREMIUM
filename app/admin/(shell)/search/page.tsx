@@ -34,13 +34,13 @@ export default async function SearchPage({ searchParams }: PageProps<"/admin/sea
             .bind(like, like).all<{ id: string; vin: string; model: string; status: string }>()
         : null,
       can("/admin/work/leads")
-        ? db.prepare(`SELECT id, name, phone, tractor_model, created_at FROM leads WHERE lower(name) LIKE ? OR regexp_replace(phone,'\\D','','g') LIKE ? ORDER BY created_at DESC LIMIT 8`)
-            .bind(like, phoneLike).all<{ id: string; name: string; phone: string; tractor_model: string | null; created_at: string }>()
+        ? db.prepare(`SELECT id, name, phone, tractor_model, created_at FROM leads WHERE (lower(name) LIKE ? OR regexp_replace(phone,'\\D','','g') LIKE ?) ${actor.role === "manager" ? "AND (assigned_to=? OR status='new')" : ""} ORDER BY created_at DESC LIMIT 8`)
+            .bind(like, actor.role === "marketer" ? "\u0000" : phoneLike, ...(actor.role === "manager" ? [actor.id] : [])).all<{ id: string; name: string; phone: string; tractor_model: string | null; created_at: string }>()
         : null,
     ]);
     if (clients?.results.length) groups.push({ key: "c", title: "Клиенты", icon: "users", tone: "sky", hits: clients.results.map((c) => ({ id: c.id, title: c.name, hint: [c.phone, c.region].filter(Boolean).join(" · "), href: `/admin/work/clients/${c.id}` })) });
     if (units?.results.length) groups.push({ key: "u", title: "Техника", icon: "tractor", tone: "teal", hits: units.results.map((u) => ({ id: u.id, title: `${u.model} · VIN ${u.vin}`, hint: u.status, href: `/admin/work/stock/${u.id}` })) });
-    if (leads?.results.length) groups.push({ key: "l", title: "Заявки", icon: "inbox", tone: "terra", hits: leads.results.map((l) => ({ id: l.id, title: l.name, hint: [l.phone, l.tractor_model, ago(l.created_at)].filter(Boolean).join(" · "), href: `/admin/work/leads/${l.id}` })) });
+    if (leads?.results.length) groups.push({ key: "l", title: "Заявки", icon: "inbox", tone: "terra", hits: leads.results.map((l) => ({ id: l.id, title: l.name, hint: [actor.role === "marketer" ? "" : l.phone, l.tractor_model, ago(l.created_at)].filter(Boolean).join(" · "), href: `/admin/work/leads/${l.id}` })) });
   }
 
   return (

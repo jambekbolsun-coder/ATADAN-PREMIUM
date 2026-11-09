@@ -7,6 +7,9 @@ import { moneyAccounts } from "../../../../../_lib/sales";
 import { date, money, type Currency } from "../../../../../_lib/format";
 import { Badge, Card, Notice, PageHeader } from "../../../../../_ui/ui";
 import { ShipmentActions, VoidShipmentCost } from "../../logistics-actions";
+import { shipmentInfoAction } from "../../../../../_lib/stock-actions";
+import { ActionDialog, Field } from "../../../../../_ui/forms";
+import { dateTime } from "../../../../../_lib/format";
 
 export const metadata = { title: "Поставка" };
 
@@ -58,18 +61,19 @@ export default async function ShipmentCard({ params }: PageProps<"/admin/work/lo
         <Card title={`Машины (${units.length})`} flush>
           <div className="ax-table-wrap" style={{ border: 0, borderRadius: 0 }}>
             <table className="ax-table">
-              <thead><tr><th>VIN</th><th>Модель</th><th>Статус</th>{cost ? <><th className="r">Закупка</th><th className="r">Доля расходов</th><th className="r">Себестоимость</th></> : null}</tr></thead>
+              <thead><tr><th>VIN</th><th>Модель</th><th>Статус</th><th>Клиент</th>{cost ? <><th className="r">Закупка</th><th className="r">Доля расходов</th><th className="r">Себестоимость</th></> : null}</tr></thead>
               <tbody>
                 {units.map((u) => (
                   <tr key={u.id}>
                     <td className="num"><Link href={`/admin/work/stock/${u.id}`} className="ax-strong">{u.vin}</Link>{u.engine_number ? <div className="ax-small">двиг. {u.engine_number}</div> : null}</td>
                     <td>{u.model}</td>
                     <td><Badge tone={UNIT_STATUS[u.status]?.tone ?? "mute"}>{UNIT_STATUS[u.status]?.label ?? u.status}</Badge></td>
+                    <td className="ax-small">{u.client ?? ""}</td>
                     {cost ? <><td className="r num">{money(u.purchase_cost_minor)}</td><td className="r num">{money(u.allocated_cost_minor)}</td><td className="r num ax-strong">{money(u.landed_cost_minor)}</td></> : null}
                   </tr>
                 ))}
               </tbody>
-              {cost ? <tfoot><tr><td colSpan={3}>Итого</td><td className="r num">{money(units.reduce((a, u) => a + u.purchase_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.allocated_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.landed_cost_minor, 0))}</td></tr></tfoot> : null}
+              {cost ? <tfoot><tr><td colSpan={4}>Итого</td><td className="r num">{money(units.reduce((a, u) => a + u.purchase_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.allocated_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.landed_cost_minor, 0))}</td></tr></tfoot> : null}
             </table>
           </div>
         </Card>
@@ -77,6 +81,7 @@ export default async function ShipmentCard({ params }: PageProps<"/admin/work/lo
           <Card title="Расходы поставки">
             <div className="ax-row-line" style={{ marginBottom: 8 }}><span className="ax-small">Всего</span><b className="num">{money(costsTotal)}</b></div>
             <p className="ax-small" style={{ marginTop: 0 }}>Распределение: {ALLOCATION[s.allocation_method] ?? s.allocation_method}</p>
+            {cost && s.allocation_method === "manual" && units.reduce((a, u) => a + (u.manual_cost_minor ?? 0), 0) !== costsTotal ? <div style={{ marginBottom: 8 }}><Notice tone="warn">Вручную распределено {money(units.reduce((a, u) => a + (u.manual_cost_minor ?? 0), 0))} из {money(costsTotal)}. Проверьте доли машин.</Notice></div> : null}
             {costs.length ? (
               <div className="ax-list">
                 {costs.map((c) => (
@@ -92,7 +97,31 @@ export default async function ShipmentCard({ params }: PageProps<"/admin/work/lo
               </div>
             ) : <p className="ax-small" style={{ margin: 0 }}>Расходов пока нет. Добавьте фрахт, пошлину, брокера: они войдут в себестоимость машин.</p>}
           </Card>
-          {s.route || s.transport ? <Card title="Маршрут"><dl className="ax-kv"><dt>Маршрут</dt><dd>{String(s.route || "не указан")}</dd><dt>Транспорт</dt><dd>{String(s.transport || "не указан")}</dd></dl></Card> : null}
+          <Card title="Маршрут и перевозчик">
+            <dl className="ax-kv">
+              <dt>Откуда</dt><dd>{String(s.origin || "не указано")}</dd>
+              <dt>Куда</dt><dd>{String(s.destination || "не указано")}</dd>
+              <dt>Маршрут</dt><dd>{String(s.route || "не указан")}</dd>
+              <dt>Транспорт</dt><dd>{String(s.transport || "не указан")}</dd>
+              <dt>Перевозчик</dt><dd>{String(s.carrier || "не указан")}</dd>
+              <dt>Водитель</dt><dd>{[s.driver_name, s.driver_phone].filter(Boolean).map(String).join(", ") || "не указан"}</dd>
+              <dt>Отправление</dt><dd>{s.departure_at ? dateTime(String(s.departure_at)) : "не указано"}</dd>
+              <dt>Ожидаем</dt><dd>{s.eta ? date(s.eta) : "не указано"}</dd>
+            </dl>
+            {canLogistics(actor) ? (
+              <ActionDialog label="Изменить" triggerClass="ax-btn-sm" title="Маршрут и перевозчик" action={shipmentInfoAction.bind(null, s.id)} submitLabel="Сохранить">
+                <Field label="Откуда" htmlFor="si-o"><input id="si-o" name="origin" className="ax-input" defaultValue={String(s.origin ?? "")} /></Field>
+                <Field label="Куда" htmlFor="si-d"><input id="si-d" name="destination" className="ax-input" defaultValue={String(s.destination ?? "")} /></Field>
+                <Field label="Маршрут" htmlFor="si-r"><input id="si-r" name="route" className="ax-input" defaultValue={String(s.route ?? "")} /></Field>
+                <Field label="Транспорт" htmlFor="si-t"><input id="si-t" name="transport" className="ax-input" defaultValue={String(s.transport ?? "")} /></Field>
+                <Field label="Перевозчик" htmlFor="si-c"><input id="si-c" name="carrier" className="ax-input" defaultValue={String(s.carrier ?? "")} /></Field>
+                <Field label="Водитель" htmlFor="si-n"><input id="si-n" name="driverName" className="ax-input" defaultValue={String(s.driver_name ?? "")} /></Field>
+                <Field label="Телефон водителя" htmlFor="si-p"><input id="si-p" name="driverPhone" className="ax-input" inputMode="tel" defaultValue={String(s.driver_phone ?? "")} /></Field>
+                <Field label="Дата и время отправления" htmlFor="si-dep"><input id="si-dep" name="departure" type="datetime-local" className="ax-input" defaultValue={String(s.departure_local ?? "")} /></Field>
+                <Field label="Ожидаемая дата" htmlFor="si-eta"><input id="si-eta" name="eta" type="date" className="ax-input" defaultValue={s.eta ?? ""} /></Field>
+              </ActionDialog>
+            ) : null}
+          </Card>
         </div>
       </div>
     </>

@@ -83,7 +83,8 @@ export async function getCatalog(includeUnpublished = false): Promise<Tractor[]>
     const inventory = await getRawDb()
       .prepare("SELECT tractor_slug, COUNT(*)::int AS available_units FROM inventory_units_v2 WHERE archived=0 AND status='stock' AND COALESCE(tractor_slug,'')<>'' GROUP BY tractor_slug")
       .all<InventoryAvailability>();
-    return applyInventoryAvailability(catalog, inventory.results as InventoryAvailability[])
+    const visible = includeUnpublished ? catalog : catalog.map((t) => (t.priceOnRequest ? { ...t, price: null, approximatePriceUsd: undefined, discountPercent: null } : t));
+    return applyInventoryAvailability(visible, inventory.results as InventoryAvailability[])
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.hp - b.hp || a.model.localeCompare(b.model));
   } catch {
     // A database outage must never turn a catalogue flag into fictitious stock.

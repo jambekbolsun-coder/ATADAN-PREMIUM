@@ -2,8 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ExternalLink } from "lucide-react";
 import { requireSection } from "../../../../_lib/session";
-import { CATEGORIES, getModel, MODEL_STATUS } from "../../../../_lib/catalog-admin";
-import { isBoss } from "../../../../_lib/db-kit";
+import { canModelCost, CATEGORIES, getModel, MODEL_STATUS } from "../../../../_lib/catalog-admin";
 import { modelCostAction, modelStatusAction } from "../../../../_lib/marketing-actions";
 import { date, money } from "../../../../_lib/format";
 import { ActionButton, ActionDialog, Field } from "../../../../_ui/forms";
@@ -43,7 +42,7 @@ export default async function ModelCard({ params, searchParams }: PageProps<"/ad
           slugLocked={!m.custom}
           categories={CATEGORIES.includes(m.category) ? CATEGORIES : [m.category, ...CATEGORIES]}
           initial={{
-            slug: m.slug, model: m.model, hp: String(m.hp), category: m.category, farmArea: m.farmArea ?? "", price: m.price ? String(m.price) : "", priceUsd: m.approximatePriceUsd ? String(m.approximatePriceUsd) : "",
+            slug: m.slug, model: m.model, hp: String(m.hp), category: m.category, farmArea: m.farmArea ?? "", price: m.price ? String(m.price) : "", priceUsd: m.usd_manual ? String(m.usd_manual) : "", priceOnRequest: !!m.priceOnRequest,
             discountPercent: m.discountPercent ? String(m.discountPercent) : "", promotionLabel: m.promotionLabel ?? "", recommended: !!m.recommended, popular: !!m.popular, sortOrder: String(m.sortOrder ?? 0),
             image: m.image ?? "", images: (m.images ?? []).filter((x) => x !== m.image), videoUrl: m.videoUrl ?? "", description: m.description ?? "", comfort: m.comfort ?? "", equipment: (m.equipment ?? []).join("\n"),
             specs: Object.entries(m.specs ?? {}).map(([k, v]) => ({ k, v: String(v) })), status: m.status,
@@ -57,11 +56,11 @@ export default async function ModelCard({ params, searchParams }: PageProps<"/ad
               <dt>В резерве</dt><dd className="num">{m.reserved}</dd>
               <dt>Продано</dt><dd className="num">{m.sold}</dd>
             </dl>
-            <p className="ax-small" style={{ marginBottom: 0 }}>На сайте: {m.stock ? `«В наличии ${m.stock}»` : m.transit ? "«В пути»" : "«Под заказ»"}. Считается само.</p>
+            <p className="ax-small" style={{ marginBottom: 0 }}>На сайте: {m.stock ? `«В наличии ${m.stock}»` : m.transit ? "«Под заказ»" : "«Под заказ»"}. Считается само.</p>
           </Card>
-          {isBoss(actor) ? (
+          {canModelCost(actor) ? (
             <Card title="Себестоимость модели">
-              <p className="ax-small" style={{ marginTop: 0 }}>Нужна для заказа под клиента, пока машины нет на складе. У машин на складе своя себестоимость из поставки.</p>
+              <p className="ax-small" style={{ marginTop: 0 }}>Подставляется в продажу под заказ и в машины, у которых нет своей себестоимости. Массово менять удобнее в разделе «Прайс и себестоимость».</p>
               <div className="ax-row-line" style={{ marginBottom: 8 }}><span className="ax-small">Сейчас</span><b className="num">{m.cost_minor !== null ? money(m.cost_minor) : "не задана"}</b></div>
               <ActionDialog label="Изменить" triggerClass="ax-btn-sm" title="Себестоимость модели" action={modelCostAction.bind(null, m.slug, m.cost_version)} submitLabel="Сохранить">
                 <Field label="Себестоимость, сом" htmlFor="m-cost"><input id="m-cost" name="cost" className="ax-input num" inputMode="decimal" defaultValue={m.cost_minor !== null ? String(m.cost_minor / 100) : ""} required /></Field>

@@ -40,7 +40,7 @@ export default async function SalesList({ searchParams }: PageProps<"/admin/work
       <PageHeader
         title="Продажи"
         subtitle={actor.role === "manager" ? "Ваши продажи: кто купил, что, за сколько и как оплатил" : "Кто купил, что, за сколько и как оплатил"}
-        actions={<ButtonLink href="/admin/work/sales/new" variant="primary"><Plus size={17} aria-hidden />Новая продажа</ButtonLink>}
+        actions={<><ButtonLink href="/admin/work/sales/quick">Быстрая продажа</ButtonLink><ButtonLink href="/admin/work/sales/new" variant="primary"><Plus size={17} aria-hidden />Новая продажа</ButtonLink></>}
       />
       <nav className="ax-tabs" aria-label="Статус продажи">
         {SALE_VIEWS.map((v) => (

@@ -44,8 +44,8 @@ export default async function SaleDocumentPage({ params, searchParams }: PagePro
         <b>Покупатель</b><br />{customer?.name ?? s.customer}<br />
         Тел.: {customer?.phone ?? s.phone}<br />
         {customer?.region ? <>{customer.region}<br /></> : null}
-        Паспорт / ИНН: <Blank /><br />
-        Адрес: <Blank /><br />
+        Паспорт / ИНН: {customer?.passport || <Blank />}<br />
+        Адрес: {customer?.address || <Blank />}<br />
         <br /><span className="doc-line" /> подпись
       </div>
     </div>
@@ -126,7 +126,7 @@ export default async function SaleDocumentPage({ params, searchParams }: PagePro
           {itemsTable}
           <p>Всего к оплате: <b>{fmt(s.total_minor)} {sign}</b> ({amountInWords(s.total_minor, cur)}).</p>
           {s.paid_minor > 0 ? <p>Уже оплачено: {fmt(s.paid_minor)} {sign}. Остаток к оплате: <b>{fmt(Math.max(0, s.total_minor - s.paid_minor))} {sign}</b> ({amountInWords(Math.max(0, s.total_minor - s.paid_minor), cur)}).</p> : null}
-          <p className="doc-small">Счёт действителен до {day(s.reserve_until)}. Машина зарезервирована за покупателем до этой даты.</p>
+          <p className="doc-small">Счёт действителен до {day(s.reserve_until)}.{items.some((i) => i.inventory_unit_id) ? " Машина зарезервирована за покупателем до этой даты." : ""}</p>
           <div className="doc-sign"><div>Директор <span className="doc-line" /> {c.director}</div><div>Бухгалтер <span className="doc-line" /></div></div>
         </article>
       ) : null}

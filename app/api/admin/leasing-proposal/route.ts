@@ -1,5 +1,5 @@
 import { getRawDb } from "../../../../db";
-import { canUseSection, requireActor } from "../../../lib/admin-auth";
+import { canUseSection, requireActor, assertLegacyArchive } from "../../../lib/admin-auth";
 import { cleanText, fail, HttpError } from "../../../lib/security";
 
 type LeaseRecord={id:string;title:string;data_json:string};
@@ -11,7 +11,7 @@ function variantsOf(value:unknown){try{const parsed=typeof value==="string"?JSON
 
 export async function GET(request:Request){
   try{
-    const actor=await requireActor(request);if(!canUseSection(actor,"leasing-applications"))throw new HttpError(403,"Нет доступа к заявкам на лизинг");
+    const actor=await requireActor(request);assertLegacyArchive(actor);if(!canUseSection(actor,"leasing-applications"))throw new HttpError(403,"Нет доступа к заявкам на лизинг");
     const id=cleanText(new URL(request.url).searchParams.get("id"),100,true),record=await getRawDb().prepare("SELECT id,title,data_json FROM admin_records WHERE id=? AND kind='leasing_applications' AND archived=0").bind(id).first<LeaseRecord>();
     if(!record)throw new HttpError(404,"Заявка не найдена");
     let data:Record<string,unknown>={};try{data=JSON.parse(record.data_json) as Record<string,unknown>}catch{data={}}

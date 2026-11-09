@@ -7,6 +7,8 @@ export type Tractor = {
   farmArea: string;
   price: number | null;
   approximatePriceUsd?: number;
+  /** На сайте показать «Цена по запросу»; в продажах цена продолжает работать. */
+  priceOnRequest?: boolean;
   discountPercent?: number | null;
   promotionLabel?: string | null;
   inStock: boolean;

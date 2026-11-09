@@ -9,7 +9,7 @@ export type ModelFormValue = {
   slug: string; model: string; hp: string; category: string; farmArea: string; price: string; priceUsd: string;
   discountPercent: string; promotionLabel: string; recommended: boolean; popular: boolean; sortOrder: string;
   image: string; images: string[]; videoUrl: string; description: string; comfort: string; equipment: string;
-  specs: { k: string; v: string }[]; status: string;
+  specs: { k: string; v: string }[]; status: string; priceOnRequest: boolean;
 };
 
 const slugify = (v: string) => v.toLowerCase().replace(/[()]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 90);
@@ -54,12 +54,13 @@ export function ModelForm({ initial, originalSlug, categories, slugLocked }: { i
       <section className="ax-card">
         <h3 className="ax-card-h">Цена на сайте</h3>
         <div className="ax-grid ax-g2" style={{ gap: 12 }}>
-          <Field label="Цена, сом" htmlFor="m-price" hint="Пусто: на сайте «Цена по запросу»"><input id="m-price" className="ax-input num" inputMode="numeric" value={v.price} onChange={(e) => set("price", e.target.value.replace(/\s/g, ""))} /></Field>
+          <Field label="Цена, сом" htmlFor="m-price" hint="Если пусто, на сайте примерная цена в долларах"><input id="m-price" className="ax-input num" inputMode="numeric" value={v.price} onChange={(e) => set("price", e.target.value.replace(/\s/g, ""))} /></Field>
           <Field label="Примерная цена, $" htmlFor="m-usd" hint="Показывается в калькуляторе"><input id="m-usd" className="ax-input num" inputMode="numeric" value={v.priceUsd} onChange={(e) => set("priceUsd", e.target.value.replace(/\s/g, ""))} /></Field>
           <Field label="Скидка на сайте, %" htmlFor="m-disc"><input id="m-disc" className="ax-input num" inputMode="decimal" value={v.discountPercent} onChange={(e) => set("discountPercent", e.target.value)} /></Field>
           <Field label="Плашка на карточке" htmlFor="m-label" hint="Например: «Хит сезона»"><input id="m-label" className="ax-input" value={v.promotionLabel} onChange={(e) => set("promotionLabel", e.target.value)} /></Field>
         </div>
         {priceChanged ? <Field label="Почему меняется цена" htmlFor="m-pnote" hint="Попадёт в историю цен"><input id="m-pnote" className="ax-input" value={priceNote} onChange={(e) => setPriceNote(e.target.value)} placeholder="Новый прайс завода" /></Field> : null}
+        <label className="ax-check" style={{ borderBottom: 0 }}><input type="checkbox" checked={v.priceOnRequest} onChange={(e) => set("priceOnRequest", e.target.checked)} /> Не показывать цену на сайте: «Цена по запросу»</label>
         <p className="ax-small" style={{ margin: 0 }}>Уже оформленные продажи не меняются. «В наличии» на сайте считается со склада автоматически.</p>
       </section>
 

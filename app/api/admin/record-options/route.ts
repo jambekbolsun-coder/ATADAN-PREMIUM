@@ -1,11 +1,11 @@
 import { getRawDb } from "../../../../db";
-import { canUseSection, requireActor } from "../../../lib/admin-auth";
+import { canUseSection, requireActor, assertLegacyArchive } from "../../../lib/admin-auth";
 import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
 import { defaultChoices } from "../../../lib/workflow-options";
 
 export async function GET(request: Request) {
   try {
-    const actor=await requireActor(request), kind=new URL(request.url).searchParams.get("kind");
+    const actor=await requireActor(request), kind=new URL(request.url).searchParams.get("kind");assertLegacyArchive(actor);
     const section=kind==="documents"?"documents":kind==="finance_entries"?"expenses":"";
     if(!section||!canUseSection(actor,section))throw new HttpError(403,"Нет доступа");
     const db=getRawDb(), [folders, choices]=await Promise.all([
@@ -19,7 +19,7 @@ export async function GET(request: Request) {
 }
 export async function POST(request: Request) {
   try {
-    sameOrigin(request);const actor=await requireActor(request),body=await jsonBody(request,4000),kind=cleanText(body.kind,40,true);
+    sameOrigin(request);const actor=await requireActor(request);assertLegacyArchive(actor,true);const body=await jsonBody(request,4000),kind=cleanText(body.kind,40,true);
     if(!["documents","finance_entries"].includes(kind))throw new HttpError(400,"Неизвестный раздел");
     if(!canUseSection(actor,kind==="documents"?"documents":"expenses"))throw new HttpError(403,"Нет доступа");
     const db=getRawDb();

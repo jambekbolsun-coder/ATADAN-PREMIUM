@@ -19,7 +19,7 @@ import { canUseSection } from "../../lib/admin-auth";
 import { suggestedPriceUsd } from "../../lib/catalog";
 import { HttpError } from "../../lib/security";
 import type { Tractor } from "../../types";
-import { audit, isBoss, mediaUrl, newId, num, query, slugOf, text } from "./db-kit";
+import { audit, isBoss, mediaUrl, newId, num, query, safeJson, slugOf, text } from "./db-kit";
 
 const base = tractorsData as Tractor[];
 export const MODEL_STATUS: Record<string, { label: string; tone: "good" | "warn" | "mute" | "info" }> = {
@@ -30,8 +30,10 @@ export const MODEL_STATUS: Record<string, { label: string; tone: "good" | "warn"
 };
 export const CATEGORIES = ["Средний класс", "Тяжёлый класс", "Универсальные"];
 export const canCatalog = (a: Actor) => canUseSection(a, "catalog");
+/** Себестоимость модели меняют владелец, директор и бухгалтер (§7). */
+export const canModelCost = (a: Actor) => isBoss(a) || a.role === "accountant";
 
-export type AdminModel = Tractor & { status: NonNullable<Tractor["status"]>; custom: boolean; edited: boolean; stock: number; transit: number; reserved: number; sold: number; cost_minor: number | null; cost_version: number };
+export type AdminModel = Tractor & { status: NonNullable<Tractor["status"]>; custom: boolean; edited: boolean; stock: number; transit: number; reserved: number; sold: number; cost_minor: number | null; cost_version: number; usd_manual: number | null };
 
 function statusOf(t: Partial<Tractor>): AdminModel["status"] {
   return t.status === "draft" || t.status === "hidden" || t.status === "archived" ? t.status : "published";
@@ -60,15 +62,19 @@ export async function listModels(): Promise<AdminModel[]> {
   const seen = new Set<string>();
   const push = (t: Tractor, custom: boolean, edited: boolean) => {
     const s = u.get(t.slug), k = c.get(t.slug);
-    out.push({ ...t, approximatePriceUsd: t.approximatePriceUsd ?? suggestedPriceUsd(t.hp), status: statusOf(t), custom, edited, stock: s?.stock ?? 0, transit: s?.transit ?? 0, reserved: s?.reserved ?? 0, sold: s?.sold ?? 0, cost_minor: k ? Number(k.cost_minor) : null, cost_version: k?.version ?? 0 });
+    out.push({ ...t, usd_manual: t.approximatePriceUsd ?? null, approximatePriceUsd: t.approximatePriceUsd ?? suggestedPriceUsd(t.hp), status: statusOf(t), custom, edited, stock: s?.stock ?? 0, transit: s?.transit ?? 0, reserved: s?.reserved ?? 0, sold: s?.sold ?? 0, cost_minor: k ? Number(k.cost_minor) : null, cost_version: k?.version ?? 0 });
   };
   for (const t of base) {
     seen.add(t.slug);
     const o = ov.get(t.slug);
     if (o?.is_deleted) continue;
-    push(o ? { ...t, ...(JSON.parse(o.data_json) as Tractor) } : t, false, !!o);
+    push(o ? { ...t, ...safeJson<Partial<Tractor>>(o.data_json, {}) } : t, false, !!o);
   }
-  for (const o of ov.values()) if (!seen.has(o.slug) && !o.is_deleted) push(JSON.parse(o.data_json) as Tractor, true, true);
+  for (const o of ov.values()) {
+    if (seen.has(o.slug) || o.is_deleted) continue;
+    const t = safeJson<Tractor | null>(o.data_json, null);
+    if (t?.slug && t.model) push(t, true, true);
+  }
   return out.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0) || a.hp - b.hp || a.model.localeCompare(b.model));
 }
 
@@ -79,9 +85,9 @@ export async function getModel(slug: string) {
   const db = getRawDb();
   const [history, promos] = await Promise.all([
     db.prepare(`SELECT h.old_price, h.new_price, h.old_usd, h.new_usd, h.note, h.changed_at, s.display_name AS author FROM product_price_history h LEFT JOIN staff s ON s.id=h.changed_by WHERE h.slug=? ORDER BY h.changed_at DESC LIMIT 20`).bind(slug).all<{ old_price: number | null; new_price: number | null; old_usd: number | null; new_usd: number | null; note: string; changed_at: string; author: string | null }>(),
-    db.prepare(`SELECT id, title, status, data_json FROM admin_records WHERE kind='promotions' AND archived=0 AND (',' || replace(COALESCE(data_json::json->>'tractorSlugs',''),' ','') || ',') LIKE ?`).bind(`%,${slug},%`).all<{ id: string; title: string; status: string; data_json: string }>(),
+    db.prepare(`SELECT id, title, status, data_json FROM admin_records WHERE kind='promotions' AND archived=0 AND replace(data_json,' ','') LIKE ?`).bind(`%${slug}%`).all<{ id: string; title: string; status: string; data_json: string }>(),
   ]);
-  return { model: m, history: history.results, promotions: promos.results.map((p) => ({ id: p.id, title: p.title, status: p.status, ...(JSON.parse(p.data_json || "{}") as { startsAt?: string; endsAt?: string; discount?: string; discountType?: string }) })) };
+  return { model: m, history: history.results, promotions: promos.results.filter((p) => String(safeJson<{ tractorSlugs?: string }>(p.data_json, {}).tractorSlugs ?? "").split(",").map((x) => x.trim()).includes(slug)).map((p) => ({ id: p.id, title: p.title, status: p.status, ...safeJson<{ startsAt?: string; endsAt?: string; discount?: string; discountType?: string }>(p.data_json, {}) })) };
 }
 
 export type ModelInput = {
@@ -91,7 +97,7 @@ export type ModelInput = {
   recommended: boolean; popular: boolean; sortOrder: string;
   image: string; images: string[]; videoUrl: string;
   description: string; comfort: string; equipment: string; specs: { k: string; v: string }[];
-  status: string; priceNote?: string;
+  status: string; priceNote?: string; priceOnRequest?: boolean;
 };
 
 export async function saveModel(actor: Actor, input: ModelInput) {
@@ -136,21 +142,74 @@ export async function saveModel(actor: Actor, input: ModelInput) {
     const data: Tractor = {
       ...(before ?? {}),
       id: before?.id ?? slug, slug, model, hp, category: text(input.category, 60) || CATEGORIES[0], farmArea: text(input.farmArea, 60),
-      price, approximatePriceUsd: priceUsd ?? undefined, discountPercent: discount, promotionLabel: text(input.promotionLabel, 80) || null,
+      price, approximatePriceUsd: priceUsd ?? undefined, priceOnRequest: !!input.priceOnRequest, discountPercent: discount, promotionLabel: text(input.promotionLabel, 80) || null,
       inStock: false, recommended: !!input.recommended, popular: !!input.popular, status, sortOrder,
       image, images, videoUrl: videoUrl || null, description: text(input.description, 3000), comfort: text(input.comfort, 2000), equipment, specs,
     };
     // служебные поля списка не храним
-    for (const k of ["custom", "edited", "stock", "transit", "reserved", "sold", "cost_minor", "cost_version", "availableUnits"]) delete (data as Record<string, unknown>)[k];
+    for (const k of ["custom", "edited", "stock", "transit", "reserved", "sold", "cost_minor", "cost_version", "availableUnits", "usd_manual"]) delete (data as Record<string, unknown>)[k];
     await q(`INSERT INTO product_overrides(slug,data_json,is_deleted,updated_at) VALUES(?,?,0,CURRENT_TIMESTAMP)
       ON CONFLICT(slug) DO UPDATE SET data_json=excluded.data_json, is_deleted=0, updated_at=CURRENT_TIMESTAMP`, slug, JSON.stringify(data));
     if (original && original !== slug) await q("UPDATE product_overrides SET is_deleted=1, updated_at=CURRENT_TIMESTAMP WHERE slug=?", original);
-    const oldPrice = before ? before.price ?? null : null, oldUsd = before ? before.approximatePriceUsd ?? null : null;
+    const oldPrice = before ? before.price ?? null : null, oldUsd = before ? before.usd_manual : null;
     if (!before || oldPrice !== price || oldUsd !== (priceUsd ?? null)) {
       await q("INSERT INTO product_price_history(id,slug,old_price,new_price,old_usd,new_usd,note,changed_by) VALUES(?,?,?,?,?,?,?,?)", newId(), slug, oldPrice, price, oldUsd, priceUsd, text(input.priceNote, 300) || (before ? "" : "Модель добавлена"), actor.id);
     }
     await audit(q, actor, before ? "catalog.update" : "catalog.create", slug, `${model}: ${status}${price ? `, ${price} сом` : ""}${priceUsd ? `, $${priceUsd}` : ""}`);
     return slug;
+  });
+}
+
+/** Объект модели для записи: без служебных полей списка и без расчётной цены в долларах. */
+function plainModel(m: AdminModel): Tractor {
+  const { custom: _c, edited: _e, stock: _s, transit: _t, reserved: _r, sold: _so, cost_minor: _cm, cost_version: _cv, usd_manual, availableUnits: _a, ...data } = m;
+  void _c; void _e; void _s; void _t; void _r; void _so; void _cm; void _cv; void _a;
+  return { ...data, approximatePriceUsd: usd_manual ?? undefined };
+}
+
+export type PriceChange = { slug: string; price: string; usd: string; discount: string; cost: string; onRequest: boolean };
+
+/** Прайс одной таблицей: цены, скидки и себестоимость сразу по многим моделям. */
+export async function savePrices(actor: Actor, changes: PriceChange[], noteInput: string) {
+  const mayPrice = canCatalog(actor), mayCost = canModelCost(actor);
+  if (!mayPrice && !mayCost) throw new HttpError(403, "Нет доступа к прайсу");
+  if (!Array.isArray(changes) || !changes.length) throw new HttpError(400, "Нет изменений");
+  if (changes.length > 500) throw new HttpError(400, "Слишком много строк");
+  const models = new Map((await listModels()).map((m) => [m.slug, m]));
+  const note = text(noteInput, 300);
+  const parsed = changes.map((c) => {
+    const m = models.get(text(c.slug, 100));
+    if (!m) throw new HttpError(404, `Модель ${c.slug} не найдена`);
+    return {
+      m,
+      price: num(c.price, `Цена ${m.model}, сом`, { max: 1_000_000_000, int: true, optional: true }),
+      usd: num(c.usd, `Цена ${m.model}, $`, { min: 1000, max: 500_000, int: true, optional: true }),
+      discount: num(c.discount, `Скидка ${m.model}`, { max: 90, optional: true }),
+      cost: num(c.cost, `Себестоимость ${m.model}`, { max: 1_000_000_000, optional: true }),
+      onRequest: !!c.onRequest,
+    };
+  });
+  return getRawDb().transaction(async (client) => {
+    const q = query(client);
+    await q("SELECT pg_advisory_xact_lock(hashtext('catalog-models'))");
+    let prices = 0, costs = 0;
+    for (const { m, price, usd, discount, cost, onRequest } of parsed) {
+      const priceChanged = (m.price ?? null) !== price || m.usd_manual !== usd;
+      if (mayPrice && (priceChanged || (m.discountPercent ?? null) !== discount || !!m.priceOnRequest !== onRequest)) {
+        await q(`INSERT INTO product_overrides(slug,data_json,is_deleted,updated_at) VALUES(?,?,0,CURRENT_TIMESTAMP)
+          ON CONFLICT(slug) DO UPDATE SET data_json=excluded.data_json, is_deleted=0, updated_at=CURRENT_TIMESTAMP`, m.slug, JSON.stringify({ ...plainModel(m), price, approximatePriceUsd: usd ?? undefined, discountPercent: discount, priceOnRequest: onRequest }));
+        if (priceChanged) await q("INSERT INTO product_price_history(id,slug,old_price,new_price,old_usd,new_usd,note,changed_by) VALUES(?,?,?,?,?,?,?,?)", newId(), m.slug, m.price ?? null, price, m.usd_manual, usd, note, actor.id);
+        prices++;
+      }
+      const newCost = cost === null ? null : Math.round(cost * 100);
+      if (mayCost && newCost !== m.cost_minor) {
+        if (newCost === null) await q("DELETE FROM product_costs WHERE slug=?", m.slug);
+        else await q("INSERT INTO product_costs(slug,cost_minor,version) VALUES(?,?,1) ON CONFLICT(slug) DO UPDATE SET cost_minor=excluded.cost_minor, version=product_costs.version+1", m.slug, newCost);
+        costs++;
+      }
+    }
+    await audit(q, actor, "catalog.prices", "price-list", `Прайс: цены ${prices}, себестоимость ${costs}${note ? ` (${note})` : ""}`);
+    return { prices, costs };
   });
 }
 
@@ -162,8 +221,7 @@ export async function setModelStatus(actor: Actor, slug: string, status: string)
   if (status === "published" && !m.image) throw new HttpError(400, "Добавьте главное фото, потом публикуйте");
   return getRawDb().transaction(async (client) => {
     const q = query(client);
-    const { custom: _c, edited: _e, stock: _s, transit: _t, reserved: _r, sold: _so, cost_minor: _cm, cost_version: _cv, ...data } = m;
-    void _c; void _e; void _s; void _t; void _r; void _so; void _cm; void _cv;
+    const data = plainModel(m);
     await q(`INSERT INTO product_overrides(slug,data_json,is_deleted,updated_at) VALUES(?,?,0,CURRENT_TIMESTAMP)
       ON CONFLICT(slug) DO UPDATE SET data_json=excluded.data_json, updated_at=CURRENT_TIMESTAMP`, slug, JSON.stringify({ ...data, status }));
     await audit(q, actor, "catalog.status", slug, `${m.model}: ${MODEL_STATUS[m.status].label} → ${MODEL_STATUS[status].label}`);
@@ -172,7 +230,7 @@ export async function setModelStatus(actor: Actor, slug: string, status: string)
 
 /** Себестоимость модели для заказа под клиента (когда машины ещё нет на складе). */
 export async function saveModelCost(actor: Actor, slug: string, value: string, version: number) {
-  if (!isBoss(actor)) throw new HttpError(403, "Себестоимость меняют только владелец и директор");
+  if (!canModelCost(actor)) throw new HttpError(403, "Себестоимость меняют владелец, директор и бухгалтер");
   const cost = num(value, "Себестоимость, сом", { max: 1_000_000_000 })!;
   return getRawDb().transaction(async (client) => {
     const q = query(client);

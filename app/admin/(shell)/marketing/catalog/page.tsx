@@ -25,7 +25,7 @@ export default async function Catalog({ searchParams }: PageProps<"/admin/market
 
   return (
     <>
-      <PageHeader title="Каталог техники" subtitle="Модели на atadan.kg: цены, фото, характеристики и видимость. Наличие считается со склада." actions={<ButtonLink href="/admin/marketing/catalog/new" variant="primary"><Plus size={17} aria-hidden />Новая модель</ButtonLink>} />
+      <PageHeader title="Каталог техники" subtitle="Модели на atadan.kg: цены, фото, характеристики и видимость. Наличие считается со склада." actions={<><ButtonLink href="/admin/work/prices">Прайс и себестоимость</ButtonLink><ButtonLink href="/admin/marketing/catalog/new" variant="primary"><Plus size={17} aria-hidden />Новая модель</ButtonLink></>} />
       <nav className="ax-tabs" aria-label="Статус">
         {TABS.map((t) => <Link key={t.key} href={`/admin/marketing/catalog${t.key ? `?status=${t.key}` : ""}`} aria-current={tab === t.key ? "page" : undefined}>{t.label}<span>{counts[t.key]}</span></Link>)}
       </nav>

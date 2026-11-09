@@ -14,7 +14,7 @@ export default async function NewModel() {
       <PageHeader title="Новая модель" subtitle="Сначала сохраняется черновиком. На сайт попадёт, когда добавите фото и нажмёте «показать на сайте»." />
       <ModelForm
         categories={CATEGORIES}
-        initial={{ slug: "", model: "", hp: "", category: CATEGORIES[0], farmArea: "", price: "", priceUsd: "", discountPercent: "", promotionLabel: "", recommended: false, popular: false, sortOrder: "0", image: "", images: [], videoUrl: "", description: "", comfort: "", equipment: "", specs: SPECS.map((k) => ({ k, v: "" })), status: "draft" }}
+        initial={{ slug: "", model: "", hp: "", category: CATEGORIES[0], farmArea: "", price: "", priceUsd: "", discountPercent: "", promotionLabel: "", recommended: false, popular: false, sortOrder: "0", image: "", images: [], videoUrl: "", description: "", comfort: "", equipment: "", specs: SPECS.map((k) => ({ k, v: "" })), status: "draft", priceOnRequest: false }}
       />
     </div>
   );

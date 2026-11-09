@@ -3,6 +3,7 @@ import { visibleSettings } from "../../_lib/nav";
 import { ROLE_LABEL } from "../../_lib/roles";
 import { Avatar, Grouped, PageHeader, RowLink } from "../../_ui/ui";
 import { LogoutButton } from "../../_ui/client";
+import { InstallCard } from "../../_ui/install";
 import Link from "next/link";
 
 export const metadata = { title: "Настройки" };
@@ -25,6 +26,7 @@ export default async function Settings() {
           {g.items.map((i) => <RowLink key={i.href} href={i.href} icon={i.icon} tone={i.tone} label={i.label} hint={i.hint} />)}
         </Grouped>
       ))}
+      <InstallCard />
       <LogoutButton className="ax-btn-block" label="Выйти из аккаунта" />
     </div>
   );

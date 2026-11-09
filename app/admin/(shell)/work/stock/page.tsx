@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { Search, Truck } from "lucide-react";
+import { Plus, Search, Truck } from "lucide-react";
 import { requireSection, seesCost } from "../../../_lib/session";
-import { listUnits, UNIT_STATUS, UNIT_VIEWS, canLogistics } from "../../../_lib/stock";
+import { canIntake, listUnits, UNIT_STATUS, UNIT_VIEWS, canLogistics } from "../../../_lib/stock";
 import { money } from "../../../_lib/format";
 import { Badge, ButtonLink, Empty, PageHeader } from "../../../_ui/ui";
 
@@ -21,7 +21,7 @@ export default async function Stock({ searchParams }: PageProps<"/admin/work/sto
       <PageHeader
         title="Техника"
         subtitle="Каждая машина по VIN: где она, сколько стоила, кому продана"
-        actions={canLogistics(actor) ? <ButtonLink href="/admin/work/logistics" variant="primary"><Truck size={17} aria-hidden />Поставки и приём</ButtonLink> : null}
+        actions={<>{canIntake(actor) ? <ButtonLink href="/admin/work/stock/new" variant="primary"><Plus size={17} aria-hidden />Приход техники</ButtonLink> : null}{canLogistics(actor) ? <ButtonLink href="/admin/work/logistics"><Truck size={17} aria-hidden />Поставки и приём</ButtonLink> : null}</>}
       />
       <nav className="ax-tabs" aria-label="Статус техники">
         {UNIT_VIEWS.map((v) => <Link key={v.key} href={href(v.key)} aria-current={view === v.key || (!UNIT_VIEWS.some((x) => x.key === view) && v.key === "all") ? "page" : undefined}>{v.label}<span>{counts[v.key] ?? 0}</span></Link>)}

@@ -38,7 +38,7 @@ export async function POST(request: Request) {
     sameOrigin(request);
     const actor = await requireActor(request);
     const boss = actor.role === "owner" || actor.role === "director";
-    if (!(boss || actor.role === "accountant" || canUseSection(actor, "inventory-units") || canUseSection(actor, "catalog"))) throw new HttpError(403, "Нет доступа к импорту запчастей");
+    if (!(boss || actor.role === "accountant" || (actor.role !== "manager" && canUseSection(actor, "catalog")))) throw new HttpError(403, "Нет доступа к импорту запчастей");
     const form = await request.formData();
     const action = String(form.get("action") ?? "");
     const mode = form.get("mode") === "update" ? "update" : "skip";
@@ -82,7 +82,14 @@ export async function POST(request: Request) {
         if (v.qty > 0) await q("INSERT INTO part_movements(id,part_id,kind,qty_delta,qty_after,unit_cost_minor,note,created_by) VALUES(?,?,'count',?,?,?,?,?)", crypto.randomUUID(), id, v.qty, v.qty, v.cost, `Начальный остаток (импорт ${file.name})`, actor.id);
       }
       for (const v of update) {
-        await q("UPDATE parts SET name=?, category=?, unit=?, price_minor=CASE WHEN ?>0 THEN ? ELSE price_minor END, min_qty=?, location=CASE WHEN ?<>'' THEN ? ELSE location END, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(sku)=?", v.name, v.category, v.unit, v.price, v.price, v.min, v.location, v.location, actor.id, v.sku);
+        // обновляем только те колонки, которые есть в файле: файл «артикул + цена» не должен стирать остальное
+        const set: string[] = ["name=?"], args: unknown[] = [v.name];
+        if (keys.includes("category")) { set.push("category=?"); args.push(v.category); }
+        if (keys.includes("unit")) { set.push("unit=?"); args.push(v.unit); }
+        if (keys.includes("price") && v.price > 0) { set.push("price_minor=?"); args.push(v.price); }
+        if (keys.includes("min")) { set.push("min_qty=?"); args.push(v.min); }
+        if (keys.includes("location") && v.location) { set.push("location=?"); args.push(v.location); }
+        await q(`UPDATE parts SET ${set.join(", ")}, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE upper(sku)=?`, ...args, actor.id, v.sku);
       }
       await q("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)", crypto.randomUUID(), actor.id, "Импорт запчастей", file.name.slice(0, 200), `создано ${create.length}, обновлено ${update.length}, пропущено ${skipped}`);
     });

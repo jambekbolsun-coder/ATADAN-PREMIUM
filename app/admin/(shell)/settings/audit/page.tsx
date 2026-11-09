@@ -11,7 +11,7 @@ export default async function Audit({ searchParams }: PageProps<"/admin/settings
   await requireSection("/admin/settings/audit");
   const sp = await searchParams;
   const str = (k: string) => (typeof sp[k] === "string" ? String(sp[k]).slice(0, 80) : "");
-  const page = Math.max(1, Number(str("page")) || 1);
+  const page = Math.max(1, Math.min(500, Number(str("page")) || 1));
   const where = ["1=1"], args: unknown[] = [];
   if (str("who")) { where.push("l.actor_id=?"); args.push(str("who")); }
   if (str("q")) { const like = `%${str("q").toLowerCase().replace(/[%_\\]/g, "")}%`; where.push("(lower(l.action) LIKE ? OR lower(l.detail) LIKE ? OR lower(l.entity_id) LIKE ?)"); args.push(like, like, like); }

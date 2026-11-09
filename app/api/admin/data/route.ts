@@ -2,6 +2,7 @@ import { getRawDb } from "../../../../db";
 import { canUseSection, requireActor } from "../../../lib/admin-auth";
 import { normalizePhone, normalizeVin, somToMinor } from "../../../lib/business";
 import { auditStatement } from "../../../lib/crm";
+import { getCatalog } from "../../../lib/catalog";
 import { cleanText, fail, HttpError, jsonBody, sameOrigin } from "../../../lib/security";
 
 export const runtime = "nodejs";
@@ -178,7 +179,8 @@ export async function POST(request: Request) {
     const { action, kind, rows, filename } = await importPayload(request);
     if (action !== "validate_import" && action !== "commit_import") throw new HttpError(400, "Неизвестное действие");
     if (!new Set(["customers", "inventory"]).has(kind)) throw new HttpError(400, "Импорт доступен для клиентов и склада");
-    if (!canUseSection(actor, kind === "customers" ? "client-base" : "inventory-units")) throw new HttpError(403, "Нет доступа к импорту");
+    if (!["owner", "director", "accountant"].includes(actor.role) || !canUseSection(actor, kind === "customers" ? "client-base" : "inventory-units")) throw new HttpError(403, "Загружать файлы могут владелец, директор и бухгалтер");
+    const knownSlugs = kind === "inventory" ? new Set((await getCatalog(true)).map((t) => t.slug)) : null;
 
     const required = kind === "customers" ? ["name", "phone"] : ["vin", "model", "tractorSlug"];
     const available = new Set(rows.flatMap((row) => Object.keys(row)));
@@ -202,7 +204,11 @@ export async function POST(request: Request) {
           const vin = normalizeVin(row.vin);
           if (seen.has(vin)) throw new Error("Дубликат VIN в файле");
           seen.add(vin);
-          valid.push({ __row: sourceRow, vin, model: cleanText(row.model, 120, true), tractorSlug: cleanText(row.tractorSlug, 120, true), purchaseCostMinor: somToMinor(Number(row.purchaseCost || 0)), landedCostMinor: somToMinor(Number(row.expenses || 0)), listPriceMinor: somToMinor(Number(row.salePrice || 0)), location: cleanText(row.location ?? "", 200) });
+          const tractorSlug = cleanText(row.tractorSlug, 120, true);
+          if (knownSlugs && !knownSlugs.has(tractorSlug)) throw new Error(`Модели с адресом «${tractorSlug}» нет в каталоге`);
+          const purchaseCostMinor = somToMinor(Number(row.purchaseCost || 0));
+          // полная себестоимость = закупка + расходы (так считают продажи и маржа)
+          valid.push({ __row: sourceRow, vin, model: cleanText(row.model, 120, true), tractorSlug, purchaseCostMinor, landedCostMinor: purchaseCostMinor + somToMinor(Number(row.expenses || 0)), listPriceMinor: somToMinor(Number(row.salePrice || 0)), location: cleanText(row.location ?? "", 200) });
         }
       } catch (error) { errors.push({ row: sourceRow, error: error instanceof Error ? error.message : "Некорректная строка" }); }
     }
@@ -225,8 +231,8 @@ export async function POST(request: Request) {
       const id = crypto.randomUUID();
       if (kind === "customers") statements.push(db.prepare("INSERT INTO crm_customers(id,name,phone,normalized_phone,email,region,source,assigned_to) VALUES(?,?,?,?,?,?,?,?)").bind(id, row.name, row.phone, row.normalizedPhone, row.email, row.region, row.source, actor.id));
       else {
-        const data = { vin: row.vin, model: row.model, tractorSlug: row.tractorSlug, unitStatus: "На складе", purchaseCost: Number(row.purchaseCostMinor) / 100, expenses: Number(row.landedCostMinor) / 100, salePrice: Number(row.listPriceMinor) / 100, location: row.location };
-        statements.push(db.prepare("INSERT INTO inventory_units_v2(id,vin,tractor_slug,model,status,purchase_cost_minor,landed_cost_minor,list_price_minor,location,responsible_id,created_by,updated_by) VALUES(?,?,?,?,'stock',?,?,?,?,?,?,?)").bind(id, row.vin, row.tractorSlug, row.model, row.purchaseCostMinor, row.landedCostMinor, row.listPriceMinor, row.location, actor.id, actor.id, actor.id));
+        const data = { vin: row.vin, model: row.model, tractorSlug: row.tractorSlug, unitStatus: "На складе", purchaseCost: Number(row.purchaseCostMinor) / 100, expenses: (Number(row.landedCostMinor) - Number(row.purchaseCostMinor)) / 100, salePrice: Number(row.listPriceMinor) / 100, location: row.location };
+        statements.push(db.prepare("INSERT INTO inventory_units_v2(id,vin,tractor_slug,model,status,purchase_cost_minor,landed_cost_minor,list_price_minor,location,responsible_id,created_by,updated_by,received_at) VALUES(?,?,?,?,'stock',?,?,?,?,?,?,?,CURRENT_TIMESTAMP)").bind(id, row.vin, row.tractorSlug, row.model, row.purchaseCostMinor, row.landedCostMinor, row.listPriceMinor, row.location, actor.id, actor.id, actor.id));
         statements.push(db.prepare("INSERT INTO admin_records(id,kind,title,status,category,data_json,created_by,updated_by) VALUES(?,'inventory_units',?,'active','Импорт',?,?,?)").bind(id, `${row.model} · ${row.vin}`, JSON.stringify(data), actor.id, actor.id));
       }
     }

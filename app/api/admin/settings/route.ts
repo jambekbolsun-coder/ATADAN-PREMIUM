@@ -1,15 +1,15 @@
 import { getRawDb } from "../../../../db";
-import { requireActor } from "../../../lib/admin-auth";
+import { requireActor, assertLegacyArchive } from "../../../lib/admin-auth";
 import { getSiteSettings } from "../../../lib/site-settings";
 import { defaultSettings } from "../../../lib/site-settings-types";
 import { copy } from "../../../data/site-copy";
 import { auditStatement } from "../../../lib/crm";
 import { cleanText,fail,HttpError,jsonBody,safeMedia,sameOrigin } from "../../../lib/security";
 import type { Locale } from "../../../types";
-export async function GET(request:Request){try{await requireActor(request,true);return Response.json(await getSiteSettings(),{headers:{"Cache-Control":"no-store"}});}catch(e){return fail(e);}}
+export async function GET(request:Request){try{assertLegacyArchive(await requireActor(request,true));return Response.json(await getSiteSettings(),{headers:{"Cache-Control":"no-store"}});}catch(e){return fail(e);}}
 export async function POST(request:Request){
   try{
-    sameOrigin(request);const actor=await requireActor(request,true),body=await jsonBody(request,300000);
+    sameOrigin(request);const actor=await requireActor(request,true);assertLegacyArchive(actor,true);const body=await jsonBody(request,300000);
     const value=body.settings as typeof defaultSettings;if(!value||typeof value!=="object")throw new HttpError(400,"Некорректные настройки");
     const settings={...defaultSettings,phone:cleanText(value.phone,40,true),address:cleanText(value.address,300,true),instagram:cleanText(value.instagram,300,true),email:cleanText(value.email??"",160),workingHours:cleanText(value.workingHours??"",160),annualRate:value.annualRate,downPercent:value.downPercent,fee:value.fee,method:value.method,translations:{} as typeof defaultSettings.translations,media:{} as Record<string,string>};
     if(settings.email && !/^\S+@\S+\.\S+$/.test(settings.email))throw new HttpError(400,"Проверьте email");

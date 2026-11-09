@@ -15,6 +15,7 @@ import type { Actor } from "../../lib/admin-auth";
 import { normalizePhone } from "../../lib/business";
 import { HttpError } from "../../lib/security";
 import { getCatalog, suggestedPriceUsd } from "../../lib/catalog";
+import { getUsdKgsRate } from "../../lib/exchange-rate";
 import { notify } from "./db-kit";
 
 export type SaleCurrency = "USD" | "KGS";
@@ -93,9 +94,18 @@ const toMinor = (value: unknown, label: string, { allowZero = false } = {}) => {
 };
 const rate = (value: unknown) => {
   const n = Number(String(value ?? "").replace(",", "."));
-  if (!Number.isFinite(n) || n < 1 || n > 1000) throw new HttpError(400, "Курс доллара: проверьте значение (сколько сомов за $1)");
+  if (!Number.isFinite(n) || n < 30 || n > 300) throw new HttpError(400, "Курс доллара: проверьте значение (сколько сомов за $1)");
   return Math.round(n * 10000) / 10000;
 };
+/** Официальный курс для проверки. Владельцу не ограничиваем; если НБКР недоступен, работает только общий диапазон. */
+async function marketRate(actor: Actor) {
+  return actor.role === "owner" ? null : ((await getUsdKgsRate())?.value ?? null);
+}
+function assertRate(actor: Actor, fx: number, market: number | null) {
+  if (!market) return;
+  const tolerance = isCompany(actor) ? 0.15 : 0.05;
+  if (Math.abs(fx - market) / market > tolerance) throw new HttpError(400, `Курс ${fx} слишком далёк от курса НБКР (${market.toFixed(2)}). Отклонение больше ${Math.round(tolerance * 100)}% может подтвердить ${isCompany(actor) ? "только владелец" : "бухгалтер или руководство"}`);
+}
 const text = (value: unknown, max: number) => String(value ?? "").trim().slice(0, max);
 const dateOnly = (value: unknown, label: string) => {
   const s = String(value ?? "");
@@ -261,29 +271,37 @@ export async function getSale(actor: Actor, saleId: string) {
 /** Машины, которые можно продать: не зарезервированы, не проданы. В пути и на таможне тоже можно (предоплата). */
 export async function sellableUnits() {
   const { results } = await getRawDb()
-    .prepare(`SELECT u.id, u.vin, u.model, u.tractor_slug, u.status, u.list_price_minor, CASE WHEN u.landed_cost_minor>0 THEN u.landed_cost_minor ELSE u.purchase_cost_minor END AS cost_minor
+    .prepare(`SELECT u.id, u.vin, u.model, u.tractor_slug, u.status, u.list_price_minor, COALESCE(NULLIF(u.landed_cost_minor,0), NULLIF(u.purchase_cost_minor,0), (SELECT pc.cost_minor FROM product_costs pc WHERE pc.slug=u.tractor_slug), 0) AS cost_minor
       FROM inventory_units_v2 u
       WHERE u.archived=0 AND u.status IN ('stock','ordered','production','transit','customs') AND u.reserved_sale_id IS NULL
         AND NOT EXISTS (SELECT 1 FROM sale_order_items i WHERE i.inventory_unit_id=u.id AND i.active=1)
       ORDER BY CASE u.status WHEN 'stock' THEN 0 ELSE 1 END, u.model, u.vin LIMIT 500`)
     .all<{ id: string; vin: string; model: string; tractor_slug: string; status: string; list_price_minor: number; cost_minor: number }>();
-  return results.map((u) => ({ ...u, list_price_minor: Number(u.list_price_minor), cost_minor: Number(u.cost_minor) }));
+  // своя цена машины важнее; если её нет, берём цену модели из прайса
+  const [models, fx] = await Promise.all([catalogModels(), getUsdKgsRate()]);
+  const bySlug = new Map(models.map((m) => [m.slug, m]));
+  return results.map((u) => {
+    const m = bySlug.get(u.tractor_slug);
+    const list = Number(u.list_price_minor) || m?.priceKgs || Math.round((m?.priceUsd ?? 0) * 100 * (fx?.value ?? 87.5));
+    return { ...u, list_price_minor: list, cost_minor: Number(u.cost_minor) };
+  });
 }
 
 export async function catalogModels() {
-  const catalog = await getCatalog();
-  return catalog.map((t) => ({ slug: t.slug, model: t.model, hp: t.hp, priceUsd: t.approximatePriceUsd ?? suggestedPriceUsd(t.hp) }));
+  // черновики и скрытые с сайта модели тоже можно заказывать и продавать; архивные нельзя
+  const catalog = (await getCatalog(true)).filter((t) => t.status !== "archived");
+  return catalog.map((t) => ({ slug: t.slug, model: t.model, hp: t.hp, priceUsd: t.approximatePriceUsd ?? suggestedPriceUsd(t.hp), priceKgs: t.price ? Math.round(t.price * (1 - (t.discountPercent ?? 0) / 100) * 100) : 0 }));
 }
 
 export async function moneyAccounts() {
-  const { results } = await getRawDb().prepare("SELECT id, name, currency, account_type FROM financial_accounts WHERE active=1 AND account_type IN ('cash','bank') ORDER BY account_type, name").all<{ id: string; name: string; currency: string; account_type: string }>();
+  const { results } = await getRawDb().prepare("SELECT id, name, currency, account_type FROM financial_accounts WHERE active=1 AND account_type IN ('cash','bank') ORDER BY CASE account_type WHEN 'cash' THEN 0 ELSE 1 END, name").all<{ id: string; name: string; currency: string; account_type: string }>();
   return results;
 }
 
 // ───────────────────────── оформление ─────────────────────────
 export type NewSaleInput = {
   customerId?: string;
-  customer?: { name: string; phone: string; region?: string };
+  customer?: { name?: string; phone?: string; region?: string; passport?: string; address?: string };
   leadId?: string;
   currency: SaleCurrency;
   fxRate: number | string;
@@ -304,6 +322,7 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
   const policy = await salesPolicy();
   const currency: SaleCurrency = input.currency === "KGS" ? "KGS" : "USD";
   const fx = currency === "KGS" ? 1 : rate(input.fxRate);
+  if (currency === "USD") assertRate(actor, fx, await marketRate(actor));
   if (!METHODS.includes(input.method)) throw new HttpError(400, "Выберите способ оплаты");
   const method = input.method;
   const bankName = text(input.bankName, 120);
@@ -331,10 +350,19 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
       if (existing) {
         customerId = existing.id;
         customerNote = `Клиент с телефоном +${phone} уже был в базе (${existing.name}), продажа оформлена на него`;
+        // заявка с сайта создаёт клиента заранее: исправленное менеджером имя должно попасть в договор
+        if (input.leadId && name !== existing.name) {
+          await q("UPDATE crm_customers SET name=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", name, existing.id);
+          customerNote = "";
+        }
       } else {
         customerId = id();
-        await q("INSERT INTO crm_customers(id,name,phone,region,source,normalized_phone,assigned_to) VALUES(?,?,?,?,?,?,?)", customerId, name, `+${phone}`, text(input.customer?.region, 80), input.leadId ? "website" : "office", phone, actor.id);
+        const [fromLead] = input.leadId ? await q<{ source: string }>("SELECT source FROM leads WHERE id=?", text(input.leadId, 100)) : [];
+        await q("INSERT INTO crm_customers(id,name,phone,region,source,normalized_phone,assigned_to) VALUES(?,?,?,?,?,?,?)", customerId, name, `+${phone}`, text(input.customer?.region, 80), fromLead?.source || "office", phone, actor.id);
       }
+    }
+    if (text(input.customer?.passport, 200) || text(input.customer?.address, 300)) {
+      await q("UPDATE crm_customers SET passport=COALESCE(NULLIF(?,''),passport), address=COALESCE(NULLIF(?,''),address), updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", text(input.customer?.passport, 200), text(input.customer?.address, 300), customerId);
     }
 
     // 2. Позиции: блокируем машины, проверяем, что их никто не продал раньше
@@ -345,13 +373,15 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
       if (item.kind === "unit") {
         const unitId = text(item.unitId, 100);
         const [u] = await q<{ id: string; vin: string; model: string; tractor_slug: string; status: string; reserved_sale_id: string | null; list_price_minor: number; cost: number }>(
-          "SELECT id, vin, model, tractor_slug, status, reserved_sale_id, list_price_minor, CASE WHEN landed_cost_minor>0 THEN landed_cost_minor ELSE purchase_cost_minor END AS cost FROM inventory_units_v2 WHERE id=? AND archived=0 FOR UPDATE",
+          "SELECT id, vin, model, tractor_slug, status, reserved_sale_id, list_price_minor, COALESCE(NULLIF(landed_cost_minor,0), NULLIF(purchase_cost_minor,0), (SELECT pc.cost_minor FROM product_costs pc WHERE pc.slug=tractor_slug), 0) AS cost FROM inventory_units_v2 WHERE id=? AND archived=0 FOR UPDATE",
           unitId,
         );
         if (!u) throw new HttpError(404, "Машина не найдена на складе");
         if (u.reserved_sale_id || ["reserved", "sold", "delivered"].includes(u.status)) throw new HttpError(409, `VIN ${u.vin} уже зарезервирован или продан. Выберите другую машину`);
         if (rows.some((r) => r.unitId === u.id)) throw new HttpError(400, `VIN ${u.vin} добавлен дважды`);
-        const listSale = currency === "KGS" ? Number(u.list_price_minor) : Math.round(Number(u.list_price_minor) / fx);
+        const m0 = catalog.get(u.tractor_slug);
+        const listKgs = Number(u.list_price_minor) || m0?.priceKgs || Math.round((m0?.priceUsd ?? 0) * 100 * (currency === "USD" ? fx : 87.5));
+        const listSale = currency === "KGS" ? listKgs : Math.round(listKgs / fx);
         rows.push({ kind: "unit", unitId: u.id, slug: u.tractor_slug, title: `${u.model} · VIN ${u.vin}`, qty: 1, price, list: listSale, cost: Number(u.cost) });
         if (!Number(u.cost)) unknownCost = true;
       } else if (item.kind === "model_order") {
@@ -359,8 +389,10 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
         if (!m) throw new HttpError(400, "Выберите модель из каталога");
         const qty = Math.max(1, Math.min(50, Math.round(Number(item.qty) || 1)));
         const listUsd = m.priceUsd * 100;
-        rows.push({ kind: "model_order", unitId: null, slug: m.slug, title: `${m.model} · под заказ`, qty, price, list: currency === "USD" ? listUsd : Math.round(listUsd * fx), cost: 0 });
-        unknownCost = true;
+        const [pc] = await q<{ cost_minor: number }>("SELECT cost_minor FROM product_costs WHERE slug=?", m.slug);
+        const modelCost = Number(pc?.cost_minor ?? 0);
+        rows.push({ kind: "model_order", unitId: null, slug: m.slug, title: `${m.model} · под заказ`, qty, price, list: currency === "USD" ? listUsd : Math.round(listUsd * fx), cost: modelCost });
+        if (!modelCost) unknownCost = true;
       } else if (item.kind === "part" && item.partId) {
         // запчасть со склада: блокируем строку, проверяем остаток; списание ниже, вместе с продажей
         const qty = Math.max(1, Math.min(10_000, Math.round(Number(item.qty) || 1)));
@@ -385,8 +417,10 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
     if (total <= 0) throw new HttpError(400, "Сумма продажи должна быть больше нуля");
 
     // 3. Цена не ниже себестоимости (решение владельца от 05.11.2026)
-    const belowCostReason = text(input.belowCostReason, 500);
-    if (costKgs > 0 && toKgs(total, currency, fx) < costKgs) {
+    // проверяем каждую позицию: дорогая запчасть не должна прикрывать машину, проданную в убыток
+    const isBelowCost = rows.some((r) => r.cost > 0 && toKgs(r.price, currency, fx) < r.cost);
+    const belowCostReason = isBelowCost ? text(input.belowCostReason, 500) : "";
+    if (isBelowCost) {
       if (policy.belowCost === "nobody" || actor.role !== "owner") throw new HttpError(409, "Цена ниже допустимой: продать дешевле себестоимости может только владелец, с причиной");
       if (belowCostReason.length < 5) throw new HttpError(400, "Цена ниже себестоимости: укажите причину (не короче 5 символов)");
     }
@@ -425,8 +459,9 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
     const number = await nextNumber(q);
     const leadId = text(input.leadId, 100) || null;
     if (leadId) {
-      const [lead] = await q<{ id: string; sale_id: string | null }>("SELECT id, sale_id FROM leads WHERE id=? FOR UPDATE", leadId);
+      const [lead] = await q<{ id: string; sale_id: string | null; assigned_to: string | null }>("SELECT id, sale_id, assigned_to FROM leads WHERE id=? FOR UPDATE", leadId);
       if (!lead) throw new HttpError(404, "Заявка не найдена");
+      if (!isCompany(actor) && lead.assigned_to && lead.assigned_to !== actor.id) throw new HttpError(403, "Эта заявка закреплена за другим менеджером");
       if (lead.sale_id) throw new HttpError(409, "По этой заявке продажа уже оформлена");
     }
     await q(
@@ -457,6 +492,48 @@ export async function createSale(actor: Actor, input: NewSaleInput) {
     if (belowCostReason) await notify(q, { topic: "approvals", priority: "high", title: `Продажа ${number} ниже себестоимости`, body: belowCostReason, url: `/admin/work/sales/${saleId}`, exclude: actor.id, entity: { type: "sale", id: saleId } });
     return { id: saleId, number };
   });
+}
+
+export type QuickSaleInput = {
+  customerId?: string;
+  customer?: NewSaleInput["customer"];
+  unitId: string;
+  currency: SaleCurrency;
+  fxRate: string | number;
+  price: string | number;
+  accountId?: string;
+  paid?: string | number;
+  deliverNow?: boolean;
+  belowCostReason?: string;
+};
+
+/** Быстрая продажа машины со склада: оформление, оплата и выдача одним действием. */
+export async function quickSale(actor: Actor, input: QuickSaleInput) {
+  assertSeller(actor);
+  const currency: SaleCurrency = input.currency === "USD" ? "USD" : "KGS";
+  const total = toMinor(input.price, "Цена");
+  const paid = input.paid === undefined || input.paid === "" ? 0 : toMinor(input.paid, "Сумма оплаты", { allowZero: true });
+  let method: PaymentMethod = "full", advance: string | undefined, payCurrency: SaleCurrency = currency;
+  if (paid) {
+    const account = (await moneyAccounts()).find((a) => a.id === text(input.accountId, 100));
+    if (!account) throw new HttpError(400, "Выберите кассу или счёт");
+    payCurrency = account.currency === "USD" ? "USD" : "KGS";
+    const fx = payCurrency !== currency || payCurrency === "USD" ? rate(input.fxRate) : 1;
+    const inSale = convertPayment(paid, payCurrency, currency, fx).sale;
+    const tolerance = payCurrency === currency ? 0 : convertPayment(100, payCurrency, currency, fx).sale;
+    if (inSale > total + tolerance) throw new HttpError(400, "Оплата больше цены");
+    if (inSale < total - tolerance) { method = "prepay"; advance = String(inSale / 100); }
+  }
+  if (input.deliverNow && (!paid || method !== "full")) throw new HttpError(400, "Выдать сразу можно только при полной оплате. Выдачу в долг разрешает владелец в карточке продажи");
+  const created = await createSale(actor, { customerId: input.customerId, customer: input.customer, currency, fxRate: currency === "USD" ? input.fxRate : 1, method, advance, items: [{ kind: "unit", unitId: input.unitId, price: input.price }], belowCostReason: input.belowCostReason });
+  // продажа уже записана: если оплата или выдача не пройдут, менеджер завершит их в карточке
+  try {
+    if (paid) await addPayment(actor, created.id, { payer: "client", accountId: text(input.accountId, 100), currency: payCurrency, amount: input.paid as string | number, fxRate: input.fxRate, paidAt: new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Bishkek" }).format(new Date()), method: "cash" });
+    if (input.deliverNow) await deliver(actor, created.id);
+    return { ...created, partial: false };
+  } catch {
+    return { ...created, partial: true };
+  }
 }
 
 // ───────────────────────── операции с продажей ─────────────────────────
@@ -496,6 +573,7 @@ export function convertPayment(amountMinor: number, payCurrency: SaleCurrency, s
 
 export async function addPayment(actor: Actor, saleId: string, input: PaymentInput) {
   if (!canMoney(actor) && actor.role !== "manager") throw new HttpError(403, "Платежи записывают бухгалтер, менеджер, директор и владелец");
+  const market = await marketRate(actor);
   return getRawDb().transaction(async (client) => {
     const q = query(client);
     const s = await lockSale(q, actor, saleId);
@@ -510,8 +588,13 @@ export async function addPayment(actor: Actor, saleId: string, input: PaymentInp
     const amount = toMinor(input.amount, "Сумма платежа");
     const needsRate = currency !== s.currency || currency === "USD";
     const fx = needsRate ? rate(input.fxRate) : 1;
-    const { kgs, sale } = convertPayment(amount, currency, s.currency, fx);
+    if (needsRate) assertRate(actor, fx, market);
+    const converted = convertPayment(amount, currency, s.currency, fx);
+    const kgs = converted.kgs;
+    let sale = converted.sale;
     const paid = await paidOf(q, s.id);
+    // разница округления при пересчёте валют не должна оставлять копеечный долг или блокировать платёж
+    if (currency !== s.currency && Math.abs(sale - (s.total_minor - paid)) <= convertPayment(100, currency, s.currency, fx).sale) sale = s.total_minor - paid;
     if (paid + sale > s.total_minor) throw new HttpError(409, `Платёж больше остатка по продаже. Осталось оплатить: ${((s.total_minor - paid) / 100).toLocaleString("ru-RU")} ${s.currency === "USD" ? "$" : "с"}`);
     const paidAt = dateOnly(input.paidAt, "Дата платежа");
     if (new Date(paidAt) > new Date(addDays(1))) throw new HttpError(400, "Дата платежа не может быть в будущем");
@@ -541,6 +624,11 @@ export async function voidPayment(actor: Actor, paymentId: string, reason: strin
     if (!p) throw new HttpError(404, "Платёж не найден");
     if (p.status === "void") throw new HttpError(409, "Платёж уже сторнирован");
     const s = await lockSale(q, actor, p.sale_id);
+    if (p.direction === "out" && s.status === "cancelled") throw new HttpError(409, "Продажа отменена: возврат сторнировать нельзя");
+    if (p.direction === "out") {
+      const [row] = await q<{ amount_sale_minor: number }>("SELECT amount_sale_minor FROM sale_payments WHERE id=?", p.id);
+      if ((await paidOf(q, s.id)) + Number(row.amount_sale_minor) > s.total_minor) throw new HttpError(409, "После сторно оплата превысит сумму продажи");
+    } else await assertCash(q, actor, p.account_id, Number(p.amount_minor));
     const txId = id();
     await q("INSERT INTO account_transactions(id,account_id,direction,amount_minor,category,payment_id,occurred_at,description,created_by) VALUES(?,?,?,?, 'Сторно оплаты', ?, CURRENT_TIMESTAMP, ?, ?)", txId, p.account_id, p.direction === "in" ? "out" : "in", p.amount_minor, p.id, `Сторно платежа по продаже ${s.number}: ${why}`, actor.id);
     await q("UPDATE sale_payments SET status='void', void_reason=?, void_transaction_id=? WHERE id=?", why, txId, p.id);
@@ -554,17 +642,27 @@ export async function refund(actor: Actor, saleId: string, input: { accountId: s
   if (!isCompany(actor)) throw new HttpError(403, "Возврат оформляет бухгалтер, директор или владелец");
   const why = text(input.reason, 500);
   if (why.length < 5) throw new HttpError(400, "Укажите причину возврата");
+  const market = await marketRate(actor);
   return getRawDb().transaction(async (client) => {
     const q = query(client);
     const s = await lockSale(q, actor, saleId);
+    if (s.status !== "booked" && actor.role !== "owner") throw new HttpError(403, "После выдачи деньги возвращает только владелец");
     const [account] = await q<{ id: string; currency: string; name: string }>("SELECT id, currency, name FROM financial_accounts WHERE id=? AND active=1 AND account_type IN ('cash','bank')", text(input.accountId, 100));
     if (!account) throw new HttpError(400, "Выберите кассу или счёт");
     const currency: SaleCurrency = input.currency === "USD" ? "USD" : "KGS";
     if (account.currency !== currency) throw new HttpError(400, `«${account.name}» ведётся в ${account.currency}`);
     const amount = toMinor(input.amount, "Сумма возврата");
-    const fx = currency !== s.currency || currency === "USD" ? rate(input.fxRate) : 1;
-    const { kgs, sale } = convertPayment(amount, currency, s.currency, fx);
-    if (sale > (await paidOf(q, s.id))) throw new HttpError(409, "Возврат больше, чем клиент заплатил");
+    const refundRated = currency !== s.currency || currency === "USD";
+    const fx = refundRated ? rate(input.fxRate) : 1;
+    if (refundRated) assertRate(actor, fx, market);
+    const converted = convertPayment(amount, currency, s.currency, fx);
+    const kgs = converted.kgs;
+    let sale = converted.sale;
+    const alreadyPaid = await paidOf(q, s.id);
+    // возврат всей суммы по другому курсу: долг в валюте договора закрывается полностью
+    if (refundRated && Math.abs(sale - alreadyPaid) <= Math.max(convertPayment(100, currency, s.currency, fx).sale, Math.round(alreadyPaid * 0.02))) sale = alreadyPaid;
+    if (sale > alreadyPaid) throw new HttpError(409, "Возврат больше, чем клиент заплатил");
+    await assertCash(q, actor, account.id, amount);
     const paymentId = id(), txId = id();
     await q("INSERT INTO account_transactions(id,account_id,direction,amount_minor,category,payment_id,occurred_at,description,created_by) VALUES(?,?, 'out', ?, 'Возврат клиенту', ?, CURRENT_TIMESTAMP, ?, ?)", txId, account.id, amount, paymentId, `Возврат по продаже ${s.number}: ${why}`, actor.id);
     await q("INSERT INTO sale_payments(id,sale_id,direction,payer,account_id,currency,amount_minor,fx_rate,amount_sale_minor,amount_kgs_minor,paid_at,method,reference,transaction_id,created_by) VALUES(?,?,'out','client',?,?,?,?,?,?,CURRENT_TIMESTAMP,'refund',?,?,?)", paymentId, s.id, account.id, currency, amount, fx, sale, kgs, why, txId, actor.id);
@@ -587,7 +685,7 @@ export async function setBankDecision(actor: Actor, saleId: string, decision: "a
   });
 }
 
-export async function changeMethod(actor: Actor, saleId: string, method: PaymentMethod, bankName: string) {
+export async function changeMethod(actor: Actor, saleId: string, method: PaymentMethod, bankName: string, monthsInput?: string | number) {
   assertSeller(actor);
   if (!METHODS.includes(method)) throw new HttpError(400, "Выберите способ оплаты");
   return getRawDb().transaction(async (client) => {
@@ -597,10 +695,18 @@ export async function changeMethod(actor: Actor, saleId: string, method: Payment
     const bank = text(bankName, 120);
     if (method.endsWith("leasing") && !bank) throw new HttpError(400, "Укажите банк");
     await q("UPDATE sale_orders SET payment_method=?, bank_name=?, bank_decision=?, bank_note='', updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", method, method.endsWith("leasing") ? bank : "", method.endsWith("leasing") ? "pending" : "none", s.id);
-    await q("DELETE FROM sale_schedule WHERE sale_id=? AND kind IN ('bank','balance')", s.id);
+    // график строится заново: уже оплаченное одной строкой, остаток по новому способу
+    await q("DELETE FROM sale_schedule WHERE sale_id=?", s.id);
     const paid = await paidOf(q, s.id);
     const rest = s.total_minor - paid;
-    if (rest > 0) await q("INSERT INTO sale_schedule(id,sale_id,kind,payer,due_date,amount_minor) VALUES(?,?,?,?,?,?)", id(), s.id, method.endsWith("leasing") ? "bank" : "balance", method.endsWith("leasing") ? "bank" : "client", s.reserve_until ?? addDays(14), rest);
+    const addRow = (kind: string, payer: string, due: string, amount: number) => q("INSERT INTO sale_schedule(id,sale_id,kind,payer,due_date,amount_minor) VALUES(?,?,?,?,?,?)", id(), s.id, kind, payer, due, amount);
+    if (paid > 0) await addRow("advance", "client", String(s.sold_at).slice(0, 10), paid);
+    if (rest > 0 && method === "installment") {
+      const months = Math.round(Number(monthsInput) || 12);
+      if (months < 1 || months > 36) throw new HttpError(400, "Рассрочка: срок от 1 до 36 месяцев");
+      const part = Math.floor(rest / months);
+      for (let m = 0; m < months; m++) await addRow("installment", "client", addMonths(addDays(0), m + 1), m === months - 1 ? rest - part * (months - 1) : part);
+    } else if (rest > 0) await addRow(method.endsWith("leasing") ? "bank" : "balance", method.endsWith("leasing") ? "bank" : "client", s.reserve_until ?? addDays(14), rest);
     await event(q, s.id, actor, "method", `Способ оплаты изменён: ${METHOD[method].label}${bank && method.endsWith("leasing") ? `, ${bank}` : ""}`);
   });
 }
@@ -627,12 +733,13 @@ export async function deliver(actor: Actor, saleId: string) {
     if (s.status !== "booked") throw new HttpError(409, "Продажа уже выдана или отменена");
     const paid = await paidOf(q, s.id);
     if (paid < s.total_minor && !s.debt_allowed_at) throw new HttpError(409, "Выдача возможна после полной оплаты или с разрешения владельца");
+    if (paid < s.total_minor && s.payment_method === "installment" && paid <= 0) throw new HttpError(409, "Рассрочка: сначала нужен первый взнос");
     const items = await q<{ id: string; kind: string; inventory_unit_id: string | null; title: string }>("SELECT id, kind, inventory_unit_id, title FROM sale_order_items WHERE sale_id=? AND active=1", s.id);
     const pending = items.filter((i) => i.kind === "model_order");
     if (pending.length) throw new HttpError(409, `Сначала привяжите VIN к позиции «${pending[0].title}»: машина под заказ ещё не выбрана`);
     for (const it of items.filter((i) => i.inventory_unit_id)) {
       const [u] = await q<{ status: string; vin: string }>("SELECT status, vin FROM inventory_units_v2 WHERE id=? FOR UPDATE", it.inventory_unit_id);
-      if (!["stock", "reserved"].includes(u.status)) throw new HttpError(409, `VIN ${u.vin} ещё не на складе (статус: ${u.status}). Выдать можно только машину на складе`);
+      if (!["stock", "reserved", "sold"].includes(u.status)) throw new HttpError(409, `VIN ${u.vin} ещё не на складе (статус: ${u.status}). Выдать можно только машину на складе`);
       await q("UPDATE inventory_units_v2 SET status='delivered', updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", actor.id, it.inventory_unit_id);
       await q("INSERT INTO inventory_lifecycle_events(id,inventory_unit_id,from_status,to_status,actor_id,note) VALUES(?,?,?,'delivered',?,?)", id(), it.inventory_unit_id, u.status, actor.id, `Выдана по продаже ${s.number}`);
     }
@@ -650,16 +757,18 @@ export async function attachUnit(actor: Actor, itemId: string, unitId: string) {
     if (!item || item.kind !== "model_order") throw new HttpError(404, "Позиция «под заказ» не найдена");
     const s = await lockSale(q, actor, item.sale_id);
     if (s.status !== "booked") throw new HttpError(409, "Продажа уже выдана или отменена");
-    const [u] = await q<{ id: string; vin: string; model: string; tractor_slug: string; status: string; reserved_sale_id: string | null; cost: number }>("SELECT id, vin, model, tractor_slug, status, reserved_sale_id, CASE WHEN landed_cost_minor>0 THEN landed_cost_minor ELSE purchase_cost_minor END AS cost FROM inventory_units_v2 WHERE id=? AND archived=0 FOR UPDATE", text(unitId, 100));
+    const [u] = await q<{ id: string; vin: string; model: string; tractor_slug: string; status: string; reserved_sale_id: string | null; cost: number }>("SELECT id, vin, model, tractor_slug, status, reserved_sale_id, COALESCE(NULLIF(landed_cost_minor,0), NULLIF(purchase_cost_minor,0), (SELECT pc.cost_minor FROM product_costs pc WHERE pc.slug=tractor_slug), 0) AS cost FROM inventory_units_v2 WHERE id=? AND archived=0 FOR UPDATE", text(unitId, 100));
     if (!u) throw new HttpError(404, "Машина не найдена");
     if (u.tractor_slug !== item.tractor_slug) throw new HttpError(400, "Это машина другой модели");
     if (u.reserved_sale_id || ["reserved", "sold", "delivered"].includes(u.status)) throw new HttpError(409, `VIN ${u.vin} уже занят`);
     const perUnit = Math.round(Number(item.price_minor));
+    if (Number(u.cost) > 0 && toKgs(perUnit, s.currency, s.fx_rate) < Number(u.cost) && actor.role !== "owner") throw new HttpError(409, "Цена этой позиции ниже себестоимости машины: привязать VIN может только владелец");
     const listPer = Math.round(Number(item.list_price_minor));
     await q("INSERT INTO sale_order_items(id,sale_id,kind,inventory_unit_id,tractor_slug,title,qty,price_minor,list_price_minor,cost_kgs_minor) VALUES(?,?,'unit',?,?,?,1,?,?,?)", id(), s.id, u.id, u.tractor_slug, `${u.model} · VIN ${u.vin}`, perUnit, listPer, Number(u.cost));
     if (Number(item.qty) > 1) await q("UPDATE sale_order_items SET qty=qty-1 WHERE id=?", item.id);
     else await q("UPDATE sale_order_items SET active=0 WHERE id=?", item.id);
     await q("UPDATE inventory_units_v2 SET reserved_sale_id=?, status=CASE WHEN status='stock' THEN 'reserved' ELSE status END, updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", s.id, actor.id, u.id);
+    await q("INSERT INTO inventory_lifecycle_events(id,inventory_unit_id,from_status,to_status,actor_id,note) VALUES(?,?,?,?,?,?)", id(), u.id, u.status, u.status === "stock" ? "reserved" : u.status, actor.id, `Привязана к продаже ${s.number}`);
     await q("UPDATE sale_orders SET cost_kgs_minor=(SELECT COALESCE(SUM(cost_kgs_minor*qty),0) FROM sale_order_items WHERE sale_id=? AND active=1), updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", s.id, s.id);
     await event(q, s.id, actor, "unit", `К позиции под заказ привязан VIN ${u.vin}`);
   });
@@ -679,7 +788,66 @@ export async function extendReserve(actor: Actor, saleId: string, until: string,
     if (date > limit) throw new HttpError(400, `Резерв не дольше ${policy.maxReserveDays} дней от даты продажи: до ${limit}`);
     if (date < new Date().toISOString().slice(0, 10)) throw new HttpError(400, "Срок резерва не может быть в прошлом");
     await q("UPDATE sale_orders SET reserve_until=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", date, s.id);
+    if (s.reserve_until) await q("UPDATE sale_schedule SET due_date=? WHERE sale_id=? AND kind IN ('balance','bank') AND due_date=?::date", date, s.id, s.reserve_until);
     await event(q, s.id, actor, "reserve", `Резерв продлён до ${date}: ${why}`);
+  });
+}
+
+/** Вернуть на склад всё, что держит продажа: машины (резерв снимается) и запчасти. */
+export async function releaseItems(q: Q, actorId: string, saleId: string, note: string) {
+  const units = await q<{ inventory_unit_id: string }>("SELECT inventory_unit_id FROM sale_order_items WHERE sale_id=? AND active=1 AND inventory_unit_id IS NOT NULL", saleId);
+  for (const u of units) {
+    const [unit] = await q<{ status: string }>("SELECT status FROM inventory_units_v2 WHERE id=? FOR UPDATE", u.inventory_unit_id);
+    const next = ["reserved", "sold", "delivered"].includes(unit?.status ?? "") ? "stock" : unit?.status ?? "stock";
+    await q("UPDATE inventory_units_v2 SET reserved_sale_id=NULL, status=?, updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", next, actorId, u.inventory_unit_id);
+    await q("INSERT INTO inventory_lifecycle_events(id,inventory_unit_id,from_status,to_status,actor_id,note) VALUES(?,?,?,?,?,?)", id(), u.inventory_unit_id, unit?.status ?? "reserved", next, actorId, note);
+  }
+  const parts = await q<{ part_id: string; qty: number; cost_kgs_minor: number }>("SELECT part_id, qty, cost_kgs_minor FROM sale_order_items WHERE sale_id=? AND active=1 AND part_id IS NOT NULL", saleId);
+  for (const p of parts) {
+    const [pt] = await q<{ qty: number }>("UPDATE parts SET qty=qty+?, updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING qty", p.qty, p.part_id);
+    await q("INSERT INTO part_movements(id,part_id,kind,qty_delta,qty_after,unit_cost_minor,sale_id,note,created_by) VALUES(?,?,'return',?,?,?,?,?,?)", id(), p.part_id, p.qty, pt?.qty ?? 0, Number(p.cost_kgs_minor), saleId, note, actorId);
+  }
+}
+
+/** Резерв истёк больше 3 дней назад, денег нет: техника возвращается на склад. Лизинг и выдача в долг не трогаются. */
+export async function expireReserves(q: Q, today: string, ownerId: string) {
+  const rows = await q<{ id: string; number: string; manager_id: string | null; customer: string }>(`
+    SELECT o.id, o.number, o.manager_id, c.name AS customer
+    FROM sale_orders o JOIN crm_customers c ON c.id=o.customer_id
+    WHERE o.status='booked' AND o.payment_method NOT IN ('bank_leasing','state_leasing') AND o.debt_allowed_at IS NULL AND o.reserve_until < ?::date - 3
+      AND EXISTS (SELECT 1 FROM sale_order_items i WHERE i.sale_id=o.id AND i.active=1 AND (i.inventory_unit_id IS NOT NULL OR i.part_id IS NOT NULL))
+      AND NOT EXISTS (SELECT 1 FROM sale_payments p WHERE p.sale_id=o.id AND p.status='posted')
+    FOR UPDATE OF o`, today);
+  for (const r of rows) {
+    await releaseItems(q, ownerId, r.id, `Резерв по продаже ${r.number} истёк без оплаты`);
+    await q("UPDATE sale_orders SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", "Резерв истёк без оплаты", r.id);
+    await q("UPDATE leads SET status='contacted', sale_id=NULL WHERE sale_id=?", r.id);
+    await event(q, r.id, null, "cancelled", "Резерв истёк больше 3 дней назад, оплаты нет: продажа снята, техника вернулась на склад");
+  }
+  return rows;
+}
+
+/** Остаток кассы не должен уйти в минус при возврате или сторно (кроме владельца). */
+async function assertCash(q: Q, actor: Actor, accountId: string, amount: number) {
+  if (actor.role === "owner") return;
+  const [r] = await q<{ b: number; name: string }>("SELECT a.name, (a.opening_balance_minor + COALESCE((SELECT SUM(CASE WHEN direction='in' THEN amount_minor ELSE -amount_minor END) FROM account_transactions WHERE account_id=a.id),0))::bigint AS b FROM financial_accounts a WHERE a.id=?", accountId);
+  if (Number(r?.b ?? 0) < amount) throw new HttpError(409, `В «${r?.name ?? "кассе"}» не хватает денег. Уйти в минус может только владелец`);
+}
+
+/** Возврат техники после выдачи: только владелец, когда деньги клиенту уже возвращены. */
+export async function returnSale(actor: Actor, saleId: string, reason: string) {
+  if (actor.role !== "owner") throw new HttpError(403, "Вернуть выданную технику может только владелец");
+  const why = text(reason, 500);
+  if (why.length < 5) throw new HttpError(400, "Укажите причину возврата (не короче 5 символов)");
+  return getRawDb().transaction(async (client) => {
+    const q = query(client);
+    const s = await lockSale(q, actor, saleId);
+    if (s.status !== "delivered" && s.status !== "closed") throw new HttpError(409, "Возврат техники возможен только после выдачи");
+    if ((await paidOf(q, s.id)) > 0) throw new HttpError(409, "Сначала верните деньги клиенту (кнопка «Возврат денег») или сторнируйте платежи");
+    await releaseItems(q, actor.id, s.id, `Возврат техники по продаже ${s.number}: ${why}`);
+    await q("UPDATE sale_order_items SET active=0 WHERE sale_id=?", s.id);
+    await q("UPDATE sale_orders SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", why, s.id);
+    await event(q, s.id, actor, "returned", `Техника возвращена на склад: ${why}`);
   });
 }
 
@@ -694,18 +862,7 @@ export async function cancelSale(actor: Actor, saleId: string, reason: string) {
     if (s.status !== "booked") throw new HttpError(409, "Выданную технику так не отменить: нужен возврат техники (появится в разделе «Склад»)");
     const paid = await paidOf(q, s.id);
     if (paid > 0) throw new HttpError(409, "Сначала верните деньги клиенту (кнопка «Возврат») или сторнируйте ошибочные платежи");
-    const units = await q<{ inventory_unit_id: string }>("SELECT inventory_unit_id FROM sale_order_items WHERE sale_id=? AND active=1 AND inventory_unit_id IS NOT NULL", s.id);
-    for (const u of units) {
-      await q("UPDATE inventory_units_v2 SET reserved_sale_id=NULL, status=CASE WHEN status='reserved' THEN 'stock' ELSE status END, updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=? AND reserved_sale_id=?", actor.id, u.inventory_unit_id, s.id);
-      await q("INSERT INTO inventory_lifecycle_events(id,inventory_unit_id,from_status,to_status,actor_id,note) VALUES(?,?, 'reserved', 'stock', ?, ?)", id(), u.inventory_unit_id, actor.id, `Резерв снят: продажа ${s.number} отменена`);
-    }
-    // запчасти возвращаем на склад
-    const parts = await q<{ part_id: string; qty: number; cost_kgs_minor: number }>("SELECT part_id, qty, cost_kgs_minor FROM sale_order_items WHERE sale_id=? AND active=1 AND part_id IS NOT NULL", s.id);
-    for (const p of parts) {
-      const [pt] = await q<{ qty: number }>("UPDATE parts SET qty=qty+?, updated_at=CURRENT_TIMESTAMP WHERE id=? RETURNING qty", p.qty, p.part_id);
-      await q("INSERT INTO part_movements(id,part_id,kind,qty_delta,qty_after,unit_cost_minor,sale_id,note,created_by) VALUES(?,?,'return',?,?,?,?,?,?)", id(), p.part_id, p.qty, pt?.qty ?? 0, Number(p.cost_kgs_minor), s.id, `Продажа ${s.number} отменена`, actor.id);
-    }
-    await q("UPDATE sale_order_items SET active=0 WHERE sale_id=?", s.id);
+    await releaseItems(q, actor.id, s.id, `Продажа ${s.number} отменена`);
     await q("UPDATE sale_orders SET status='cancelled', cancelled_at=CURRENT_TIMESTAMP, cancel_reason=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", why, s.id);
     await q("UPDATE leads SET status='contacted', sale_id=NULL WHERE sale_id=?", s.id);
     await event(q, s.id, actor, "cancelled", `Продажа отменена: ${why}`);
