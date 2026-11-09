@@ -53,6 +53,8 @@ export const NAV: NavItem[] = [
   { href: "/admin/work/margin", label: "Маржа", icon: "trend", tone: "teal", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Прибыль по продаже, модели и менеджеру" },
   { href: "/admin/work/payroll", label: "Зарплаты", icon: "banknote", tone: "lilac", space: "work", group: "Финансы", perms: ["payroll"], hint: "Начисления и выплаты сотрудникам" },
   { href: "/admin/work/reports", label: "Отчёты", icon: "chart", tone: "sky", space: "work", group: "Финансы", roles: FIN_ROLES, hint: "Продажи, склад, деньги и маркетинг за период" },
+  // ── Работа · Помощь
+  { href: "/admin/work/guide", label: "Инструкции", icon: "book", tone: "lilac", space: "work", group: "Помощь", hint: "Как работать: с чего начать, продажи, логистика, сайт" },
   // ── Маркетинг
   { href: "/admin/marketing/catalog", label: "Каталог техники", icon: "tractor", tone: "green", space: "marketing", perms: ["catalog"], hint: "Модели на сайте: цены, фото, видимость" },
   { href: "/admin/marketing/parts", label: "Каталог запчастей", icon: "box", tone: "sun", space: "marketing", perms: ["catalog"], hint: "Карточки запчастей для сайта" },

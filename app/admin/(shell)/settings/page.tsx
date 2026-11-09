@@ -26,6 +26,7 @@ export default async function Settings() {
           {g.items.map((i) => <RowLink key={i.href} href={i.href} icon={i.icon} tone={i.tone} label={i.label} hint={i.hint} />)}
         </Grouped>
       ))}
+      <Grouped title="Помощь"><RowLink href="/admin/work/guide" icon="book" tone="lilac" label="Инструкции" hint="Как работать в админке, по шагам и с картинками" /></Grouped>
       <InstallCard />
       <LogoutButton className="ax-btn-block" label="Выйти из аккаунта" />
     </div>
