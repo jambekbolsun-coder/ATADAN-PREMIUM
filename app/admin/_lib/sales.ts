@@ -117,6 +117,11 @@ const addDays = (days: number, from = new Date()) => {
   d.setUTCDate(d.getUTCDate() + days);
   return d.toISOString().slice(0, 10);
 };
+/** Дата по Бишкеку (YYYY-MM-DD) из значения базы: timestamptz приходит объектом Date, а String(Date) даёт «Wed Nov 11 …». */
+const bishkekDay = (value: unknown) => {
+  const d = value instanceof Date ? value : new Date(String(value ?? ""));
+  return Number.isFinite(d.getTime()) ? new Date(d.getTime() + 6 * 3600_000).toISOString().slice(0, 10) : addDays(0);
+};
 const addMonths = (iso: string, months: number) => {
   const d = new Date(`${iso}T00:00:00Z`);
   const day = d.getUTCDate();
@@ -700,7 +705,7 @@ export async function changeMethod(actor: Actor, saleId: string, method: Payment
     const paid = await paidOf(q, s.id);
     const rest = s.total_minor - paid;
     const addRow = (kind: string, payer: string, due: string, amount: number) => q("INSERT INTO sale_schedule(id,sale_id,kind,payer,due_date,amount_minor) VALUES(?,?,?,?,?,?)", id(), s.id, kind, payer, due, amount);
-    if (paid > 0) await addRow("advance", "client", String(s.sold_at).slice(0, 10), paid);
+    if (paid > 0) await addRow("advance", "client", bishkekDay(s.sold_at), paid);
     if (rest > 0 && method === "installment") {
       const months = Math.round(Number(monthsInput) || 12);
       if (months < 1 || months > 36) throw new HttpError(400, "Рассрочка: срок от 1 до 36 месяцев");
