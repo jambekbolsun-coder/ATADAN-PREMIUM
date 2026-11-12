@@ -28,7 +28,7 @@ export type Dashboard = {
 const SOURCE_LABEL: Record<string, string> = {
   website: "Сайт", site: "Сайт", whatsapp: "WhatsApp", instagram: "Instagram", phone: "Звонок", call: "Звонок", office: "Визит в офис",
   exhibition: "Выставка", referral: "Рекомендация", lalafo: "Lalafo", leasing: "Калькулятор лизинга", "leasing-calculator": "Калькулятор лизинга",
-  advertising: "Реклама", organic: "Поиск", other: "Другое",
+  advertising: "Реклама", organic: "Поиск", chatbot: "Чат-бот", other: "Другое",
 };
 export function sourceLabel(source: string) {
   return SOURCE_LABEL[source] ?? (source || "Другое");

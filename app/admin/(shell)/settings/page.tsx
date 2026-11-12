@@ -1,6 +1,6 @@
 import { requireStaff } from "../../_lib/session";
 import { visibleSettings } from "../../_lib/nav";
-import { ROLE_LABEL } from "../../_lib/roles";
+import { staffTitle } from "../../_lib/roles";
 import { Avatar, Grouped, PageHeader, RowLink } from "../../_ui/ui";
 import { LogoutButton } from "../../_ui/client";
 import { InstallCard } from "../../_ui/install";
@@ -18,7 +18,7 @@ export default async function Settings() {
         <Avatar name={actor.display_name} url={actor.avatar} size={52} />
         <span style={{ minWidth: 0 }}>
           <b style={{ fontSize: 16, display: "block" }}>{actor.display_name || actor.email}</b>
-          <span className="ax-small">{ROLE_LABEL[actor.role]} · {actor.email}</span>
+          <span className="ax-small">{staffTitle(actor.role, actor.position)} · {actor.email}</span>
         </span>
       </Link>
       {groups.map((g) => (

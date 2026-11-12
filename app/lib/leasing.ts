@@ -1,12 +1,60 @@
+/**
+ * Срок лизинга на сайте: клиент выбирает от 1 месяца до максимума.
+ * Максимум задают в админке (Маркетинг → Страницы сайта → Банки и ставки), по умолчанию 84,
+ * жёсткий предел 120 месяцев.
+ */
+export const LEASE_TERM_DEFAULT_MAX = 84;
+export const LEASE_TERM_HARD_MAX = 120;
+export const LEASE_QUICK_TERMS = [3, 6, 12, 24, 36, 48, 60, 84] as const;
+
+/** Максимальный срок из настроек: целое от 1 до 120, при пустом или неверном значении 84. */
+export function normalizeLeaseMaxMonths(value: unknown) {
+  const n = Math.round(Number(value));
+  return Number.isFinite(n) && n >= 1 ? Math.min(LEASE_TERM_HARD_MAX, n) : LEASE_TERM_DEFAULT_MAX;
+}
+
+export function isValidLeaseTerm(months: number, maxMonths: number = LEASE_TERM_DEFAULT_MAX) {
+  return Number.isInteger(months) && months >= 1 && months <= normalizeLeaseMaxMonths(maxMonths);
+}
+
+/** Быстрые кнопки срока: стандартные сроки не больше максимума, плюс сам максимум. */
+export function leaseTermChoices(maxMonths: number = LEASE_TERM_DEFAULT_MAX) {
+  const max = normalizeLeaseMaxMonths(maxMonths);
+  const list: number[] = LEASE_QUICK_TERMS.filter((m) => m <= max);
+  if (!list.includes(max)) list.push(max);
+  return list;
+}
+
+function plural(n: number, one: string, few: string, many: string) {
+  const a = Math.abs(n) % 100, b = a % 10;
+  if (a > 10 && a < 20) return many;
+  if (b === 1) return one;
+  if (b >= 2 && b <= 4) return few;
+  return many;
+}
+export const formatMonths = (months: number) => `${months} ${plural(months, "месяц", "месяца", "месяцев")}`;
+/** «7 лет» для срока, кратного году, иначе пустая строка. */
+export function formatYears(months: number) {
+  if (months < 12 || months % 12 !== 0) return "";
+  const years = months / 12;
+  return `${years} ${plural(years, "год", "года", "лет")}`;
+}
+/** «7 лет (84 месяца)», «1 год (12 месяцев)», «18 месяцев». */
+export function formatLeaseTerm(months: number) {
+  const years = formatYears(months);
+  return years ? `${years} (${formatMonths(months)})` : formatMonths(months);
+}
+
 export type LeaseInput = { price: number; downPercent: number; months: number; annualRate: number; fee: number; method: "annuity" | "differentiated" };
 export type LeasePayment = { month: number; principal: number; interest: number; payment: number; balance: number };
 // All amounts in the schedule are integer tyiyn. The final payment closes the balance exactly.
-export function calculateLease(input: LeaseInput) {
+export function calculateLease(input: LeaseInput, maxMonths: number = LEASE_TERM_DEFAULT_MAX) {
   const { price, downPercent, months, annualRate, fee, method } = input;
+  const max = normalizeLeaseMaxMonths(maxMonths);
   if (![price, downPercent, months, annualRate, fee].every(Number.isFinite)
     || price <= 0 || price > 1_000_000_000 || downPercent < 0 || downPercent > 100
-    || !Number.isInteger(months) || months < 1 || months > 84 || annualRate < 0 || annualRate > 100
-    || fee < 0 || fee > price || !["annuity", "differentiated"].includes(method)) throw new Error("Проверьте стоимость, взнос, ставку и срок от 1 до 84 месяцев.");
+    || !isValidLeaseTerm(months, max) || annualRate < 0 || annualRate > 100
+    || fee < 0 || fee > price || !["annuity", "differentiated"].includes(method)) throw new Error(`Проверьте стоимость, взнос, ставку и срок от 1 до ${max} месяцев.`);
   const priceMinor = Math.round(price * 100);
   const downMinor = Math.round(priceMinor * downPercent / 100);
   const financed = priceMinor - downMinor;
@@ -34,7 +82,8 @@ export type LeaseOption={name:string;price:number};
 export type LeaseProgram={id:string;name:string;programType:string;currency:string;termsMonths:number[];minDownPercent:number;maxDownPercent:number;minDownAmount:number;downPaymentMode:string;markupPercent:number;annualRate:number;fixedCommission:number;commissionPercent:number;insurance:number;processingFee:number;delivery:number;includeDelivery:boolean;includeInsurance:boolean;includeCommission:boolean;discountOrder:"before"|"after";rounding:1|10|100;zeroPercent:boolean;options:LeaseOption[];notes:string};
 export type LeaseModelTerms={tractorSlug:string;enabled:boolean;price?:number;minDownPercent?:number;termsMonths?:number[];markupPercent?:number;annualRate?:number;fixedCommission?:number;commissionPercent?:number;discount?:number;maxFinancing?:number;options?:LeaseOption[];notes?:string};
 export type LeasePromotion={id:string;name:string;tractorSlugs:string[];discountType:"percent"|"amount";discount:number;reducedDownPercent?:number;zeroPercent:boolean;gift:string;startsAt:string;endsAt:string};
-export type LeasePublicConfig={programs:LeaseProgram[];models:LeaseModelTerms[];promotions:LeasePromotion[]};
+/** maxMonths: максимальный срок лизинга на сайте (клиент выбирает от 1 до maxMonths). */
+export type LeasePublicConfig={programs:LeaseProgram[];models:LeaseModelTerms[];promotions:LeasePromotion[];maxMonths:number};
 export type InstallmentInput={price:number;options:LeaseOption[];delivery:number;discount:number;downMode:"percent"|"amount";downValue:number;months:number;markupPercent:number;annualRate:number;fixedCommission:number;commissionPercent:number;insurance:number;processingFee:number;includeDelivery:boolean;includeInsurance:boolean;includeCommission:boolean;discountOrder:"before"|"after";rounding:1|10|100;zeroPercent:boolean};
 
 export type DownPaymentRules={price:number;minPercent:number;maxPercent:number;minAmount:number};
@@ -71,7 +120,7 @@ export function convertDownPayment(
 const clampMoney=(value:number)=>Math.max(0,Math.min(1_000_000_000,Number(value)||0));
 export function calculateInstallment(input:InstallmentInput){
   if(!Number.isFinite(input.price)||input.price<=0||!Number.isFinite(input.downValue)||!Number.isFinite(input.months))throw new Error("Проверьте стоимость, первый взнос и срок.");
-  const months=Math.max(1,Math.min(120,Math.round(input.months))),price=Math.round(clampMoney(input.price)),optionsTotal=Math.round(input.options.reduce((sum,item)=>sum+clampMoney(item.price),0)),delivery=input.includeDelivery?Math.round(clampMoney(input.delivery)):0,discount=Math.round(Math.min(price+optionsTotal+delivery,clampMoney(input.discount)));
+  const months=Math.max(1,Math.min(LEASE_TERM_HARD_MAX,Math.round(input.months))),price=Math.round(clampMoney(input.price)),optionsTotal=Math.round(input.options.reduce((sum,item)=>sum+clampMoney(item.price),0)),delivery=input.includeDelivery?Math.round(clampMoney(input.delivery)):0,discount=Math.round(Math.min(price+optionsTotal+delivery,clampMoney(input.discount)));
   const downBase=input.discountOrder==="before"?price+optionsTotal+delivery-discount:price+optionsTotal+delivery;
   const downPayment=Math.round(Math.min(price+optionsTotal+delivery-discount,input.downMode==="percent"?downBase*Math.max(0,Math.min(100,input.downValue))/100:clampMoney(input.downValue)));
   const financed=Math.round(Math.max(0,price+optionsTotal+delivery-discount-downPayment));

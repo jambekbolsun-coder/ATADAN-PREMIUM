@@ -178,4 +178,11 @@ FROM sale_orders o WHERE o.legacy_deal_id IS NOT NULL
   AND NOT EXISTS (SELECT 1 FROM sale_events e WHERE e.id='legacy-event-'||o.id);
 
 INSERT INTO schema_migrations(id) VALUES('sales-dept-20261105') ON CONFLICT(id) DO NOTHING;
+
+-- Быстрые заявки (2026-11-12): встреча из анкеты чат-бота, кто и как добавил, исходный текст
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS meeting_at TIMESTAMPTZ;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS created_via TEXT NOT NULL DEFAULT '';
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS created_by TEXT;
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS raw_text TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_leads_quick ON leads(created_via, created_at DESC);
 `;

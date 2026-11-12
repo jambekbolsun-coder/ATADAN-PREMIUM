@@ -100,4 +100,26 @@ CREATE INDEX IF NOT EXISTS idx_account_transactions_occurred ON account_transact
 CREATE INDEX IF NOT EXISTS idx_account_transactions_account ON account_transactions(account_id, occurred_at DESC);
 
 INSERT INTO schema_migrations(id) VALUES('stock-money-20261106') ON CONFLICT(id) DO NOTHING;
+
+-- Расчёт себестоимости как в Excel (2026-11-12, app/admin/_lib/landed-cost.ts):
+-- калькуляция (план на 1 машину по статьям) и цель продажи у позиции заказа; график оплаты заводу;
+-- расходы вносятся на весь заказ, на модель или на поставку (одна таблица shipment_costs).
+ALTER TABLE purchase_order_lines ADD COLUMN IF NOT EXISTS target_price_minor BIGINT;
+ALTER TABLE purchase_orders_v2 ADD COLUMN IF NOT EXISTS payment_plan_json TEXT NOT NULL DEFAULT '[]';
+CREATE TABLE IF NOT EXISTS purchase_order_plan (
+  line_id TEXT NOT NULL REFERENCES purchase_order_lines(id),
+  category TEXT NOT NULL,
+  amount_minor BIGINT NOT NULL CHECK(amount_minor>=0),
+  updated_by TEXT REFERENCES staff(id),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY(line_id, category)
+);
+ALTER TABLE shipment_costs ADD COLUMN IF NOT EXISTS purchase_order_id TEXT REFERENCES purchase_orders_v2(id);
+ALTER TABLE shipment_costs ADD COLUMN IF NOT EXISTS line_id TEXT REFERENCES purchase_order_lines(id);
+ALTER TABLE shipment_costs ALTER COLUMN shipment_id DROP NOT NULL;
+UPDATE shipment_costs c SET purchase_order_id=s.purchase_order_id FROM shipments_v2 s WHERE s.id=c.shipment_id AND c.purchase_order_id IS NULL;
+ALTER TABLE shipment_costs DROP CONSTRAINT IF EXISTS shipment_costs_category_check;
+ALTER TABLE shipment_costs ADD CONSTRAINT shipment_costs_category_check CHECK(category IN ('duty','freight','vat','customs_fee','tax','broker','storage','certification','unloading','other'));
+CREATE INDEX IF NOT EXISTS idx_shipment_costs_po ON shipment_costs(purchase_order_id, status);
+ALTER TABLE inventory_units_v2 ADD COLUMN IF NOT EXISTS planned_cost_minor BIGINT NOT NULL DEFAULT 0;
 `;

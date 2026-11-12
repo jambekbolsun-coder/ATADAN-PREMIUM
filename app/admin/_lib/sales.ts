@@ -921,7 +921,7 @@ export async function createLead(actor: Actor, input: { name: string; phone: str
   const name = text(input.name, 160);
   if (name.length < 2) throw new HttpError(400, "Укажите имя");
   const phone = normalizePhone(text(input.phone, 40));
-  const sources = ["phone", "office", "whatsapp", "instagram", "exhibition", "referral", "lalafo", "other"];
+  const sources = ["phone", "office", "whatsapp", "instagram", "chatbot", "exhibition", "referral", "lalafo", "other"];
   const source = sources.includes(input.source) ? input.source : "other";
   const catalog = await catalogModels();
   const model = catalog.find((m) => m.slug === input.model);

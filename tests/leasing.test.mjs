@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateInstallment, calculateLease, convertDownPayment, salePrice } from "../app/lib/leasing.ts";
+import { calculateInstallment, calculateLease, convertDownPayment, formatLeaseTerm, isValidLeaseTerm, leaseTermChoices, normalizeLeaseMaxMonths, salePrice } from "../app/lib/leasing.ts";
 
 test("zero-rate lease preserves principal exactly", () => {
   const result = calculateLease({ price: 3_000_000, downPercent: 30, months: 84, annualRate: 0, fee: 0, method: "annuity" });
@@ -58,4 +58,22 @@ test("installment schedule never becomes negative and the final payment closes r
   assert.equal(result.schedule.at(-1).balance,0);
   assert.ok(result.schedule.every(row=>row.payment>=0&&row.balance>=0));
   assert.equal(result.schedule.reduce((sum,row)=>sum+row.payment,0),result.contractTotal);
+});
+
+test("lease term follows the configured maximum with a hard cap of 120 months", () => {
+  assert.equal(normalizeLeaseMaxMonths(undefined), 84);
+  assert.equal(normalizeLeaseMaxMonths("96"), 96);
+  assert.equal(normalizeLeaseMaxMonths(500), 120);
+  assert.equal(normalizeLeaseMaxMonths(0), 84);
+  assert.ok(isValidLeaseTerm(1, 84) && isValidLeaseTerm(84, 84));
+  assert.ok(!isValidLeaseTerm(85, 84) && !isValidLeaseTerm(0, 84) && !isValidLeaseTerm(12.5, 84));
+  assert.ok(isValidLeaseTerm(96, 96) && !isValidLeaseTerm(121, 500));
+  assert.deepEqual(leaseTermChoices(84), [3, 6, 12, 24, 36, 48, 60, 84]);
+  assert.deepEqual(leaseTermChoices(40), [3, 6, 12, 24, 36, 40]);
+  assert.deepEqual(leaseTermChoices(96), [3, 6, 12, 24, 36, 48, 60, 84, 96]);
+  assert.equal(formatLeaseTerm(84), "7 лет (84 месяца)");
+  assert.equal(formatLeaseTerm(18), "18 месяцев");
+  const lease = calculateLease({ price: 1_000_000, downPercent: 20, months: 96, annualRate: 12, fee: 0, method: "annuity" }, 96);
+  assert.equal(lease.schedule.length, 96);
+  assert.throws(() => calculateLease({ price: 1_000_000, downPercent: 20, months: 97, annualRate: 12, fee: 0, method: "annuity" }, 96), /до 96 месяцев/);
 });

@@ -110,3 +110,24 @@ export async function saveSiteAction(_p: ActionResult | null, form: FormData): P
     annualRate: f(form, "annualRate"), downPercent: f(form, "downPercent"), fee: f(form, "fee"), method: f(form, "method"), version: Number(f(form, "version")) || 0,
   }), "Сайт обновлён");
 }
+
+// ── страницы сайта: банки и ставки (те же записи, что «Лизинг → Программы банков»), срок лизинга
+export async function saveBankAction(id: string | null, version: number, _p: ActionResult | null, form: FormData): Promise<ActionResult> {
+  const actor = await requireStaff("/admin/marketing/pages?tab=banks");
+  return run(() => site.saveBank(actor, {
+    id: id ?? undefined, version, name: f(form, "name"), annualRate: f(form, "annualRate"), minDownPercent: f(form, "minDownPercent"),
+    commissionPercent: f(form, "commissionPercent"), active: form.get("active") === "on", sortOrder: f(form, "sortOrder"),
+  }), id ? "Банк сохранён" : "Банк добавлен");
+}
+export async function bankActiveAction(id: string, active: boolean): Promise<ActionResult> {
+  const actor = await requireStaff("/admin/marketing/pages?tab=banks");
+  return run(() => site.setBankActive(actor, id, active), active ? "Банк включён: он есть в калькуляторе" : "Банк выключен: в калькуляторе его нет");
+}
+export async function deleteBankAction(id: string): Promise<ActionResult> {
+  const actor = await requireStaff("/admin/marketing/pages?tab=banks");
+  return run(() => site.deleteBank(actor, id), "Банк удалён");
+}
+export async function saveLeaseTermAction(version: number, _p: ActionResult | null, form: FormData): Promise<ActionResult> {
+  const actor = await requireStaff("/admin/marketing/pages?tab=banks");
+  return run(() => site.saveLeaseTerm(actor, { maxMonths: f(form, "maxMonths"), version }), "Срок лизинга сохранён");
+}

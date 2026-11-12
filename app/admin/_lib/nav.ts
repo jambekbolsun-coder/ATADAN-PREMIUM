@@ -9,7 +9,7 @@ export type IconKey =
   | "home" | "inbox" | "cart" | "users" | "tractor" | "box" | "truck" | "wrench" | "wallet" | "scale"
   | "receipt" | "trend" | "chart" | "banknote" | "news" | "percent" | "bank" | "globe" | "gear" | "user"
   | "key" | "palette" | "bell" | "logout" | "swap" | "list" | "shield" | "building" | "briefcase"
-  | "megaphone" | "plus" | "upload" | "download" | "smartphone" | "book";
+  | "megaphone" | "plus" | "upload" | "download" | "smartphone" | "book" | "zap";
 
 export type Space = "work" | "marketing" | "settings";
 export type Tone = "green" | "sun" | "sky" | "lilac" | "terra" | "teal";
@@ -36,6 +36,7 @@ const FIN_ROLES: StaffRole[] = ["owner", "director", "accountant"];
 
 export const NAV: NavItem[] = [
   // ── Работа · Отдел продаж
+  { href: "/admin/work/quick-leads", label: "Быстрые заявки", icon: "zap", tone: "sun", space: "work", group: "Отдел продаж", perms: ["site-leads", "deals", "sales"], hint: "Вставьте текст из чат-бота или WhatsApp: заявки создадутся сами" },
   { href: "/admin/work/leads", label: "Заявки", icon: "inbox", tone: "terra", space: "work", group: "Отдел продаж", perms: ["site-leads", "deals"], hint: "Новые обращения с сайта, WhatsApp и звонков" },
   { href: "/admin/work/sales", label: "Продажи", icon: "cart", tone: "green", space: "work", group: "Отдел продаж", perms: ["sales", "deals", "payments", "debts"], hint: "Кто купил, что, за сколько и как оплатил" },
   { href: "/admin/work/clients", label: "Клиенты", icon: "users", tone: "sky", space: "work", group: "Отдел продаж", perms: ["client-base"], hint: "Покупатели, их техника, долги и история" },
@@ -150,6 +151,7 @@ export const PLUS_ACTIONS: PlusAction[] = [
   { key: "receive", label: "Принять технику", hint: "Поставка пришла на склад", icon: "truck", tone: "sky", href: "/admin/work/logistics?tab=shipments", perms: ["shipments", "purchases"] },
   { key: "delivery", label: "Новая перевозка", hint: "Клиент, откуда, куда, когда, модели", icon: "truck", tone: "sky", href: "/admin/work/logistics/deliveries/new", perms: ["shipments", "purchases"] },
   { key: "document", label: "Добавить документ", hint: "Файл или фото в папку", icon: "book", tone: "sun", href: "/admin/work/documents/new", perms: ["documents"] },
+  { key: "quick-leads", label: "Быстрые заявки", hint: "Вставить текст из чат-бота или WhatsApp", icon: "zap", tone: "sun", href: "/admin/work/quick-leads", perms: ["site-leads", "deals", "sales"] },
   { key: "lead", label: "Новая заявка", hint: "Звонок или визит в офис", icon: "inbox", tone: "teal", href: "/admin/work/leads/new", perms: ["site-leads", "deals"] },
   { key: "model", label: "Модель в каталог", hint: "Цена, фото, характеристики", icon: "tractor", tone: "lilac", href: "/admin/marketing/catalog/new", perms: ["catalog"] },
   { key: "part", label: "Запчасть", hint: "Артикул, цена, к каким моделям", icon: "box", tone: "sun", href: "/admin/work/parts/new", perms: ["catalog"] },

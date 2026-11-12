@@ -37,6 +37,10 @@ export async function roleAction(id: string, _p: ActionResult | null, form: Form
   const actor = await requireStaff("/admin/settings/team");
   return run(() => team.setRole(actor, id, f(form, "role")), "Роль изменена", "/admin/settings/team");
 }
+export async function positionAction(id: string, _p: ActionResult | null, form: FormData): Promise<ActionResult> {
+  const actor = await requireStaff("/admin/settings/team");
+  return run(() => team.setPosition(actor, id, f(form, "position")), "Должность сохранена", "/admin/settings/team");
+}
 export async function blockAction(id: string, _p: ActionResult | null, form: FormData): Promise<ActionResult> {
   const actor = await requireStaff("/admin/settings/team");
   return run(() => team.setActive(actor, id, false, f(form, "reassignTo")), "Сотрудник заблокирован, дела переданы", "/admin/settings/team");

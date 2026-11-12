@@ -1,7 +1,7 @@
 import {
   ArrowLeftRight, Banknote, Bell, BookOpen, Briefcase, Building2, ChartColumn, House, Inbox, KeyRound, Landmark, List, LogOut,
   Megaphone, Newspaper, Package, Palette, Percent, Plus, Receipt, Scale, Settings, ShieldCheck, ShoppingCart, Smartphone,
-  Tractor, TrendingUp, Truck, Upload, Download, User, Users, Wallet, Wrench, Globe, type LucideIcon,
+  Tractor, TrendingUp, Truck, Upload, Download, User, Users, Wallet, Wrench, Globe, Zap, type LucideIcon,
 } from "lucide-react";
 import type { IconKey } from "../_lib/nav";
 
@@ -10,7 +10,7 @@ const ICONS: Record<IconKey, LucideIcon> = {
   wallet: Wallet, scale: Scale, receipt: Receipt, trend: TrendingUp, chart: ChartColumn, banknote: Banknote, news: Newspaper,
   percent: Percent, bank: Landmark, globe: Globe, gear: Settings, user: User, key: KeyRound, palette: Palette, bell: Bell,
   logout: LogOut, swap: ArrowLeftRight, list: List, shield: ShieldCheck, building: Building2, briefcase: Briefcase,
-  megaphone: Megaphone, plus: Plus, upload: Upload, download: Download, smartphone: Smartphone, book: BookOpen,
+  megaphone: Megaphone, plus: Plus, upload: Upload, download: Download, smartphone: Smartphone, book: BookOpen, zap: Zap,
 };
 
 export function Icon({ name, size = 18, strokeWidth, className }: { name: IconKey; size?: number; strokeWidth?: number; className?: string }) {

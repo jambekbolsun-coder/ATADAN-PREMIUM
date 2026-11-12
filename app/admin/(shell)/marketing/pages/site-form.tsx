@@ -1,5 +1,6 @@
 "use client";
 import { startTransition, useActionState, useState } from "react";
+import Link from "next/link";
 import { LoaderCircle } from "lucide-react";
 import { saveSiteAction } from "../../../_lib/marketing-actions";
 import { Field, Toast } from "../../../_ui/forms";
@@ -27,7 +28,7 @@ export function SiteForm({ settings, version, canEdit }: { settings: S; version:
         </section>
         <section className="ax-card">
           <h3 className="ax-card-h">Калькулятор по умолчанию</h3>
-          <p className="ax-small" style={{ marginTop: 0 }}>Используется, если нет опубликованной программы лизинга.</p>
+          <p className="ax-small" style={{ marginTop: 0 }}>Используется, только если на вкладке <Link href="/admin/marketing/pages?tab=banks">«Банки и ставки»</Link> нет включённых банков. Срок лизинга задаётся там же.</p>
           <div className="ax-grid ax-g2" style={{ gap: 12 }}>
             <Field label="Годовая ставка, %" htmlFor="s-rate" hint="Пусто: калькулятор без ставки"><input id="s-rate" name="annualRate" className="ax-input num" inputMode="decimal" defaultValue={settings.annualRate ?? ""} /></Field>
             <Field label="Первый взнос, %" htmlFor="s-down"><input id="s-down" name="downPercent" className="ax-input num" inputMode="decimal" defaultValue={settings.downPercent} required /></Field>

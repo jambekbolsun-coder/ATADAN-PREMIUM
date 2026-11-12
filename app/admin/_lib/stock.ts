@@ -4,7 +4,8 @@
  * Связи, которые держит этот модуль:
  *  - заказ заводу → оплаты заводу с курсом → эффективный курс заказа → закупочная цена машин в сомах;
  *  - поставка создаёт машины по VIN из упаковочного листа; этапы пути меняют статус машин;
- *  - расходы поставки распределяются на машины (по цене / поровну / вручную) → себестоимость;
+ *  - калькуляция заказа (план на машину по статьям) + расходы на заказ, модель или поставку → себестоимость
+ *    (по статье факт, если он есть, иначе план; расчёт в landed-cost.ts);
  *  - пересчёт себестоимости обновляет ещё не выданные продажи (маржа «предварительная» до выдачи);
  *  - оплата заводу и оплаченный расход поставки - это проводки в кассе (account_transactions).
  */
@@ -15,6 +16,7 @@ import { normalizeVin } from "../../lib/business";
 import { HttpError } from "../../lib/security";
 import { catalogModels } from "./sales";
 import { notify } from "./db-kit";
+import { COST_KEYS, COST_LABEL, computeOrder, unitResults } from "./landed-cost";
 
 export type PoCurrency = "USD" | "CNY" | "KGS";
 export const UNIT_STATUS: Record<string, { label: string; tone: "good" | "warn" | "bad" | "info" | "mute" }> = {
@@ -35,10 +37,8 @@ export const SHIPMENT_STEPS = [
   { key: "cleared", label: "Растаможено", unit: "customs" },
   { key: "received", label: "Принято на склад", unit: "stock" },
 ] as const;
-export const COST_CATEGORY: Record<string, string> = {
-  freight: "Доставка (фрахт)", duty: "Таможенная пошлина", vat: "НДС на импорт", broker: "Брокер",
-  certification: "Сертификация", unloading: "Разгрузка", storage: "Хранение", other: "Другое",
-};
+/** Статьи расходов: те же строки, что в Excel-расчёте владельца (landed-cost.ts). */
+export const COST_CATEGORY: Record<string, string> = COST_LABEL;
 export const ALLOCATION: Record<string, string> = { value: "Пропорционально закупочной цене", equal: "Поровну на машину", manual: "Вручную по каждой машине" };
 
 export const isBoss = (a: Pick<Actor, "role">) => a.role === "owner" || a.role === "director";
@@ -49,6 +49,8 @@ export const canStockEdit = (a: Actor) => isBoss(a) || a.role === "manager" || a
 
 type Q = <T = Record<string, unknown>>(sql: string, ...args: unknown[]) => Promise<T[]>;
 const query = (client: PoolClient): Q => async <T,>(sql: string, ...args: unknown[]) => (await getRawDb().prepare(sql).bind(...args).execute<T>(client)).results;
+/** Чтение вне транзакции тем же интерфейсом (для карточки заказа). */
+const readQ: Q = async <T,>(sql: string, ...args: unknown[]) => (await getRawDb().prepare(sql).bind(...args).all<T>()).results;
 const id = () => crypto.randomUUID();
 const text = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
 const toMinor = (v: unknown, label: string, { allowZero = false } = {}) => {
@@ -69,6 +71,14 @@ const dateOnly = (v: unknown, label: string) => {
   return s;
 };
 const cur = (v: unknown): PoCurrency => (v === "USD" || v === "CNY" ? v : "KGS");
+/** Год выпуска: пусто - не указан; «25» → 2025; принимаем 1990–2100. */
+export function parseYear(v: unknown, label: string): number | null {
+  const s = String(v ?? "").replace(/\s/g, "");
+  if (!s) return null;
+  const n = /^\d{2}$/.test(s) ? 2000 + Number(s) : /^\d{4}$/.test(s) ? Number(s) : NaN;
+  if (!(n >= 1990 && n <= 2100)) throw new HttpError(400, `${label}: год выпуска четырьмя цифрами, например ${new Date().getFullYear()}`);
+  return n;
+}
 
 async function audit(q: Q, actor: Actor, action: string, entity: string, detail: string) {
   await q("INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES(?,?,?,?,?)", id(), actor.id, action, entity, detail.slice(0, 2000));
@@ -88,48 +98,59 @@ async function poRate(q: Q, poId: string) {
   return r.po && Number(r.po) > 0 ? Number(r.kgs) / Number(r.po) : Number(r.rate) || 1;
 }
 
+/** Всё для расчёта себестоимости заказа: позиции, калькуляция, расходы, машины, поставки. */
+async function loadCalc(q: Q, poId: string) {
+  const [po] = await q<{ id: string; currency: PoCurrency }>("SELECT id, currency FROM purchase_orders_v2 WHERE id=?", poId);
+  if (!po) return null;
+  const rate = await poRate(q, poId);
+  const [lines, plan, facts, units, shipments] = await Promise.all([
+    q<{ id: string; qty: number; unit_price_minor: number }>("SELECT id, qty, unit_price_minor FROM purchase_order_lines WHERE purchase_order_id=? ORDER BY created_at", poId),
+    q<{ line_id: string; category: string; amount_minor: number }>("SELECT p.line_id, p.category, p.amount_minor FROM purchase_order_plan p JOIN purchase_order_lines l ON l.id=p.line_id WHERE l.purchase_order_id=?", poId),
+    q<{ category: string; currency: string; amount_minor: number; amount_kgs_minor: number; line_id: string | null; shipment_id: string | null }>("SELECT category, currency, amount_minor, amount_kgs_minor, line_id, shipment_id FROM shipment_costs WHERE purchase_order_id=? AND status='posted'", poId),
+    q<{ id: string; purchase_order_line_id: string | null; shipment_id: string | null; purchase_cost_minor: number; manual_cost_minor: number | null; status: string; cost_override_minor: number | null }>("SELECT id, purchase_order_line_id, shipment_id, purchase_cost_minor, manual_cost_minor, status, cost_override_minor FROM inventory_units_v2 WHERE purchase_order_id=? AND archived=0 ORDER BY vin", poId),
+    q<{ id: string; allocation_method: string }>("SELECT id, allocation_method FROM shipments_v2 WHERE purchase_order_id=? AND archived=0", poId),
+  ]);
+  const calc = computeOrder({
+    rate,
+    lines: lines.map((l) => ({ id: l.id, qty: Number(l.qty), price: Number(l.unit_price_minor) })),
+    plan: plan.map((p) => ({ lineId: p.line_id, category: p.category, perUnit: Number(p.amount_minor) })),
+    // расход в другой валюте переводим в валюту заказа по курсу заказа
+    facts: facts.map((f) => ({ category: f.category, kgs: Number(f.amount_kgs_minor), po: f.currency === po.currency ? Number(f.amount_minor) : Number(f.amount_kgs_minor) / rate, lineId: f.line_id, shipmentId: f.shipment_id })),
+    units: units.map((u) => ({ id: u.id, lineId: u.purchase_order_line_id, shipmentId: u.shipment_id, legacyKgs: Number(u.purchase_cost_minor ?? 0), manual: u.manual_cost_minor === null ? null : Number(u.manual_cost_minor) })),
+    shipments: shipments.map((s) => ({ id: s.id, method: s.allocation_method })),
+  });
+  return { po, rate, units, calc };
+}
+
 /**
- * Пересчитать себестоимость машин поставки: закупка (цена позиции × курс заказа) + доля расходов.
- * Выданные машины не трогаем: их маржа уже зафиксирована. Невыданные продажи получают новую себестоимость.
+ * Пересчитать себестоимость машин заказа: закупка (цена позиции × курс заказа) + статьи расходов
+ * (факт, если внесён, иначе план калькуляции). Выданные машины не трогаем: их маржа уже зафиксирована.
+ * Невыданные продажи получают новую себестоимость.
  */
-export async function recalcShipment(q: Q, shipmentId: string) {
-  const [sh] = await q<{ id: string; purchase_order_id: string; allocation_method: string }>("SELECT id, purchase_order_id, allocation_method FROM shipments_v2 WHERE id=?", shipmentId);
-  if (!sh) return;
-  const rate = await poRate(q, sh.purchase_order_id);
-  const units = await q<{ id: string; status: string; unit_price_minor: number | null; manual_cost_minor: number | null; purchase_cost_minor: number; cost_override_minor: number | null }>(
-    "SELECT u.id, u.status, l.unit_price_minor, u.manual_cost_minor, u.purchase_cost_minor, u.cost_override_minor FROM inventory_units_v2 u LEFT JOIN purchase_order_lines l ON l.id=u.purchase_order_line_id WHERE u.shipment_id=? AND u.archived=0 ORDER BY u.vin",
-    shipmentId,
-  );
-  if (!units.length) return;
-  const [costs] = await q<{ v: number }>("SELECT COALESCE(SUM(amount_kgs_minor),0)::bigint AS v FROM shipment_costs WHERE shipment_id=? AND status='posted'", shipmentId);
-  const extra = Number(costs?.v ?? 0);
-  // Машины из старой админки без позиции заказа сохраняют закупочную цену, введённую раньше.
-  const purchase = units.map((u) => (u.unit_price_minor ? Math.round(Number(u.unit_price_minor) * rate) : Number(u.purchase_cost_minor ?? 0)));
-  const base = purchase.reduce((s, v) => s + v, 0);
-  let left = extra;
-  for (const [i, u] of units.entries()) {
-    let share: number;
-    if (sh.allocation_method === "manual") share = Number(u.manual_cost_minor ?? 0);
-    else if (sh.allocation_method === "equal" || base === 0) share = i === units.length - 1 ? left : Math.floor(extra / units.length);
-    else share = i === units.length - 1 ? left : Math.floor((extra * purchase[i]) / base);
-    left -= share;
-    if (u.status === "delivered") continue;
-    // старая машина без позиции заказа и без расходов поставки: себестоимость не трогаем
-    if (!u.unit_price_minor && extra === 0) continue;
-    await q("UPDATE inventory_units_v2 SET purchase_cost_minor=?, allocated_cost_minor=?, landed_cost_minor=COALESCE(cost_override_minor, ?), updated_at=CURRENT_TIMESTAMP WHERE id=?", purchase[i], share, purchase[i] + share, u.id);
+async function recalcOrder(q: Q, poId: string) {
+  const data = await loadCalc(q, poId);
+  if (!data) return;
+  const byId = new Map(data.units.map((u) => [u.id, u]));
+  for (const r of unitResults(data.calc.slots)) {
+    const u = byId.get(r.unitId);
+    if (!u || u.status === "delivered") continue;
+    // старая машина без позиции заказа и без расходов: себестоимость не трогаем
+    if (r.legacy && r.fact === 0 && r.plan === 0) continue;
+    const landed = r.purchase + r.fact + r.plan;
+    await q("UPDATE inventory_units_v2 SET purchase_cost_minor=?, allocated_cost_minor=?, planned_cost_minor=?, landed_cost_minor=COALESCE(cost_override_minor, ?), updated_at=CURRENT_TIMESTAMP WHERE id=?", r.purchase, r.fact, r.plan, landed, u.id);
     if (u.cost_override_minor !== null) continue; // себестоимость задана вручную: продажи не пересчитываем
-    // продажа ещё не выдана: обновляем себестоимость позиции и продажи
     const items = await q<{ id: string; sale_id: string }>("SELECT i.id, i.sale_id FROM sale_order_items i JOIN sale_orders o ON o.id=i.sale_id WHERE i.inventory_unit_id=? AND i.active=1 AND o.status='booked'", u.id);
     for (const it of items) {
-      await q("UPDATE sale_order_items SET cost_kgs_minor=? WHERE id=?", purchase[i] + share, it.id);
+      await q("UPDATE sale_order_items SET cost_kgs_minor=? WHERE id=?", landed, it.id);
       await q("UPDATE sale_orders SET cost_kgs_minor=(SELECT COALESCE(SUM(cost_kgs_minor*qty),0) FROM sale_order_items WHERE sale_id=? AND active=1) WHERE id=?", it.sale_id, it.sale_id);
     }
   }
 }
 
-async function recalcOrder(q: Q, poId: string) {
-  const shipments = await q<{ id: string }>("SELECT id FROM shipments_v2 WHERE purchase_order_id=? AND archived=0", poId);
-  for (const s of shipments) await recalcShipment(q, s.id);
+/** Пересчёт после изменений в поставке: считается весь заказ, к которому она относится. */
+export async function recalcShipment(q: Q, shipmentId: string) {
+  const [sh] = await q<{ purchase_order_id: string }>("SELECT purchase_order_id FROM shipments_v2 WHERE id=?", shipmentId);
+  if (sh) await recalcOrder(q, sh.purchase_order_id);
 }
 
 // ───────────────────────── чтение ─────────────────────────
@@ -216,12 +237,30 @@ export async function getOrder(poId: string) {
   const db = getRawDb();
   const order = (await listOrders()).find((o) => o.id === poId);
   if (!order) return null;
-  const [lines, payments, shipments] = await Promise.all([
-    db.prepare(`SELECT l.id, l.tractor_slug, l.model, l.qty, l.unit_price_minor, (SELECT COUNT(*) FROM inventory_units_v2 u WHERE u.purchase_order_line_id=l.id AND u.archived=0)::int AS shipped FROM purchase_order_lines l WHERE l.purchase_order_id=? ORDER BY l.created_at`).bind(poId).all<{ id: string; tractor_slug: string; model: string; qty: number; unit_price_minor: number; shipped: number }>(),
+  const [lines, payments, shipments, costs, plan, extra, calc] = await Promise.all([
+    db.prepare(`SELECT l.id, l.tractor_slug, l.model, l.qty, l.unit_price_minor, l.target_price_minor, (SELECT COUNT(*) FROM inventory_units_v2 u WHERE u.purchase_order_line_id=l.id AND u.archived=0)::int AS shipped FROM purchase_order_lines l WHERE l.purchase_order_id=? ORDER BY l.created_at`).bind(poId).all<{ id: string; tractor_slug: string; model: string; qty: number; unit_price_minor: number; target_price_minor: number | null; shipped: number }>(),
     db.prepare("SELECT p.*, p.fx_rate::float AS fx_rate, a.name AS account FROM supplier_payments p JOIN financial_accounts a ON a.id=p.account_id WHERE p.purchase_order_id=? ORDER BY p.paid_at").bind(poId).all<{ id: string; account: string; currency: string; amount_minor: number; fx_rate: number; amount_kgs_minor: number; amount_po_minor: number; paid_at: string; note: string; status: string; void_reason: string }>(),
     (await listShipments()).filter((s) => s.purchase_order_id === poId),
+    db.prepare("SELECT c.id, c.category, c.currency, c.amount_minor, c.fx_rate::float AS fx_rate, c.amount_kgs_minor, c.paid_at, c.note, c.status, c.void_reason, c.shipment_id, c.line_id, a.name AS account, s.tracking_number, l.model AS line_model FROM shipment_costs c LEFT JOIN financial_accounts a ON a.id=c.account_id LEFT JOIN shipments_v2 s ON s.id=c.shipment_id LEFT JOIN purchase_order_lines l ON l.id=c.line_id WHERE c.purchase_order_id=? ORDER BY c.paid_at, c.created_at").bind(poId).all<{ id: string; category: string; currency: string; amount_minor: number; fx_rate: number; amount_kgs_minor: number; paid_at: string; note: string; status: string; void_reason: string; shipment_id: string | null; line_id: string | null; account: string | null; tracking_number: string | null; line_model: string | null }>(),
+    db.prepare("SELECT p.line_id, p.category, p.amount_minor FROM purchase_order_plan p JOIN purchase_order_lines l ON l.id=p.line_id WHERE l.purchase_order_id=?").bind(poId).all<{ line_id: string; category: string; amount_minor: number }>(),
+    db.prepare("SELECT payment_plan_json FROM purchase_orders_v2 WHERE id=?").bind(poId).first<{ payment_plan_json: string }>(),
+    loadCalc(readQ, poId),
   ]);
-  return { order, lines: lines.results.map((l) => ({ ...l, unit_price_minor: Number(l.unit_price_minor) })), payments: payments.results.map((p) => ({ ...p, amount_minor: Number(p.amount_minor), amount_kgs_minor: Number(p.amount_kgs_minor), amount_po_minor: Number(p.amount_po_minor) })), shipments, effectiveRate: order.paid_po_minor ? order.paid_kgs_minor / order.paid_po_minor : order.fx_rate };
+  let schedule: { label: string; percent: number }[] = [];
+  try { const s = JSON.parse(extra?.payment_plan_json || "[]"); if (Array.isArray(s)) schedule = s.filter((x) => x && Number(x.percent) > 0).map((x) => ({ label: String(x.label ?? ""), percent: Number(x.percent) })); } catch { schedule = []; }
+  const planMap: Record<string, number> = {};
+  for (const p of plan.results) planMap[`${p.line_id}:${p.category}`] = Number(p.amount_minor);
+  return {
+    order,
+    lines: lines.results.map((l) => ({ ...l, unit_price_minor: Number(l.unit_price_minor), target_price_minor: l.target_price_minor === null ? null : Number(l.target_price_minor) })),
+    payments: payments.results.map((p) => ({ ...p, amount_minor: Number(p.amount_minor), amount_kgs_minor: Number(p.amount_kgs_minor), amount_po_minor: Number(p.amount_po_minor) })),
+    shipments,
+    costs: costs.results.map((c) => ({ ...c, amount_minor: Number(c.amount_minor), amount_kgs_minor: Number(c.amount_kgs_minor) })),
+    plan: planMap,
+    schedule,
+    calc: calc?.calc.lines ?? [],
+    effectiveRate: calc?.rate ?? (order.paid_po_minor ? order.paid_kgs_minor / order.paid_po_minor : order.fx_rate),
+  };
 }
 
 export async function getShipment(shipmentId: string) {
@@ -229,12 +268,12 @@ export async function getShipment(shipmentId: string) {
   const shipment = await db.prepare(`SELECT s.*, s.eta::text AS eta, to_char(s.departure_at AT TIME ZONE 'Asia/Bishkek','YYYY-MM-DD"T"HH24:MI') AS departure_local, o.order_number, o.currency, p.name AS supplier FROM shipments_v2 s JOIN purchase_orders_v2 o ON o.id=s.purchase_order_id JOIN suppliers_v2 p ON p.id=o.supplier_id WHERE s.id=?`).bind(shipmentId).first<Record<string, unknown> & { id: string; status: string; tracking_number: string | null; purchase_order_id: string; allocation_method: string; eta: string | null; order_number: string; currency: string; supplier: string }>();
   if (!shipment) return null;
   const [units, costs] = await Promise.all([
-    db.prepare("SELECT u.id, u.vin, u.model, u.status, u.engine_number, u.purchase_cost_minor, u.allocated_cost_minor, u.landed_cost_minor, u.manual_cost_minor, u.received_at, u.damage_note, (SELECT c.name || ' ' || c.phone FROM sale_orders o JOIN crm_customers c ON c.id=o.customer_id WHERE o.id=u.reserved_sale_id) AS client FROM inventory_units_v2 u WHERE u.shipment_id=? AND u.archived=0 ORDER BY u.model, u.vin").bind(shipmentId).all<{ client: string | null; id: string; vin: string; model: string; status: string; engine_number: string; purchase_cost_minor: number; allocated_cost_minor: number; landed_cost_minor: number; manual_cost_minor: number | null; received_at: string | null; damage_note: string }>(),
+    db.prepare("SELECT u.id, u.vin, u.model, u.status, u.engine_number, u.purchase_cost_minor, u.allocated_cost_minor, u.planned_cost_minor, u.landed_cost_minor, u.manual_cost_minor, u.received_at, u.damage_note, (SELECT c.name || ' ' || c.phone FROM sale_orders o JOIN crm_customers c ON c.id=o.customer_id WHERE o.id=u.reserved_sale_id) AS client FROM inventory_units_v2 u WHERE u.shipment_id=? AND u.archived=0 ORDER BY u.model, u.vin").bind(shipmentId).all<{ client: string | null; id: string; vin: string; model: string; status: string; engine_number: string; purchase_cost_minor: number; allocated_cost_minor: number; planned_cost_minor: number; landed_cost_minor: number; manual_cost_minor: number | null; received_at: string | null; damage_note: string }>(),
     db.prepare("SELECT c.*, c.fx_rate::float AS fx_rate, a.name AS account FROM shipment_costs c LEFT JOIN financial_accounts a ON a.id=c.account_id WHERE c.shipment_id=? ORDER BY c.paid_at").bind(shipmentId).all<{ id: string; category: string; currency: string; amount_minor: number; fx_rate: number; amount_kgs_minor: number; account: string | null; paid_at: string; note: string; status: string; void_reason: string }>(),
   ]);
   return {
     shipment,
-    units: units.results.map((u) => ({ ...u, purchase_cost_minor: Number(u.purchase_cost_minor), allocated_cost_minor: Number(u.allocated_cost_minor), landed_cost_minor: Number(u.landed_cost_minor), manual_cost_minor: u.manual_cost_minor === null ? null : Number(u.manual_cost_minor) })),
+    units: units.results.map((u) => ({ ...u, purchase_cost_minor: Number(u.purchase_cost_minor), allocated_cost_minor: Number(u.allocated_cost_minor), planned_cost_minor: Number(u.planned_cost_minor ?? 0), landed_cost_minor: Number(u.landed_cost_minor), manual_cost_minor: u.manual_cost_minor === null ? null : Number(u.manual_cost_minor) })),
     costs: costs.results.map((c) => ({ ...c, amount_minor: Number(c.amount_minor), amount_kgs_minor: Number(c.amount_kgs_minor) })),
   };
 }
@@ -330,6 +369,43 @@ export async function voidSupplierPayment(actor: Actor, paymentId: string, reaso
   });
 }
 
+/**
+ * Калькуляция заказа как в Excel: план расходов на 1 машину по статьям, цель продажи, график оплаты заводу.
+ * plan: ключ "<lineId>:<статья>" → сумма в валюте заказа (пусто или 0: статьи нет); targets: lineId → цена продажи.
+ */
+export async function saveOrderPlan(actor: Actor, poId: string, input: { plan: Record<string, string>; targets: Record<string, string>; schedule: { label: string; percent: string }[] }) {
+  assertLogistics(actor);
+  const schedule = (Array.isArray(input.schedule) ? input.schedule : [])
+    .map((s, i) => ({ label: text(s.label, 60) || `Оплата ${i + 1}`, raw: String(s.percent ?? "").replace(",", ".").trim() }))
+    .filter((s) => s.raw)
+    .map((s) => {
+      const p = Number(s.raw);
+      if (!Number.isFinite(p) || p <= 0 || p > 100) throw new HttpError(400, `${s.label}: процент от 1 до 100`);
+      return { label: s.label, percent: Math.round(p * 100) / 100 };
+    });
+  if (schedule.length > 8) throw new HttpError(400, "Не больше 8 оплат в графике");
+  if (schedule.reduce((a, s) => a + s.percent, 0) > 100.001) throw new HttpError(400, "В графике оплат больше 100%");
+  return getRawDb().transaction(async (client) => {
+    const q = query(client);
+    const [po] = await q<{ id: string; order_number: string }>("SELECT id, order_number FROM purchase_orders_v2 WHERE id=? AND archived=0 FOR UPDATE", text(poId, 100));
+    if (!po) throw new HttpError(404, "Заказ не найден");
+    const lines = await q<{ id: string; model: string }>("SELECT id, model FROM purchase_order_lines WHERE purchase_order_id=?", po.id);
+    for (const l of lines) {
+      const t = String(input.targets?.[l.id] ?? "").trim();
+      await q("UPDATE purchase_order_lines SET target_price_minor=? WHERE id=?", t ? toMinor(t, `Цена продажи ${l.model}`, { allowZero: true }) : null, l.id);
+      for (const key of COST_KEYS) {
+        const raw = String(input.plan?.[`${l.id}:${key}`] ?? "").trim();
+        const v = raw ? toMinor(raw, `${l.model}, ${COST_CATEGORY[key]}`, { allowZero: true }) : 0;
+        if (v > 0) await q("INSERT INTO purchase_order_plan(line_id,category,amount_minor,updated_by) VALUES(?,?,?,?) ON CONFLICT(line_id,category) DO UPDATE SET amount_minor=excluded.amount_minor, updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP", l.id, key, v, actor.id);
+        else await q("DELETE FROM purchase_order_plan WHERE line_id=? AND category=?", l.id, key);
+      }
+    }
+    await q("UPDATE purchase_orders_v2 SET payment_plan_json=?, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", JSON.stringify(schedule), actor.id, po.id);
+    await audit(q, actor, "po.plan", po.id, `Расчёт себестоимости заказа ${po.order_number} обновлён`);
+    await recalcOrder(q, po.id);
+  });
+}
+
 // ───────────────────────── операции: поставки ─────────────────────────
 export async function createShipment(actor: Actor, input: { poId: string; tracking: string; route?: string; transport?: string; eta?: string; status?: string; allocation?: string; units: { lineId: string; vin: string; engine?: string; year?: string | number; color?: string }[] }) {
   assertLogistics(actor);
@@ -352,8 +428,7 @@ export async function createShipment(actor: Actor, input: { poId: string; tracki
       vins.add(vin);
       line.adding += 1;
       if (line.shipped + line.adding > line.qty) throw new HttpError(400, `${line.model}: в заказе ${line.qty} шт., уже отправлено ${line.shipped}. Лишняя машина в строке ${i + 1}`);
-      const year = u.year ? Math.round(Number(u.year)) : null;
-      if (year !== null && !(year >= 2000 && year <= 2100)) throw new HttpError(400, `Строка ${i + 1}: проверьте год`);
+      const year = parseYear(u.year, `Строка ${i + 1}`);
       return { line, vin, engine: text(u.engine, 60), year, color: text(u.color, 40) };
     });
     const existing = await q<{ vin: string }>(`SELECT vin FROM inventory_units_v2 WHERE upper(vin) IN (${prepared.map(() => "?").join(",")})`, ...prepared.map((p) => p.vin));
@@ -422,13 +497,43 @@ export async function receiveShipment(actor: Actor, shipmentId: string, unitIds:
   });
 }
 
-export async function addShipmentCost(actor: Actor, shipmentId: string, input: { category: string; currency: string; amount: string; fxRate: string; accountId?: string; paidAt: string; note?: string }) {
+export type CostInput = { category: string; currency: string; amount: string; fxRate: string; accountId?: string; paidAt: string; note?: string };
+
+/**
+ * Расход по заказу: на весь заказ, на одну модель или на поставку (scope: "order" | "line:<id>" | "shipment:<id>").
+ * Если указана касса, деньги списываются проводкой; «ещё не оплачено» учитывается только в себестоимости.
+ */
+export async function addOrderCost(actor: Actor, poId: string, scope: string, input: CostInput) {
   assertLogistics(actor);
-  if (!COST_CATEGORY[input.category]) throw new HttpError(400, "Выберите вид расхода");
+  if (!COST_CATEGORY[input.category]) throw new HttpError(400, "Выберите статью расхода");
   return getRawDb().transaction(async (client) => {
     const q = query(client);
-    const [s] = await q<{ id: string; tracking_number: string }>("SELECT id, tracking_number FROM shipments_v2 WHERE id=? AND archived=0 FOR UPDATE", shipmentId);
-    if (!s) throw new HttpError(404, "Поставка не найдена");
+    const [po] = await q<{ id: string; order_number: string }>("SELECT id, order_number FROM purchase_orders_v2 WHERE id=? AND archived=0 FOR UPDATE", text(poId, 100));
+    if (!po) throw new HttpError(404, "Заказ не найден");
+    let lineId: string | null = null, shipmentId: string | null = null, where = `заказ ${po.order_number}`;
+    if (scope.startsWith("line:")) {
+      const [l] = await q<{ id: string; model: string }>("SELECT id, model FROM purchase_order_lines WHERE id=? AND purchase_order_id=?", text(scope.slice(5), 100), po.id);
+      if (!l) throw new HttpError(400, "Выберите модель из этого заказа");
+      lineId = l.id; where = `${l.model} · заказ ${po.order_number}`;
+    } else if (scope.startsWith("shipment:")) {
+      const [s] = await q<{ id: string; tracking_number: string }>("SELECT id, tracking_number FROM shipments_v2 WHERE id=? AND purchase_order_id=? AND archived=0", text(scope.slice(9), 100), po.id);
+      if (!s) throw new HttpError(400, "Выберите поставку этого заказа");
+      shipmentId = s.id; where = s.tracking_number;
+    } else if (scope !== "order") throw new HttpError(400, "Укажите, к чему относится расход");
+    await insertCost(q, actor, { poId: po.id, lineId, shipmentId, where }, input);
+    await recalcOrder(q, po.id);
+  });
+}
+
+export async function addShipmentCost(actor: Actor, shipmentId: string, input: CostInput) {
+  const [s] = await getRawDb().prepare("SELECT purchase_order_id FROM shipments_v2 WHERE id=? AND archived=0").bind(shipmentId).all<{ purchase_order_id: string }>().then((r) => r.results);
+  if (!s) throw new HttpError(404, "Поставка не найдена");
+  return addOrderCost(actor, s.purchase_order_id, `shipment:${shipmentId}`, input);
+}
+
+async function insertCost(q: Q, actor: Actor, target: { poId: string; lineId: string | null; shipmentId: string | null; where: string }, input: CostInput) {
+  const s = { id: target.shipmentId, tracking_number: target.where };
+  {
     let currency = cur(input.currency);
     let accountId: string | null = null;
     if (input.accountId) {
@@ -445,12 +550,11 @@ export async function addShipmentCost(actor: Actor, shipmentId: string, input: {
     let tx: string | null = null;
     if (accountId) {
       tx = id();
-      await q("INSERT INTO account_transactions(id,account_id,direction,amount_minor,category,payment_id,occurred_at,description,created_by,link_type,link_id) VALUES(?,?, 'out', ?, ?, ?, ?, ?, ?, 'shipment', ?)", tx, accountId, amount, `Поставка: ${COST_CATEGORY[input.category]}`, cid, paidAt, `${COST_CATEGORY[input.category]} · ${s.tracking_number}${input.note ? ` · ${text(input.note, 200)}` : ""}`, actor.id, s.id);
+      await q("INSERT INTO account_transactions(id,account_id,direction,amount_minor,category,payment_id,occurred_at,description,created_by,link_type,link_id) VALUES(?,?, 'out', ?, ?, ?, ?, ?, ?, ?, ?)", tx, accountId, amount, `Логистика: ${COST_CATEGORY[input.category]}`, cid, paidAt, `${COST_CATEGORY[input.category]} · ${s.tracking_number}${input.note ? ` · ${text(input.note, 200)}` : ""}`, actor.id, s.id ? "shipment" : "purchase_order", s.id ?? target.poId);
     }
-    await q("INSERT INTO shipment_costs(id,shipment_id,category,currency,amount_minor,fx_rate,amount_kgs_minor,account_id,transaction_id,paid_at,note,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)", cid, s.id, input.category, currency, amount, fx, kgs, accountId, tx, paidAt, text(input.note, 300), actor.id);
-    await audit(q, actor, "shipment.cost", s.id, `${COST_CATEGORY[input.category]}: ${amount / 100} ${currency}`);
-    await recalcShipment(q, s.id);
-  });
+    await q("INSERT INTO shipment_costs(id,shipment_id,purchase_order_id,line_id,category,currency,amount_minor,fx_rate,amount_kgs_minor,account_id,transaction_id,paid_at,note,created_by) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)", cid, s.id, target.poId, target.lineId, input.category, currency, amount, fx, kgs, accountId, tx, paidAt, text(input.note, 300), actor.id);
+    await audit(q, actor, "po.cost", s.id ?? target.poId, `${COST_CATEGORY[input.category]}: ${amount / 100} ${currency} · ${s.tracking_number}`);
+  }
 }
 
 export async function voidShipmentCost(actor: Actor, costId: string, reason: string) {
@@ -459,16 +563,17 @@ export async function voidShipmentCost(actor: Actor, costId: string, reason: str
   if (why.length < 5) throw new HttpError(400, "Укажите причину сторно");
   return getRawDb().transaction(async (client) => {
     const q = query(client);
-    const [c] = await q<{ id: string; shipment_id: string; account_id: string | null; amount_minor: number; status: string; category: string }>("SELECT id, shipment_id, account_id, amount_minor, status, category FROM shipment_costs WHERE id=? FOR UPDATE", costId);
+    const [c] = await q<{ id: string; shipment_id: string | null; purchase_order_id: string | null; account_id: string | null; amount_minor: number; status: string; category: string }>("SELECT id, shipment_id, purchase_order_id, account_id, amount_minor, status, category FROM shipment_costs WHERE id=? FOR UPDATE", costId);
     if (!c || c.status !== "posted") throw new HttpError(409, "Расход не найден или уже сторнирован");
     let tx: string | null = null;
     if (c.account_id) {
       tx = id();
-      await q("INSERT INTO account_transactions(id,account_id,direction,amount_minor,category,payment_id,occurred_at,description,created_by,link_type,link_id) VALUES(?,?, 'in', ?, 'Сторно расхода поставки', ?, CURRENT_TIMESTAMP, ?, ?, 'shipment', ?)", tx, c.account_id, c.amount_minor, c.id, `Сторно: ${why}`, actor.id, c.shipment_id);
+      await q("INSERT INTO account_transactions(id,account_id,direction,amount_minor,category,payment_id,occurred_at,description,created_by,link_type,link_id) VALUES(?,?, 'in', ?, 'Сторно расхода по заказу', ?, CURRENT_TIMESTAMP, ?, ?, ?, ?)", tx, c.account_id, c.amount_minor, c.id, `Сторно: ${why}`, actor.id, c.shipment_id ? "shipment" : "purchase_order", c.shipment_id ?? c.purchase_order_id);
     }
     await q("UPDATE shipment_costs SET status='void', void_reason=?, void_transaction_id=? WHERE id=?", why, tx, c.id);
-    await audit(q, actor, "shipment.cost_void", c.shipment_id, why);
-    await recalcShipment(q, c.shipment_id);
+    await audit(q, actor, "po.cost_void", c.shipment_id ?? c.purchase_order_id ?? c.id, why);
+    if (c.purchase_order_id) await recalcOrder(q, c.purchase_order_id);
+    else if (c.shipment_id) await recalcShipment(q, c.shipment_id);
   });
 }
 
@@ -505,13 +610,16 @@ export async function setAllocation(actor: Actor, shipmentId: string, method: st
 }
 
 // ───────────────────────── операции: машина ─────────────────────────
-type NewUnit = { slug: string; vin: string; engine?: string; year?: string; color?: string; location?: string; cost?: string; price?: string };
+export type NewUnit = { slug: string; vin: string; engine?: string; year?: string; color?: string; location?: string; /** себестоимость в долларах */ costUsd?: string; /** из чего сложилась: «цена завода 45 000, таможня 4 000» */ breakdown?: string };
 
-/** Приход машин, которые уже стоят на складе, без заказа заводу. */
-export async function createUnits(actor: Actor, input: NewUnit[]) {
+/** Приход машин, которые уже стоят на складе, без заказа заводу. Себестоимость в долларах переводится в сомы по курсу. */
+export async function createUnits(actor: Actor, payload: { fxRate?: string; rows: NewUnit[] }) {
   if (!canIntake(actor)) throw new HttpError(403, "Приход оформляют владелец, директор и бухгалтер");
+  const input = payload?.rows;
   if (!Array.isArray(input) || !input.length) throw new HttpError(400, "Добавьте хотя бы одну машину");
   if (input.length > 200) throw new HttpError(400, "За один раз не больше 200 машин");
+  const anyCost = input.some((u) => String(u.costUsd ?? "").trim());
+  const fx = anyCost ? rateOf(payload.fxRate, "USD", "Курс доллара") : 1;
   const models = new Map((await catalogModels()).map((m) => [m.slug, m]));
   const seen = new Set<string>();
   const rows = input.map((u, i) => {
@@ -520,9 +628,10 @@ export async function createUnits(actor: Actor, input: NewUnit[]) {
     const vin = normalizeVin(u.vin);
     if (seen.has(vin)) throw new HttpError(400, `Строка ${i + 1}: VIN ${vin} повторяется`);
     seen.add(vin);
-    const year = u.year ? Math.round(Number(u.year)) : null;
-    if (year !== null && !(year >= 2000 && year <= 2100)) throw new HttpError(400, `Строка ${i + 1}: проверьте год`);
-    return { m, vin, year, engine: text(u.engine, 60), color: text(u.color, 40), location: text(u.location, 120), cost: u.cost ? toMinor(u.cost, `Строка ${i + 1}, себестоимость`, { allowZero: true }) : 0, price: u.price ? toMinor(u.price, `Строка ${i + 1}, цена`, { allowZero: true }) : 0 };
+    const year = parseYear(u.year, `Строка ${i + 1}`);
+    const usd = String(u.costUsd ?? "").trim() ? toMinor(u.costUsd, `Строка ${i + 1}, себестоимость`, { allowZero: true }) : 0;
+    const note = usd ? `себестоимость ${(usd / 100).toLocaleString("ru-RU")} $ по курсу ${fx}${u.breakdown ? ` (${text(u.breakdown, 200)})` : ""}` : "";
+    return { m, vin, year, engine: text(u.engine, 60), color: text(u.color, 40), location: text(u.location, 120), cost: Math.round(usd * fx), price: 0, note };
   });
   return getRawDb().transaction(async (client) => {
     const q = query(client);
@@ -531,7 +640,7 @@ export async function createUnits(actor: Actor, input: NewUnit[]) {
     for (const r of rows) {
       const uid = id();
       await q("INSERT INTO inventory_units_v2(id,vin,tractor_slug,model,status,purchase_cost_minor,landed_cost_minor,list_price_minor,location,engine_number,year,color,received_at,created_by,updated_by) VALUES(?,?,?,?,'stock',?,?,?,?,?,?,?,CURRENT_TIMESTAMP,?,?)", uid, r.vin, r.m.slug, r.m.model, r.cost, r.cost, r.price, r.location, r.engine, r.year, r.color, actor.id, actor.id);
-      await unitEvent(q, actor, uid, null, "stock", "Приход на склад вручную");
+      await unitEvent(q, actor, uid, null, "stock", `Приход на склад вручную${r.note ? `: ${r.note}` : ""}`);
     }
     await audit(q, actor, "unit.intake", "stock", `Приход вручную: ${rows.length} машин`);
     return rows.length;
@@ -545,9 +654,9 @@ export async function setUnitCost(actor: Actor, unitId: string, value: string) {
   const cost = raw ? toMinor(raw, "Себестоимость", { allowZero: true }) : null;
   return getRawDb().transaction(async (client) => {
     const q = query(client);
-    const [u] = await q<{ id: string; vin: string; purchase_cost_minor: number; allocated_cost_minor: number; status: string }>("SELECT id, vin, purchase_cost_minor, allocated_cost_minor, status FROM inventory_units_v2 WHERE id=? AND archived=0 FOR UPDATE", unitId);
+    const [u] = await q<{ id: string; vin: string; purchase_cost_minor: number; allocated_cost_minor: number; planned_cost_minor: number; status: string }>("SELECT id, vin, purchase_cost_minor, allocated_cost_minor, planned_cost_minor, status FROM inventory_units_v2 WHERE id=? AND archived=0 FOR UPDATE", unitId);
     if (!u) throw new HttpError(404, "Машина не найдена");
-    const landed = cost ?? Number(u.purchase_cost_minor) + Number(u.allocated_cost_minor);
+    const landed = cost ?? Number(u.purchase_cost_minor) + Number(u.allocated_cost_minor) + Number(u.planned_cost_minor ?? 0);
     await q("UPDATE inventory_units_v2 SET cost_override_minor=?, landed_cost_minor=?, updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", cost, landed, actor.id, u.id);
     const items = await q<{ id: string; sale_id: string }>("SELECT i.id, i.sale_id FROM sale_order_items i JOIN sale_orders o ON o.id=i.sale_id WHERE i.inventory_unit_id=? AND i.active=1 AND o.status='booked'", u.id);
     for (const it of items) {
@@ -565,8 +674,7 @@ export async function updateUnit(actor: Actor, unitId: string, input: { engine?:
     const q = query(client);
     const [u] = await q<{ id: string; vin: string }>("SELECT id, vin FROM inventory_units_v2 WHERE id=? FOR UPDATE", unitId);
     if (!u) throw new HttpError(404, "Машина не найдена");
-    const year = input.year ? Math.round(Number(input.year)) : null;
-    if (year !== null && !(year >= 2000 && year <= 2100)) throw new HttpError(400, "Проверьте год выпуска");
+    const year = parseYear(input.year, "Год выпуска");
     const listPrice = input.listPrice && isBoss(actor) ? toMinor(input.listPrice, "Цена прайса", { allowZero: true }) : null;
     if (input.vin && canIntake(actor)) {
       const vin = normalizeVin(input.vin);

@@ -19,7 +19,7 @@ export function NewLeadForm({ models }: { models: { slug: string; label: string 
         <Field label="Телефон" htmlFor="ld-phone"><input id="ld-phone" name="phone" className="ax-input" inputMode="tel" required placeholder="+996 555 12 34 56" /></Field>
         <Field label="Откуда" htmlFor="ld-src">
           <select id="ld-src" name="source" className="ax-input" defaultValue="phone">
-            <option value="phone">Звонок</option><option value="office">Визит в офис</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option>
+            <option value="phone">Звонок</option><option value="office">Визит в офис</option><option value="whatsapp">WhatsApp</option><option value="instagram">Instagram</option><option value="chatbot">Чат-бот</option>
             <option value="exhibition">Выставка</option><option value="referral">Рекомендация</option><option value="lalafo">Lalafo</option><option value="other">Другое</option>
           </select>
         </Field>

@@ -124,4 +124,17 @@ CREATE TABLE IF NOT EXISTS delivery_items (
   vin TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_delivery_items_delivery ON delivery_items(delivery_id);
+
+-- Решение владельца 2026-11-12: Ислам - второй владелец с подписью «Владелец компании», Бекболсун - «Инженер».
+-- Выполняется один раз: потом роль и должность меняют в Настройки → Сотрудники.
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id='staff-titles-20261112') THEN
+    UPDATE staff SET role='owner', permissions_json='[]', position='Владелец компании'
+      WHERE active=1 AND role IN ('director','owner') AND (display_name ILIKE 'Ислам%' OR display_name ILIKE 'Islam%');
+    UPDATE staff SET position='Инженер'
+      WHERE active=1 AND role='owner' AND (display_name ILIKE 'Бекболсун%' OR display_name ILIKE 'Bekbolsun%');
+    INSERT INTO schema_migrations(id) VALUES('staff-titles-20261112');
+  END IF;
+END $$;
 `;

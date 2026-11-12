@@ -7,6 +7,7 @@ import { moneyAccounts } from "../../../../../_lib/sales";
 import { date, money, type Currency } from "../../../../../_lib/format";
 import { Badge, Card, Notice, PageHeader } from "../../../../../_ui/ui";
 import { ShipmentActions, VoidShipmentCost } from "../../logistics-actions";
+import { CostDialog } from "../../cost-forms";
 import { shipmentInfoAction } from "../../../../../_lib/stock-actions";
 import { ActionDialog, Field } from "../../../../../_ui/forms";
 import { dateTime } from "../../../../../_lib/format";
@@ -37,11 +38,9 @@ export default async function ShipmentCard({ params }: PageProps<"/admin/work/lo
             shipmentId={s.id}
             status={s.status}
             units={units.map((u) => ({ id: u.id, vin: u.vin, model: u.model, received: !!u.received_at }))}
-            accounts={accounts}
-            rates={{ USD: fx?.value ? Math.round(fx.value * 100) / 100 : 0 }}
             allocation={s.allocation_method}
             manual={units.map((u) => ({ id: u.id, vin: u.vin, value: u.manual_cost_minor !== null ? String(u.manual_cost_minor / 100) : "" }))}
-            categories={COST_CATEGORY}
+            extra={<CostDialog target={{ shipmentId: s.id }} accounts={accounts} usdRate={fx?.value ? Math.round(fx.value * 100) / 100 : 0} currency={s.currency} />}
           />
         ) : null}
       />
@@ -61,7 +60,7 @@ export default async function ShipmentCard({ params }: PageProps<"/admin/work/lo
         <Card title={`Машины (${units.length})`} flush>
           <div className="ax-table-wrap" style={{ border: 0, borderRadius: 0 }}>
             <table className="ax-table">
-              <thead><tr><th>VIN</th><th>Модель</th><th>Статус</th><th>Клиент</th>{cost ? <><th className="r">Закупка</th><th className="r">Доля расходов</th><th className="r">Себестоимость</th></> : null}</tr></thead>
+              <thead><tr><th>VIN</th><th>Модель</th><th>Статус</th><th>Клиент</th>{cost ? <><th className="r">Закупка</th><th className="r">Расходы</th><th className="r">Себестоимость</th></> : null}</tr></thead>
               <tbody>
                 {units.map((u) => (
                   <tr key={u.id}>
@@ -69,11 +68,11 @@ export default async function ShipmentCard({ params }: PageProps<"/admin/work/lo
                     <td>{u.model}</td>
                     <td><Badge tone={UNIT_STATUS[u.status]?.tone ?? "mute"}>{UNIT_STATUS[u.status]?.label ?? u.status}</Badge></td>
                     <td className="ax-small">{u.client ?? ""}</td>
-                    {cost ? <><td className="r num">{money(u.purchase_cost_minor)}</td><td className="r num">{money(u.allocated_cost_minor)}</td><td className="r num ax-strong">{money(u.landed_cost_minor)}</td></> : null}
+                    {cost ? <><td className="r num">{money(u.purchase_cost_minor)}</td><td className="r num">{money(u.allocated_cost_minor + u.planned_cost_minor)}{u.planned_cost_minor ? <div className="ax-small">из них план {money(u.planned_cost_minor)}</div> : null}</td><td className="r num ax-strong">{money(u.landed_cost_minor)}</td></> : null}
                   </tr>
                 ))}
               </tbody>
-              {cost ? <tfoot><tr><td colSpan={4}>Итого</td><td className="r num">{money(units.reduce((a, u) => a + u.purchase_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.allocated_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.landed_cost_minor, 0))}</td></tr></tfoot> : null}
+              {cost ? <tfoot><tr><td colSpan={4}>Итого</td><td className="r num">{money(units.reduce((a, u) => a + u.purchase_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.allocated_cost_minor + u.planned_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.landed_cost_minor, 0))}</td></tr></tfoot> : null}
             </table>
           </div>
         </Card>
@@ -95,7 +94,7 @@ export default async function ShipmentCard({ params }: PageProps<"/admin/work/lo
                   </div>
                 ))}
               </div>
-            ) : <p className="ax-small" style={{ margin: 0 }}>Расходов пока нет. Добавьте фрахт, пошлину, брокера: они войдут в себестоимость машин.</p>}
+            ) : <p className="ax-small" style={{ margin: 0 }}>Расходов именно этой поставки пока нет. Расходы на весь заказ и расчёт себестоимости: в карточке заказа <Link href={`/admin/work/logistics/orders/${s.purchase_order_id}`} style={{ color: "var(--brand)" }}>{s.order_number}</Link>.</p>}
           </Card>
           <Card title="Маршрут и перевозчик">
             <dl className="ax-kv">

@@ -74,11 +74,12 @@ export default async function UnitCard({ params }: PageProps<"/admin/work/stock/
             <Card title="Себестоимость">
               <dl className="ax-kv">
                 <dt>Закупка по курсу</dt><dd className="num">{money(u.purchase_cost_minor)}</dd>
-                <dt>Доля расходов поставки</dt><dd className="num">{money(Number(u.allocated_cost_minor ?? 0))}</dd>
+                <dt>Расходы (факт)</dt><dd className="num">{money(Number(u.allocated_cost_minor ?? 0))}</dd>
+                {Number(u.planned_cost_minor ?? 0) ? <><dt>Расходы по плану</dt><dd className="num">{money(Number(u.planned_cost_minor))}</dd></> : null}
                 <dt>Себестоимость</dt><dd className="num" style={{ fontSize: 16 }}>{money(u.landed_cost_minor)}</dd>
                 <dt>Цена прайса</dt><dd className="num">{u.list_price_minor ? money(u.list_price_minor) : "не задана"}</dd>
               </dl>
-              {!u.received_at ? <p className="ax-small" style={{ marginBottom: 0 }}>Предварительно: расходы поставки ещё могут добавиться.</p> : null}
+              {Number(u.planned_cost_minor ?? 0) ? <p className="ax-small" style={{ marginBottom: 0 }}>Часть расходов пока по плану из расчёта заказа. Когда внесут настоящие счета, себестоимость пересчитается сама.</p> : !u.received_at ? <p className="ax-small" style={{ marginBottom: 0 }}>Предварительно: расходы поставки ещё могут добавиться.</p> : null}
             </Card>
           ) : null}
         </div>

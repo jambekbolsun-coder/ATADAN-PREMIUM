@@ -1,7 +1,7 @@
-import { validPublicPhone, LEASE_MONTHS } from "../../lib/customer-input";
+import { validPublicPhone } from "../../lib/customer-input";
 import { ensureDb, getRawDb } from "../../../db";
 import { getCatalog } from "../../lib/catalog";
-import { calculateInstallment, salePrice, type LeaseProgram } from "../../lib/leasing";
+import { calculateInstallment, isValidLeaseTerm, leaseTermChoices, salePrice, type LeaseProgram } from "../../lib/leasing";
 import { getLeasingPublicConfig } from "../../lib/leasing-public";
 import { getSiteSettings } from "../../lib/site-settings";
 import { cleanText, digest, fail, HttpError, jsonBody, rateLimit, sameOrigin } from "../../lib/security";
@@ -15,7 +15,7 @@ export async function POST(request:Request){
     if(name.length<2||!validPublicPhone(phone))throw new HttpError(400,"Укажите имя и корректный номер телефона");
     await ensureDb();const forwarded=request.headers.get("x-forwarded-for")?.split(",")[0]??"local";await rateLimit(`lease:${forwarded}`,6,900);
     const [catalog,config,{settings},usdKgsRate]=await Promise.all([getCatalog(),getLeasingPublicConfig(),getSiteSettings(),getUsdKgsRate()]);const tractor=catalog.find(item=>item.slug===tractorSlug);if(!tractor)throw new HttpError(400,"Модель не найдена");
-    const fallback:LeaseProgram={id:"default",name:"Предварительный расчёт",programType:"Лизинг",currency:"KGS",termsMonths:[LEASE_MONTHS],minDownPercent:settings.downPercent,maxDownPercent:90,minDownAmount:0,downPaymentMode:"Оба варианта",markupPercent:0,annualRate:settings.annualRate??0,fixedCommission:settings.fee,commissionPercent:0,insurance:0,processingFee:0,delivery:0,includeDelivery:true,includeInsurance:false,includeCommission:true,discountOrder:"before",rounding:1,zeroPercent:false,options:[],notes:""};
+    const fallback:LeaseProgram={id:"default",name:"Предварительный расчёт",programType:"Лизинг",currency:"KGS",termsMonths:leaseTermChoices(config.maxMonths),minDownPercent:settings.downPercent,maxDownPercent:90,minDownAmount:0,downPaymentMode:"Оба варианта",markupPercent:0,annualRate:settings.annualRate??0,fixedCommission:settings.fee,commissionPercent:0,insurance:0,processingFee:0,delivery:0,includeDelivery:true,includeInsurance:false,includeCommission:true,discountOrder:"before",rounding:1,zeroPercent:false,options:[],notes:""};
     const program=config.programs.find(item=>item.id===programId)??(programId==="default"?fallback:null);if(!program)throw new HttpError(400,"Программа недоступна");const model=config.models.find(item=>item.tractorSlug===tractorSlug);if(model?.enabled===false)throw new HttpError(400,"Для этой модели программа недоступна");
     const promotion=config.promotions.find(item=>!item.tractorSlugs.length||item.tractorSlugs.includes(tractorSlug)),publishedPrice=model?.price??salePrice(tractor.price,tractor.discountPercent??0),priceBasis=cleanText(body.priceBasis??"manual_som",30),claimedRate=Number(body.exchangeRate);
     let basePrice=publishedPrice??Number(body.estimatedPrice);
@@ -30,7 +30,7 @@ export async function POST(request:Request){
     }
     if(!Number.isFinite(basePrice)||basePrice<=0||basePrice>500000000)throw new HttpError(400,"Введите ориентировочную стоимость для предварительного расчёта");
     const allowedOptions=model?.options?.length?model.options:program.options,requested=Array.isArray(body.options)?body.options.map(value=>cleanText(value,120)).filter(Boolean):[],options=requested.map(option=>{const found=allowedOptions.find(item=>item.name===option);if(!found)throw new HttpError(400,"Выбрана недоступная опция");return found});
-    if(months!==LEASE_MONTHS)throw new HttpError(400,"Выбран недоступный срок");const minDown=promotion?.reducedDownPercent??model?.minDownPercent??program.minDownPercent;if((downMode==="percent"&&downValue<minDown)||(downMode==="amount"&&downValue<Math.max(program.minDownAmount,basePrice*minDown/100)))throw new HttpError(400,"Первоначальный взнос ниже допустимого");
+    if(!isValidLeaseTerm(months,config.maxMonths))throw new HttpError(400,`Выберите срок от 1 до ${config.maxMonths} месяцев`);const minDown=promotion?.reducedDownPercent??model?.minDownPercent??program.minDownPercent;if((downMode==="percent"&&downValue<minDown)||(downMode==="amount"&&downValue<Math.max(program.minDownAmount,basePrice*minDown/100)))throw new HttpError(400,"Первоначальный взнос ниже допустимого");
     if(!Number.isFinite(downValue)||downValue<0||(downMode==="percent"?downValue>program.maxDownPercent:downValue>basePrice*program.maxDownPercent/100))throw new HttpError(400,"Проверьте первоначальный взнос");
     const discount=model?.discount??(promotion?promotion.discountType==="percent"?basePrice*promotion.discount/100:promotion.discount:0),zeroPercent=Boolean(promotion?.zeroPercent||program.zeroPercent),result=calculateInstallment({price:basePrice,options,delivery:program.delivery,discount,downMode,downValue,months,markupPercent:model?.markupPercent??program.markupPercent,annualRate:model?.annualRate??program.annualRate,fixedCommission:model?.fixedCommission??program.fixedCommission,commissionPercent:model?.commissionPercent??program.commissionPercent,insurance:program.insurance,processingFee:program.processingFee,includeDelivery:program.includeDelivery,includeInsurance:program.includeInsurance,includeCommission:program.includeCommission,discountOrder:program.discountOrder,rounding:program.rounding,zeroPercent});
     if(model?.maxFinancing&&result.financed>model.maxFinancing)throw new HttpError(400,"Сумма превышает лимит финансирования этой модели");

@@ -7,3 +7,6 @@ export const ROLE_LABEL: Record<StaffRole, string> = {
   accountant: "Бухгалтер",
   marketer: "Маркетолог",
 };
+
+/** Как подписывать сотрудника: должность, если указана, иначе роль. */
+export const staffTitle = (role: StaffRole, position?: string | null) => position?.trim() || ROLE_LABEL[role];

@@ -33,10 +33,12 @@ type DialogProps = {
   disabled?: boolean;
   disabledReason?: string;
   children?: ReactNode;
+  /** Широкий диалог для таблиц (расчёт себестоимости). */
+  wide?: boolean;
 };
 
 /** Кнопка, открывающая диалог с формой. После успеха диалог закрывается и показывается уведомление. */
-export function ActionDialog({ label, title, description, action, submitLabel, variant = "primary", triggerClass, disabled, disabledReason, children }: DialogProps) {
+export function ActionDialog({ label, title, description, action, submitLabel, variant = "primary", triggerClass, disabled, disabledReason, children, wide }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
   const [state, formAction, actionPending] = useActionState(action, null);
@@ -63,7 +65,7 @@ export function ActionDialog({ label, title, description, action, submitLabel, v
       {disabled && disabledReason ? <span className="ax-sr">{disabledReason}</span> : null}
       {/* Закрытие по клику на затемнение; Esc закрывает <dialog> штатно. */}
       {/* eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-noninteractive-element-interactions */}
-      <dialog ref={ref} className="ax-sheet" aria-label={title} onClick={(e) => e.target === ref.current && ref.current?.close()}>
+      <dialog ref={ref} className={cn("ax-sheet", wide && "ax-sheet-wide")} aria-label={title} onClick={(e) => e.target === ref.current && ref.current?.close()}>
         <div className="ax-sheet-panel">
           <div className="ax-grip" aria-hidden />
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>

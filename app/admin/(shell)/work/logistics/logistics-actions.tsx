@@ -1,9 +1,9 @@
 "use client";
-import { useState } from "react";
-import { Building2, Banknote, PackageCheck, Receipt, Scale } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { Building2, Banknote, PackageCheck, Scale } from "lucide-react";
 import { ActionButton, ActionDialog, Field } from "../../../_ui/forms";
 import {
-  advanceShipmentAction, allocationAction, createSupplierAction, receiveShipmentAction, shipmentCostAction,
+  advanceShipmentAction, allocationAction, createSupplierAction, receiveShipmentAction,
   supplierPaymentAction, voidShipmentCostAction, voidSupplierPaymentAction,
 } from "../../../_lib/stock-actions";
 
@@ -68,14 +68,10 @@ const STEPS = [
   { key: "customs", label: "На таможне" }, { key: "cleared", label: "Растаможено" },
 ];
 
-export function ShipmentActions(p: { shipmentId: string; status: string; units: { id: string; vin: string; model: string; received: boolean }[]; accounts: Account[]; rates: Record<string, number>; allocation: string; manual: { id: string; vin: string; value: string }[]; categories: Record<string, string> }) {
+export function ShipmentActions(p: { shipmentId: string; status: string; units: { id: string; vin: string; model: string; received: boolean }[]; allocation: string; manual: { id: string; vin: string; value: string }[]; extra?: ReactNode }) {
   const idx = STEPS.findIndex((s) => s.key === p.status);
   const next = idx >= 0 && idx < STEPS.length - 1 ? STEPS[idx + 1] : null;
   const notReceived = p.units.filter((u) => !u.received);
-  const [costAcc, setCostAcc] = useState("");
-  const [costCur, setCostCur] = useState("KGS");
-  const acc = p.accounts.find((a) => a.id === costAcc);
-  const currency = acc ? acc.currency : costCur;
   const [method, setMethod] = useState(p.allocation);
   return (
     <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
@@ -90,22 +86,7 @@ export function ShipmentActions(p: { shipmentId: string; status: string; units: 
           <Field label="Куда поставили" htmlFor="rcv-loc"><input id="rcv-loc" name="location" className="ax-input" defaultValue="Склад Бишкек" /></Field>
         </ActionDialog>
       ) : null}
-      <ActionDialog label={<><Receipt size={17} aria-hidden />Расход поставки</>} title="Расход поставки" description="Фрахт, пошлина, НДС, брокер, сертификация. Распределяется на машины и входит в себестоимость." action={shipmentCostAction.bind(null, p.shipmentId)} submitLabel="Добавить расход">
-        <Field label="Что оплатили" htmlFor="sc-cat"><select id="sc-cat" name="category" className="ax-input">{Object.entries(p.categories).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></Field>
-        <Field label="Откуда платим" htmlFor="sc-acc" hint="«Ещё не оплачено»: расход учтётся в себестоимости, деньги из кассы спишете позже">
-          <select id="sc-acc" name="accountId" className="ax-input" value={costAcc} onChange={(e) => setCostAcc(e.target.value)}>
-            <option value="">Ещё не оплачено</option>
-            {p.accounts.map((a) => <option key={a.id} value={a.id}>{a.name} · {a.currency}</option>)}
-          </select>
-        </Field>
-        {!acc ? <Field label="Валюта" htmlFor="sc-cur"><select id="sc-cur" name="currency" className="ax-input" value={costCur} onChange={(e) => setCostCur(e.target.value)}><option value="KGS">Сомы</option><option value="USD">Доллары</option><option value="CNY">Юани</option></select></Field> : <input type="hidden" name="currency" value={acc.currency} />}
-        <div className="ax-grid ax-g2" style={{ gap: 12 }}>
-          <Field label={`Сумма, ${CUR_SIGN[currency]}`} htmlFor="sc-amount"><input id="sc-amount" name="amount" className="ax-input num" inputMode="decimal" required /></Field>
-          {currency !== "KGS" ? <Field label={`Курс: сомов за 1 ${CUR_SIGN[currency]}`} htmlFor="sc-fx"><input id="sc-fx" name="fxRate" className="ax-input num" inputMode="decimal" required defaultValue={p.rates[currency] ?? ""} /></Field> : <input type="hidden" name="fxRate" value="1" />}
-          <Field label="Дата" htmlFor="sc-date"><input id="sc-date" name="paidAt" type="date" className="ax-input" defaultValue={today()} required /></Field>
-        </div>
-        <Field label="Комментарий" htmlFor="sc-note"><input id="sc-note" name="note" className="ax-input" placeholder="Фура Урумчи – Бишкек" /></Field>
-      </ActionDialog>
+      {p.extra}
       <ActionDialog label={<><Scale size={17} aria-hidden />Распределение</>} title="Как распределять расходы на машины" action={allocationAction.bind(null, p.shipmentId)} submitLabel="Сохранить">
         <Field label="Способ" htmlFor="al-method">
           <select id="al-method" name="method" className="ax-input" value={method} onChange={(e) => setMethod(e.target.value)}>

@@ -21,6 +21,12 @@ export const STAFF_ROLES: { key: StaffRole; label: string; hint: string }[] = [
   { key: "accountant", label: "Бухгалтер", hint: "Касса, долги, расходы, логистика, зарплаты" },
   { key: "marketer", label: "Маркетолог", hint: "Каталог, публикации, акции, лизинг, сайт" },
 ];
+/** Все роли для смены роли владельцем. Владелец и директор видят всё, доступы им не нужны. */
+export const ALL_ROLES: { key: StaffRole; label: string; hint: string }[] = [
+  { key: "owner", label: "Владелец", hint: "Полный доступ ко всему, как у владельца" },
+  { key: "director", label: "Директор", hint: "Всё, кроме сотрудников и списания техники" },
+  ...STAFF_ROLES,
+];
 export const DEFAULT_PERMS: Record<"manager" | "accountant" | "marketer", PermissionSection[]> = {
   manager: ["deals", "client-base", "inventory-units", "sales", "meetings", "documents", "service-cases", "payments", "employee-tasks", "notifications", "chat", "groups", "leasing-applications", "site-leads"],
   accountant: ["suppliers", "purchases", "shipments", "expenses", "finance", "financial-accounts", "payroll", "payments", "debts", "documents", "employee-tasks", "notifications", "chat", "groups"],
@@ -96,11 +102,12 @@ export async function revokeInvite(actor: Actor, hash: string) {
   });
 }
 
-async function target(q: ReturnType<typeof query>, actor: Actor, id: string) {
+async function target(q: ReturnType<typeof query>, actor: Actor, id: string, { top = false } = {}) {
   const [t] = await q<{ id: string; role: StaffRole; email: string; display_name: string; active: number }>("SELECT id, role, email, display_name, active FROM staff WHERE id=? AND active>=0 FOR UPDATE", text(id, 100));
   if (!t) throw new HttpError(404, "Сотрудник не найден");
   if (t.id === actor.id) throw new HttpError(400, "Себя так менять нельзя");
-  if (t.role === "owner" || t.role === "director") throw new HttpError(400, "Владельца и директора здесь не меняют");
+  // Роль владельца и директора меняет только владелец (canTeam); блокировать и ограничивать их нельзя.
+  if (!top && (t.role === "owner" || t.role === "director")) throw new HttpError(400, "Владельца и директора здесь не меняют");
   return t;
 }
 
@@ -118,14 +125,28 @@ export async function setPermissions(actor: Actor, id: string, permissions: stri
 
 export async function setRole(actor: Actor, id: string, role: string) {
   if (!canTeam(actor)) throw new HttpError(403, "Нет доступа");
-  if (!["manager", "accountant", "marketer"].includes(role)) throw new HttpError(400, "Выберите роль");
+  if (!ALL_ROLES.some((r) => r.key === role)) throw new HttpError(400, "Выберите роль");
   await getRawDb().transaction(async (client) => {
     const q = query(client);
-    const t = await target(q, actor, id);
+    const t = await target(q, actor, id, { top: true });
     if (t.role === role) throw new HttpError(400, "Роль не изменилась");
-    await q("UPDATE staff SET role=?, permissions_json=? WHERE id=?", role, JSON.stringify(DEFAULT_PERMS[role as "manager"]), t.id);
+    const perms = role === "owner" || role === "director" ? [] : DEFAULT_PERMS[role as "manager"];
+    await q("UPDATE staff SET role=?, permissions_json=? WHERE id=?", role, JSON.stringify(perms), t.id);
     await q("DELETE FROM staff_sessions WHERE staff_id=?", t.id);
     await audit(q, actor, "staff_role", t.id, `${t.display_name}: ${t.role} → ${role}; доступы по умолчанию`);
+  });
+}
+
+/** Должность в подписи сотрудника (например, «Владелец компании», «Инженер»). Права не меняет. */
+export async function setPosition(actor: Actor, id: string, position: string) {
+  if (!canTeam(actor)) throw new HttpError(403, "Нет доступа");
+  const value = text(position, 120);
+  await getRawDb().transaction(async (client) => {
+    const q = query(client);
+    const [t] = await q<{ id: string; display_name: string }>("SELECT id, display_name FROM staff WHERE id=? AND active>=0 FOR UPDATE", text(id, 100));
+    if (!t) throw new HttpError(404, "Сотрудник не найден");
+    await q("UPDATE staff SET position=? WHERE id=?", value, t.id);
+    await audit(q, actor, "staff_position", t.id, `${t.display_name}: должность «${value}»`);
   });
 }
 

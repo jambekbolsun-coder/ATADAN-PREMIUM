@@ -1,7 +1,7 @@
 "use client";
 
 import { PhoneInput } from "./PhoneInput";
-import { LEASE_MONTHS, successMessage } from "../lib/customer-input";
+import { successMessage } from "../lib/customer-input";
 import { managerWhatsAppUrl } from "../lib/whatsapp";
 import Image from "next/image";
 import {
@@ -18,6 +18,12 @@ import {
   calculateInstallment,
   convertDownPayment,
   downPaymentLimits,
+  formatLeaseTerm,
+  formatMonths,
+  formatYears,
+  LEASE_TERM_DEFAULT_MAX,
+  leaseTermChoices,
+  normalizeLeaseMaxMonths,
   normalizeDownPayment,
   salePrice,
   type LeaseProgram,
@@ -34,7 +40,10 @@ const emptyConfig: LeasePublicConfig = {
   programs: [],
   models: [],
   promotions: [],
+  maxMonths: LEASE_TERM_DEFAULT_MAX,
 };
+const percent = (value: number) =>
+  new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value) + "%";
 const money = (value: number) =>
   new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value) +
   " сом";
@@ -65,7 +74,11 @@ export function FinanceCalculator({
     [error, setError] = useState("");
   const { locale } = useI18n();
   const [estimatedPrice, setEstimatedPrice] = useState(0);
-  const months = LEASE_MONTHS,
+  // Срок: от 1 месяца до максимума из админки (по умолчанию 84). Изначально выбран максимум.
+  const maxMonths = normalizeLeaseMaxMonths(config.maxMonths),
+    termChoices = leaseTermChoices(maxMonths),
+    [chosenMonths, setChosenMonths] = useState(maxMonths),
+    months = Math.max(1, Math.min(maxMonths, chosenMonths)),
     requestKey = useRef(crypto.randomUUID());
   const selected = tractor ?? tractors.find((item) => item.slug === slug),
     fallback: LeaseProgram = {
@@ -73,7 +86,7 @@ export function FinanceCalculator({
       name: "Предварительный расчёт",
       programType: "Лизинг",
       currency: "KGS",
-      termsMonths: [LEASE_MONTHS],
+      termsMonths: termChoices,
       minDownPercent: settings.downPercent,
       maxDownPercent: 90,
       minDownAmount: 0,
@@ -123,7 +136,9 @@ export function FinanceCalculator({
       promotion?.reducedDownPercent ??
       model?.minDownPercent ??
       program.minDownPercent,
-    zeroPercent = Boolean(promotion?.zeroPercent || program.zeroPercent);
+    zeroPercent = Boolean(promotion?.zeroPercent || program.zeroPercent),
+    effectiveRate = model?.annualRate ?? program.annualRate,
+    effectiveCommission = model?.commissionPercent ?? program.commissionPercent;
   const downRules = {
     price: basePrice,
     minPercent: minDown,
@@ -144,10 +159,9 @@ export function FinanceCalculator({
         downValue,
         months,
         markupPercent: model?.markupPercent ?? program.markupPercent,
-        annualRate: model?.annualRate ?? program.annualRate,
+        annualRate: effectiveRate,
         fixedCommission: model?.fixedCommission ?? program.fixedCommission,
-        commissionPercent:
-          model?.commissionPercent ?? program.commissionPercent,
+        commissionPercent: effectiveCommission,
         insurance: program.insurance,
         processingFee: program.processingFee,
         includeDelivery: program.includeDelivery,
@@ -216,7 +230,7 @@ export function FinanceCalculator({
       requestKey.current = crypto.randomUUID();
       window.location.assign(managerWhatsAppUrl(settings.phone, {
         name: String(form.get("name") || ""), phone: String(form.get("phone") || ""), model: selected.model,
-        message: [`Лизинг на 7 лет. Предварительная стоимость: ${money(basePrice)}. Первый взнос: ${money(result.downPayment)}.`, termsUnconfirmed ? "Ставку и комиссии требуется уточнить." : "", String(form.get("city") || ""), String(form.get("comment") || "")].filter(Boolean).join("\n"),
+        message: [`Лизинг на ${formatLeaseTerm(months)}.${config.programs.length ? ` Банк: ${program.name}.` : ""} Предварительная стоимость: ${money(basePrice)}. Первый взнос: ${money(result.downPayment)}. Платёж в месяц: ${money(result.monthly)}.`, termsUnconfirmed ? "Ставку и комиссии требуется уточнить." : "", String(form.get("city") || ""), String(form.get("comment") || "")].filter(Boolean).join("\n"),
         path: window.location.href,
       }));
     } catch (cause) {
@@ -247,8 +261,9 @@ export function FinanceCalculator({
             : "Предварительный расчёт"}
         </h2>
         <p>
-          Лизинг на 7 лет. Двигайте ползунок первого взноса · платёж
-          пересчитывается автоматически.
+          Срок лизинга от 1 до {maxMonths} месяцев. Выберите
+          {config.programs.length ? " банк," : ""} срок и первый взнос ·
+          платёж пересчитывается автоматически.
         </p>
       </header>
       <div className="lease-layout">
@@ -268,30 +283,42 @@ export function FinanceCalculator({
               </select>
             </label>
           ) : null}
-          {config.programs.length > 1 ? (
-            <label>
-              <span>Программа</span>
-              <select
-                value={program.id}
-                onChange={(event) => {
-                  const next = config.programs.find(
-                    (item) => item.id === event.target.value,
-                  );
-                  setProgramId(event.target.value);
-                  setDownMode("percent");
-                  if (next) {
-                    setDownValue(next.minDownPercent);
-                    setChosen([]);
-                  }
-                }}
-              >
-                {config.programs.map((item) => (
-                  <option value={item.id} key={item.id}>
-                    {item.name} · {item.programType}
-                  </option>
-                ))}
-              </select>
-            </label>
+          {config.programs.length ? (
+            <div className="lease-bank">
+              <label>
+                <span>Банк</span>
+                <select
+                  value={program.id}
+                  onChange={(event) => {
+                    const next = config.programs.find(
+                      (item) => item.id === event.target.value,
+                    );
+                    setProgramId(event.target.value);
+                    setDownMode("percent");
+                    if (next) {
+                      setDownValue(
+                        promotion?.reducedDownPercent ??
+                          model?.minDownPercent ??
+                          next.minDownPercent,
+                      );
+                      setChosen([]);
+                    }
+                  }}
+                >
+                  {config.programs.map((item) => (
+                    <option value={item.id} key={item.id}>
+                      {item.name} · {item.zeroPercent ? "0%" : `${percent(item.annualRate)} годовых`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="lease-bank-terms">
+                {zeroPercent ? "Без процентов" : `Ставка ${percent(effectiveRate)} годовых`}
+                {" · "}первый взнос от {percent(minDown)}
+                {" · "}
+                {effectiveCommission > 0 ? `комиссия ${percent(effectiveCommission)}` : "без комиссии в %"}
+              </p>
+            </div>
           ) : null}
           {selected ? (
             <div className="lease-selected">
@@ -412,12 +439,48 @@ export function FinanceCalculator({
               onChange={(event) => setDownValue(normalizeDownPayment(Number(event.target.value), downMode, downRules))}
             />
           </fieldset>
-          <div className="lease-fixed-term">
-            <CalendarClock />
-            <span>
-              Срок лизинга<strong>7 лет</strong>
-            </span>
-          </div>
+          <fieldset className="lease-term">
+            <legend>Срок лизинга</legend>
+            <div className="lease-term-value" aria-live="polite">
+              <CalendarClock aria-hidden />
+              <span>
+                <strong>{formatMonths(months)}</strong>
+                <small>
+                  {formatYears(months) || `можно от 1 до ${maxMonths} мес.`}
+                </small>
+              </span>
+            </div>
+            <div className="lease-term-quick" role="group" aria-label="Быстрый выбор срока">
+              {termChoices.map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  className={value === months ? "active" : ""}
+                  aria-pressed={value === months}
+                  onClick={() => setChosenMonths(value)}
+                >
+                  {value} мес.
+                </button>
+              ))}
+            </div>
+            <input
+              aria-label="Срок лизинга в месяцах · ползунок"
+              type="range"
+              min={1}
+              max={maxMonths}
+              step={1}
+              value={months}
+              onChange={(event) =>
+                setChosenMonths(
+                  Math.max(1, Math.min(maxMonths, Math.round(Number(event.target.value)) || 1)),
+                )
+              }
+            />
+            <div className="lease-term-scale" aria-hidden>
+              <span>1 мес.</span>
+              <span>{maxMonths} мес.</span>
+            </div>
+          </fieldset>
           {options.length ? (
             <fieldset className="lease-options">
               <legend>Дополнительные опции</legend>
@@ -451,6 +514,16 @@ export function FinanceCalculator({
               <dt>Цена трактора</dt>
               <dd>{basePrice ? money(basePrice) : "Н/Д"}</dd>
             </div>
+            {config.programs.length ? (
+              <div>
+                <dt>Банк</dt>
+                <dd>{program.name}</dd>
+              </div>
+            ) : null}
+            <div>
+              <dt>Срок</dt>
+              <dd>{formatMonths(months)}</dd>
+            </div>
             <div>
               <dt>Первый взнос</dt>
               <dd>{result ? money(result.downPayment) : "Н/Д"}</dd>
@@ -474,7 +547,7 @@ export function FinanceCalculator({
           </dl>
           <p>
             {termsUnconfirmed
-              ? "Это деление ориентировочной стоимости на 84 месяца после первого взноса. Ставка, комиссии, график и итоговая сумма будут согласованы с менеджером."
+              ? `Это деление ориентировочной стоимости после первого взноса на выбранный срок: ${formatMonths(months)}. Ставка, комиссии, график и итоговая сумма будут согласованы с менеджером.`
               : `${!publishedPrice ? "Расчёт по ориентировочной стоимости. " : ""}Расчёт предварительный. Финальные условия, одобрение и договор подтверждаются менеджером.`}
           </p>
           <button

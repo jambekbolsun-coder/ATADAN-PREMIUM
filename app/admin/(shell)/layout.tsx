@@ -6,7 +6,7 @@ import { InstallBanner, InstallSetup } from "../_ui/install";
 import { currentTheme } from "../_ui/theme-server";
 import { requireStaff } from "../_lib/session";
 import { canSee, NAV, roleTab, visibleNav, visiblePlus } from "../_lib/nav";
-import { ROLE_LABEL } from "../_lib/roles";
+import { staffTitle } from "../_lib/roles";
 
 export const metadata: Metadata = {
   title: { default: "ATADAN · админ-панель", template: "%s · ATADAN" },
@@ -34,7 +34,7 @@ export default async function ShellLayout({ children }: LayoutProps<"/admin">) {
       <InstallSetup />
       <AdminShell
         nav={visibleNav(actor)}
-        user={{ name: actor.display_name || actor.email, role: ROLE_LABEL[actor.role], avatar: actor.avatar }}
+        user={{ name: actor.display_name || actor.email, role: staffTitle(actor.role, actor.position), avatar: actor.avatar }}
         plus={visiblePlus(actor)}
         tab={roleTab(actor)}
         unread={unread?.n ?? 0}
