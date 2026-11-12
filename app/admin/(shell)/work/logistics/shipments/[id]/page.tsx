@@ -68,11 +68,11 @@ export default async function ShipmentCard({ params }: PageProps<"/admin/work/lo
                     <td>{u.model}</td>
                     <td><Badge tone={UNIT_STATUS[u.status]?.tone ?? "mute"}>{UNIT_STATUS[u.status]?.label ?? u.status}</Badge></td>
                     <td className="ax-small">{u.client ?? ""}</td>
-                    {cost ? <><td className="r num">{money(u.purchase_cost_minor)}</td><td className="r num">{money(u.allocated_cost_minor + u.planned_cost_minor)}{u.planned_cost_minor ? <div className="ax-small">из них план {money(u.planned_cost_minor)}</div> : null}</td><td className="r num ax-strong">{money(u.landed_cost_minor)}</td></> : null}
+                    {cost ? <><td className="r num">{money(u.purchase_cost_minor)}</td><td className="r num">{money(u.allocated_cost_minor)}</td><td className="r num ax-strong">{money(u.landed_cost_minor)}</td></> : null}
                   </tr>
                 ))}
               </tbody>
-              {cost ? <tfoot><tr><td colSpan={4}>Итого</td><td className="r num">{money(units.reduce((a, u) => a + u.purchase_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.allocated_cost_minor + u.planned_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.landed_cost_minor, 0))}</td></tr></tfoot> : null}
+              {cost ? <tfoot><tr><td colSpan={4}>Итого</td><td className="r num">{money(units.reduce((a, u) => a + u.purchase_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.allocated_cost_minor, 0))}</td><td className="r num">{money(units.reduce((a, u) => a + u.landed_cost_minor, 0))}</td></tr></tfoot> : null}
             </table>
           </div>
         </Card>
@@ -94,7 +94,7 @@ export default async function ShipmentCard({ params }: PageProps<"/admin/work/lo
                   </div>
                 ))}
               </div>
-            ) : <p className="ax-small" style={{ margin: 0 }}>Расходов именно этой поставки пока нет. Расходы на весь заказ и расчёт себестоимости: в карточке заказа <Link href={`/admin/work/logistics/orders/${s.purchase_order_id}`} style={{ color: "var(--brand)" }}>{s.order_number}</Link>.</p>}
+            ) : <p className="ax-small" style={{ margin: 0 }}>Расходов именно этой поставки пока нет. Расходы на весь заказ: в карточке заказа <Link href={`/admin/work/logistics/orders/${s.purchase_order_id}`} style={{ color: "var(--brand)" }}>{s.order_number}</Link>.</p>}
           </Card>
           <Card title="Маршрут и перевозчик">
             <dl className="ax-kv">

@@ -487,14 +487,5 @@ a.ax-list-row:hover { background: var(--surface-2); border-radius: 10px; }
 .ax-guide-shot ol > li::before { content: counter(gl); position: absolute; left: 0; top: 0; width: 23px; height: 23px; border-radius: 50%; background: #e8590c; color: #fff; font-weight: 700; font-size: 13px; display: grid; place-items: center; }
 .ax-guide-next { display: grid; gap: 2px; }
 
-/* Расчёт себестоимости заказа */
+/* Широкий диалог */
 dialog.ax-sheet.ax-sheet-wide { max-width: 940px; }
-.ax-calc td.num, .ax-calc th.num { text-align: right; white-space: nowrap; }
-.ax-calc .ax-calc-total td { font-weight: 700; background: var(--surface-2); }
-.ax-calc .ax-calc-sub td { color: var(--muted); font-size: 12.5px; }
-.ax-calc-src { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 999px; font-size: 10.5px; font-weight: 600; vertical-align: 1px; }
-.ax-calc-src.is-plan { background: var(--sun-soft); color: var(--sun); }
-.ax-calc-src.is-fact { background: var(--brand-soft); color: var(--brand); }
-.ax-calc-src.is-mixed { background: var(--sky-soft, var(--surface-2)); color: var(--sky, var(--muted)); }
-.ax-calc-edit input.ax-input { min-width: 96px; text-align: right; }
-.ax-calc-edit th:first-child, .ax-calc-edit td:first-child { min-width: 170px; }

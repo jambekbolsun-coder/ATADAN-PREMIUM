@@ -4,8 +4,7 @@
  * Связи, которые держит этот модуль:
  *  - заказ заводу → оплаты заводу с курсом → эффективный курс заказа → закупочная цена машин в сомах;
  *  - поставка создаёт машины по VIN из упаковочного листа; этапы пути меняют статус машин;
- *  - калькуляция заказа (план на машину по статьям) + расходы на заказ, модель или поставку → себестоимость
- *    (по статье факт, если он есть, иначе план; расчёт в landed-cost.ts);
+ *  - расходы на заказ, модель или поставку распределяются на машины → себестоимость (расчёт в landed-cost.ts);
  *  - пересчёт себестоимости обновляет ещё не выданные продажи (маржа «предварительная» до выдачи);
  *  - оплата заводу и оплаченный расход поставки - это проводки в кассе (account_transactions).
  */
@@ -16,7 +15,7 @@ import { normalizeVin } from "../../lib/business";
 import { HttpError } from "../../lib/security";
 import { catalogModels } from "./sales";
 import { notify } from "./db-kit";
-import { COST_KEYS, COST_LABEL, computeOrder, unitResults } from "./landed-cost";
+import { COST_LABEL, computeOrder, unitResults } from "./landed-cost";
 
 export type PoCurrency = "USD" | "CNY" | "KGS";
 export const UNIT_STATUS: Record<string, { label: string; tone: "good" | "warn" | "bad" | "info" | "mute" }> = {
@@ -49,8 +48,6 @@ export const canStockEdit = (a: Actor) => isBoss(a) || a.role === "manager" || a
 
 type Q = <T = Record<string, unknown>>(sql: string, ...args: unknown[]) => Promise<T[]>;
 const query = (client: PoolClient): Q => async <T,>(sql: string, ...args: unknown[]) => (await getRawDb().prepare(sql).bind(...args).execute<T>(client)).results;
-/** Чтение вне транзакции тем же интерфейсом (для карточки заказа). */
-const readQ: Q = async <T,>(sql: string, ...args: unknown[]) => (await getRawDb().prepare(sql).bind(...args).all<T>()).results;
 const id = () => crypto.randomUUID();
 const text = (v: unknown, max: number) => String(v ?? "").trim().slice(0, max);
 const toMinor = (v: unknown, label: string, { allowZero = false } = {}) => {
@@ -98,46 +95,43 @@ async function poRate(q: Q, poId: string) {
   return r.po && Number(r.po) > 0 ? Number(r.kgs) / Number(r.po) : Number(r.rate) || 1;
 }
 
-/** Всё для расчёта себестоимости заказа: позиции, калькуляция, расходы, машины, поставки. */
+/** Всё для расчёта себестоимости заказа: позиции, расходы, машины, поставки. */
 async function loadCalc(q: Q, poId: string) {
-  const [po] = await q<{ id: string; currency: PoCurrency }>("SELECT id, currency FROM purchase_orders_v2 WHERE id=?", poId);
+  const [po] = await q<{ id: string }>("SELECT id FROM purchase_orders_v2 WHERE id=?", poId);
   if (!po) return null;
   const rate = await poRate(q, poId);
-  const [lines, plan, facts, units, shipments] = await Promise.all([
+  const [lines, facts, units, shipments] = await Promise.all([
     q<{ id: string; qty: number; unit_price_minor: number }>("SELECT id, qty, unit_price_minor FROM purchase_order_lines WHERE purchase_order_id=? ORDER BY created_at", poId),
-    q<{ line_id: string; category: string; amount_minor: number }>("SELECT p.line_id, p.category, p.amount_minor FROM purchase_order_plan p JOIN purchase_order_lines l ON l.id=p.line_id WHERE l.purchase_order_id=?", poId),
-    q<{ category: string; currency: string; amount_minor: number; amount_kgs_minor: number; line_id: string | null; shipment_id: string | null }>("SELECT category, currency, amount_minor, amount_kgs_minor, line_id, shipment_id FROM shipment_costs WHERE purchase_order_id=? AND status='posted'", poId),
+    q<{ amount_kgs_minor: number; line_id: string | null; shipment_id: string | null }>("SELECT amount_kgs_minor, line_id, shipment_id FROM shipment_costs WHERE purchase_order_id=? AND status='posted'", poId),
     q<{ id: string; purchase_order_line_id: string | null; shipment_id: string | null; purchase_cost_minor: number; manual_cost_minor: number | null; status: string; cost_override_minor: number | null }>("SELECT id, purchase_order_line_id, shipment_id, purchase_cost_minor, manual_cost_minor, status, cost_override_minor FROM inventory_units_v2 WHERE purchase_order_id=? AND archived=0 ORDER BY vin", poId),
     q<{ id: string; allocation_method: string }>("SELECT id, allocation_method FROM shipments_v2 WHERE purchase_order_id=? AND archived=0", poId),
   ]);
-  const calc = computeOrder({
+  const slots = computeOrder({
     rate,
     lines: lines.map((l) => ({ id: l.id, qty: Number(l.qty), price: Number(l.unit_price_minor) })),
-    plan: plan.map((p) => ({ lineId: p.line_id, category: p.category, perUnit: Number(p.amount_minor) })),
-    // расход в другой валюте переводим в валюту заказа по курсу заказа
-    facts: facts.map((f) => ({ category: f.category, kgs: Number(f.amount_kgs_minor), po: f.currency === po.currency ? Number(f.amount_minor) : Number(f.amount_kgs_minor) / rate, lineId: f.line_id, shipmentId: f.shipment_id })),
+    facts: facts.map((f) => ({ kgs: Number(f.amount_kgs_minor), lineId: f.line_id, shipmentId: f.shipment_id })),
     units: units.map((u) => ({ id: u.id, lineId: u.purchase_order_line_id, shipmentId: u.shipment_id, legacyKgs: Number(u.purchase_cost_minor ?? 0), manual: u.manual_cost_minor === null ? null : Number(u.manual_cost_minor) })),
     shipments: shipments.map((s) => ({ id: s.id, method: s.allocation_method })),
   });
-  return { po, rate, units, calc };
+  return { units, slots };
 }
 
 /**
- * Пересчитать себестоимость машин заказа: закупка (цена позиции × курс заказа) + статьи расходов
- * (факт, если внесён, иначе план калькуляции). Выданные машины не трогаем: их маржа уже зафиксирована.
+ * Пересчитать себестоимость машин заказа: закупка (цена позиции × курс заказа) + доля внесённых расходов.
+ * Выданные машины не трогаем: их маржа уже зафиксирована.
  * Невыданные продажи получают новую себестоимость.
  */
 async function recalcOrder(q: Q, poId: string) {
   const data = await loadCalc(q, poId);
   if (!data) return;
   const byId = new Map(data.units.map((u) => [u.id, u]));
-  for (const r of unitResults(data.calc.slots)) {
+  for (const r of unitResults(data.slots)) {
     const u = byId.get(r.unitId);
     if (!u || u.status === "delivered") continue;
     // старая машина без позиции заказа и без расходов: себестоимость не трогаем
-    if (r.legacy && r.fact === 0 && r.plan === 0) continue;
-    const landed = r.purchase + r.fact + r.plan;
-    await q("UPDATE inventory_units_v2 SET purchase_cost_minor=?, allocated_cost_minor=?, planned_cost_minor=?, landed_cost_minor=COALESCE(cost_override_minor, ?), updated_at=CURRENT_TIMESTAMP WHERE id=?", r.purchase, r.fact, r.plan, landed, u.id);
+    if (r.legacy && r.fact === 0) continue;
+    const landed = r.purchase + r.fact;
+    await q("UPDATE inventory_units_v2 SET purchase_cost_minor=?, allocated_cost_minor=?, landed_cost_minor=COALESCE(cost_override_minor, ?), updated_at=CURRENT_TIMESTAMP WHERE id=?", r.purchase, r.fact, landed, u.id);
     if (u.cost_override_minor !== null) continue; // себестоимость задана вручную: продажи не пересчитываем
     const items = await q<{ id: string; sale_id: string }>("SELECT i.id, i.sale_id FROM sale_order_items i JOIN sale_orders o ON o.id=i.sale_id WHERE i.inventory_unit_id=? AND i.active=1 AND o.status='booked'", u.id);
     for (const it of items) {
@@ -237,29 +231,19 @@ export async function getOrder(poId: string) {
   const db = getRawDb();
   const order = (await listOrders()).find((o) => o.id === poId);
   if (!order) return null;
-  const [lines, payments, shipments, costs, plan, extra, calc] = await Promise.all([
-    db.prepare(`SELECT l.id, l.tractor_slug, l.model, l.qty, l.unit_price_minor, l.target_price_minor, (SELECT COUNT(*) FROM inventory_units_v2 u WHERE u.purchase_order_line_id=l.id AND u.archived=0)::int AS shipped FROM purchase_order_lines l WHERE l.purchase_order_id=? ORDER BY l.created_at`).bind(poId).all<{ id: string; tractor_slug: string; model: string; qty: number; unit_price_minor: number; target_price_minor: number | null; shipped: number }>(),
+  const [lines, payments, shipments, costs] = await Promise.all([
+    db.prepare(`SELECT l.id, l.tractor_slug, l.model, l.qty, l.unit_price_minor, (SELECT COUNT(*) FROM inventory_units_v2 u WHERE u.purchase_order_line_id=l.id AND u.archived=0)::int AS shipped FROM purchase_order_lines l WHERE l.purchase_order_id=? ORDER BY l.created_at`).bind(poId).all<{ id: string; tractor_slug: string; model: string; qty: number; unit_price_minor: number; shipped: number }>(),
     db.prepare("SELECT p.*, p.fx_rate::float AS fx_rate, a.name AS account FROM supplier_payments p JOIN financial_accounts a ON a.id=p.account_id WHERE p.purchase_order_id=? ORDER BY p.paid_at").bind(poId).all<{ id: string; account: string; currency: string; amount_minor: number; fx_rate: number; amount_kgs_minor: number; amount_po_minor: number; paid_at: string; note: string; status: string; void_reason: string }>(),
     (await listShipments()).filter((s) => s.purchase_order_id === poId),
     db.prepare("SELECT c.id, c.category, c.currency, c.amount_minor, c.fx_rate::float AS fx_rate, c.amount_kgs_minor, c.paid_at, c.note, c.status, c.void_reason, c.shipment_id, c.line_id, a.name AS account, s.tracking_number, l.model AS line_model FROM shipment_costs c LEFT JOIN financial_accounts a ON a.id=c.account_id LEFT JOIN shipments_v2 s ON s.id=c.shipment_id LEFT JOIN purchase_order_lines l ON l.id=c.line_id WHERE c.purchase_order_id=? ORDER BY c.paid_at, c.created_at").bind(poId).all<{ id: string; category: string; currency: string; amount_minor: number; fx_rate: number; amount_kgs_minor: number; paid_at: string; note: string; status: string; void_reason: string; shipment_id: string | null; line_id: string | null; account: string | null; tracking_number: string | null; line_model: string | null }>(),
-    db.prepare("SELECT p.line_id, p.category, p.amount_minor FROM purchase_order_plan p JOIN purchase_order_lines l ON l.id=p.line_id WHERE l.purchase_order_id=?").bind(poId).all<{ line_id: string; category: string; amount_minor: number }>(),
-    db.prepare("SELECT payment_plan_json FROM purchase_orders_v2 WHERE id=?").bind(poId).first<{ payment_plan_json: string }>(),
-    loadCalc(readQ, poId),
   ]);
-  let schedule: { label: string; percent: number }[] = [];
-  try { const s = JSON.parse(extra?.payment_plan_json || "[]"); if (Array.isArray(s)) schedule = s.filter((x) => x && Number(x.percent) > 0).map((x) => ({ label: String(x.label ?? ""), percent: Number(x.percent) })); } catch { schedule = []; }
-  const planMap: Record<string, number> = {};
-  for (const p of plan.results) planMap[`${p.line_id}:${p.category}`] = Number(p.amount_minor);
   return {
     order,
-    lines: lines.results.map((l) => ({ ...l, unit_price_minor: Number(l.unit_price_minor), target_price_minor: l.target_price_minor === null ? null : Number(l.target_price_minor) })),
+    lines: lines.results.map((l) => ({ ...l, unit_price_minor: Number(l.unit_price_minor) })),
     payments: payments.results.map((p) => ({ ...p, amount_minor: Number(p.amount_minor), amount_kgs_minor: Number(p.amount_kgs_minor), amount_po_minor: Number(p.amount_po_minor) })),
     shipments,
     costs: costs.results.map((c) => ({ ...c, amount_minor: Number(c.amount_minor), amount_kgs_minor: Number(c.amount_kgs_minor) })),
-    plan: planMap,
-    schedule,
-    calc: calc?.calc.lines ?? [],
-    effectiveRate: calc?.rate ?? (order.paid_po_minor ? order.paid_kgs_minor / order.paid_po_minor : order.fx_rate),
+    effectiveRate: order.paid_po_minor ? order.paid_kgs_minor / order.paid_po_minor : order.fx_rate,
   };
 }
 
@@ -268,12 +252,12 @@ export async function getShipment(shipmentId: string) {
   const shipment = await db.prepare(`SELECT s.*, s.eta::text AS eta, to_char(s.departure_at AT TIME ZONE 'Asia/Bishkek','YYYY-MM-DD"T"HH24:MI') AS departure_local, o.order_number, o.currency, p.name AS supplier FROM shipments_v2 s JOIN purchase_orders_v2 o ON o.id=s.purchase_order_id JOIN suppliers_v2 p ON p.id=o.supplier_id WHERE s.id=?`).bind(shipmentId).first<Record<string, unknown> & { id: string; status: string; tracking_number: string | null; purchase_order_id: string; allocation_method: string; eta: string | null; order_number: string; currency: string; supplier: string }>();
   if (!shipment) return null;
   const [units, costs] = await Promise.all([
-    db.prepare("SELECT u.id, u.vin, u.model, u.status, u.engine_number, u.purchase_cost_minor, u.allocated_cost_minor, u.planned_cost_minor, u.landed_cost_minor, u.manual_cost_minor, u.received_at, u.damage_note, (SELECT c.name || ' ' || c.phone FROM sale_orders o JOIN crm_customers c ON c.id=o.customer_id WHERE o.id=u.reserved_sale_id) AS client FROM inventory_units_v2 u WHERE u.shipment_id=? AND u.archived=0 ORDER BY u.model, u.vin").bind(shipmentId).all<{ client: string | null; id: string; vin: string; model: string; status: string; engine_number: string; purchase_cost_minor: number; allocated_cost_minor: number; planned_cost_minor: number; landed_cost_minor: number; manual_cost_minor: number | null; received_at: string | null; damage_note: string }>(),
+    db.prepare("SELECT u.id, u.vin, u.model, u.status, u.engine_number, u.purchase_cost_minor, u.allocated_cost_minor, u.landed_cost_minor, u.manual_cost_minor, u.received_at, u.damage_note, (SELECT c.name || ' ' || c.phone FROM sale_orders o JOIN crm_customers c ON c.id=o.customer_id WHERE o.id=u.reserved_sale_id) AS client FROM inventory_units_v2 u WHERE u.shipment_id=? AND u.archived=0 ORDER BY u.model, u.vin").bind(shipmentId).all<{ client: string | null; id: string; vin: string; model: string; status: string; engine_number: string; purchase_cost_minor: number; allocated_cost_minor: number; landed_cost_minor: number; manual_cost_minor: number | null; received_at: string | null; damage_note: string }>(),
     db.prepare("SELECT c.*, c.fx_rate::float AS fx_rate, a.name AS account FROM shipment_costs c LEFT JOIN financial_accounts a ON a.id=c.account_id WHERE c.shipment_id=? ORDER BY c.paid_at").bind(shipmentId).all<{ id: string; category: string; currency: string; amount_minor: number; fx_rate: number; amount_kgs_minor: number; account: string | null; paid_at: string; note: string; status: string; void_reason: string }>(),
   ]);
   return {
     shipment,
-    units: units.results.map((u) => ({ ...u, purchase_cost_minor: Number(u.purchase_cost_minor), allocated_cost_minor: Number(u.allocated_cost_minor), planned_cost_minor: Number(u.planned_cost_minor ?? 0), landed_cost_minor: Number(u.landed_cost_minor), manual_cost_minor: u.manual_cost_minor === null ? null : Number(u.manual_cost_minor) })),
+    units: units.results.map((u) => ({ ...u, purchase_cost_minor: Number(u.purchase_cost_minor), allocated_cost_minor: Number(u.allocated_cost_minor), landed_cost_minor: Number(u.landed_cost_minor), manual_cost_minor: u.manual_cost_minor === null ? null : Number(u.manual_cost_minor) })),
     costs: costs.results.map((c) => ({ ...c, amount_minor: Number(c.amount_minor), amount_kgs_minor: Number(c.amount_kgs_minor) })),
   };
 }
@@ -366,43 +350,6 @@ export async function voidSupplierPayment(actor: Actor, paymentId: string, reaso
     await q("UPDATE supplier_payments SET status='void', void_reason=?, void_transaction_id=? WHERE id=?", why, tx, p.id);
     await audit(q, actor, "po.payment_void", p.purchase_order_id, why);
     await recalcOrder(q, p.purchase_order_id);
-  });
-}
-
-/**
- * Калькуляция заказа как в Excel: план расходов на 1 машину по статьям, цель продажи, график оплаты заводу.
- * plan: ключ "<lineId>:<статья>" → сумма в валюте заказа (пусто или 0: статьи нет); targets: lineId → цена продажи.
- */
-export async function saveOrderPlan(actor: Actor, poId: string, input: { plan: Record<string, string>; targets: Record<string, string>; schedule: { label: string; percent: string }[] }) {
-  assertLogistics(actor);
-  const schedule = (Array.isArray(input.schedule) ? input.schedule : [])
-    .map((s, i) => ({ label: text(s.label, 60) || `Оплата ${i + 1}`, raw: String(s.percent ?? "").replace(",", ".").trim() }))
-    .filter((s) => s.raw)
-    .map((s) => {
-      const p = Number(s.raw);
-      if (!Number.isFinite(p) || p <= 0 || p > 100) throw new HttpError(400, `${s.label}: процент от 1 до 100`);
-      return { label: s.label, percent: Math.round(p * 100) / 100 };
-    });
-  if (schedule.length > 8) throw new HttpError(400, "Не больше 8 оплат в графике");
-  if (schedule.reduce((a, s) => a + s.percent, 0) > 100.001) throw new HttpError(400, "В графике оплат больше 100%");
-  return getRawDb().transaction(async (client) => {
-    const q = query(client);
-    const [po] = await q<{ id: string; order_number: string }>("SELECT id, order_number FROM purchase_orders_v2 WHERE id=? AND archived=0 FOR UPDATE", text(poId, 100));
-    if (!po) throw new HttpError(404, "Заказ не найден");
-    const lines = await q<{ id: string; model: string }>("SELECT id, model FROM purchase_order_lines WHERE purchase_order_id=?", po.id);
-    for (const l of lines) {
-      const t = String(input.targets?.[l.id] ?? "").trim();
-      await q("UPDATE purchase_order_lines SET target_price_minor=? WHERE id=?", t ? toMinor(t, `Цена продажи ${l.model}`, { allowZero: true }) : null, l.id);
-      for (const key of COST_KEYS) {
-        const raw = String(input.plan?.[`${l.id}:${key}`] ?? "").trim();
-        const v = raw ? toMinor(raw, `${l.model}, ${COST_CATEGORY[key]}`, { allowZero: true }) : 0;
-        if (v > 0) await q("INSERT INTO purchase_order_plan(line_id,category,amount_minor,updated_by) VALUES(?,?,?,?) ON CONFLICT(line_id,category) DO UPDATE SET amount_minor=excluded.amount_minor, updated_by=excluded.updated_by, updated_at=CURRENT_TIMESTAMP", l.id, key, v, actor.id);
-        else await q("DELETE FROM purchase_order_plan WHERE line_id=? AND category=?", l.id, key);
-      }
-    }
-    await q("UPDATE purchase_orders_v2 SET payment_plan_json=?, updated_by=?, updated_at=CURRENT_TIMESTAMP WHERE id=?", JSON.stringify(schedule), actor.id, po.id);
-    await audit(q, actor, "po.plan", po.id, `Расчёт себестоимости заказа ${po.order_number} обновлён`);
-    await recalcOrder(q, po.id);
   });
 }
 
@@ -654,9 +601,9 @@ export async function setUnitCost(actor: Actor, unitId: string, value: string) {
   const cost = raw ? toMinor(raw, "Себестоимость", { allowZero: true }) : null;
   return getRawDb().transaction(async (client) => {
     const q = query(client);
-    const [u] = await q<{ id: string; vin: string; purchase_cost_minor: number; allocated_cost_minor: number; planned_cost_minor: number; status: string }>("SELECT id, vin, purchase_cost_minor, allocated_cost_minor, planned_cost_minor, status FROM inventory_units_v2 WHERE id=? AND archived=0 FOR UPDATE", unitId);
+    const [u] = await q<{ id: string; vin: string; purchase_cost_minor: number; allocated_cost_minor: number; status: string }>("SELECT id, vin, purchase_cost_minor, allocated_cost_minor, status FROM inventory_units_v2 WHERE id=? AND archived=0 FOR UPDATE", unitId);
     if (!u) throw new HttpError(404, "Машина не найдена");
-    const landed = cost ?? Number(u.purchase_cost_minor) + Number(u.allocated_cost_minor) + Number(u.planned_cost_minor ?? 0);
+    const landed = cost ?? Number(u.purchase_cost_minor) + Number(u.allocated_cost_minor);
     await q("UPDATE inventory_units_v2 SET cost_override_minor=?, landed_cost_minor=?, updated_by=?, updated_at=CURRENT_TIMESTAMP, version=version+1 WHERE id=?", cost, landed, actor.id, u.id);
     const items = await q<{ id: string; sale_id: string }>("SELECT i.id, i.sale_id FROM sale_order_items i JOIN sale_orders o ON o.id=i.sale_id WHERE i.inventory_unit_id=? AND i.active=1 AND o.status='booked'", u.id);
     for (const it of items) {

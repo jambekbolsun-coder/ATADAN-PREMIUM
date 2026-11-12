@@ -77,18 +77,6 @@ export async function orderCostAction(poId: string, _p: ActionResult | null, for
   return run(() => stock.addOrderCost(actor, poId, f(form, "scope") || "order", { category: f(form, "category"), currency: f(form, "currency"), amount: f(form, "amount"), fxRate: f(form, "fxRate"), accountId: f(form, "accountId"), paidAt: f(form, "paidAt"), note: f(form, "note") }), "Расход добавлен, себестоимость пересчитана", [`/admin/work/logistics/orders/${poId}`, "/admin/work/logistics", "/admin/work/stock", "/admin/work/cash"]);
 }
 
-export async function orderPlanAction(poId: string, _p: ActionResult | null, form: FormData): Promise<ActionResult> {
-  const actor = await requireStaff();
-  const plan: Record<string, string> = {}, targets: Record<string, string> = {};
-  for (const [k, v] of form.entries()) {
-    if (k.startsWith("plan:")) plan[k.slice(5)] = String(v);
-    else if (k.startsWith("target:")) targets[k.slice(7)] = String(v);
-  }
-  const labels = form.getAll("payLabel").map(String), percents = form.getAll("payPercent").map(String);
-  const schedule = percents.map((percent, i) => ({ label: labels[i] ?? "", percent }));
-  return run(() => stock.saveOrderPlan(actor, poId, { plan, targets, schedule }), "Расчёт сохранён, себестоимость пересчитана", [`/admin/work/logistics/orders/${poId}`, "/admin/work/stock"]);
-}
-
 export async function voidShipmentCostAction(shipmentId: string, costId: string, _p: ActionResult | null, form: FormData): Promise<ActionResult> {
   const actor = await requireStaff();
   return run(() => stock.voidShipmentCost(actor, costId, f(form, "reason")), "Расход сторнирован", [`/admin/work/logistics/shipments/${shipmentId}`, "/admin/work/logistics", "/admin/work/cash"]);

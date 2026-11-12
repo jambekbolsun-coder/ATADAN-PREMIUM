@@ -137,4 +137,40 @@ BEGIN
     INSERT INTO schema_migrations(id) VALUES('staff-titles-20261112');
   END IF;
 END $$;
+
+-- Решение владельца 2026-11-12 (2): убрать тестовые кассы «e2e» и расчёт как в Excel.
+-- Касса без связанных продаж, оплат заводу, расходов и переводов удаляется вместе со своими проводками;
+-- если удалить нельзя (есть связи), она скрывается. Итог пишется в журнал действий. Выполняется один раз.
+DO $$
+DECLARE a RECORD; gone TEXT := ''; hidden TEXT := ''; who TEXT;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM schema_migrations WHERE id='e2e-accounts-20261112') THEN
+    FOR a IN SELECT id, name FROM financial_accounts WHERE name ILIKE '%e2e%' LOOP
+      BEGIN
+        IF EXISTS (SELECT 1 FROM sale_payments WHERE account_id=a.id)
+          OR EXISTS (SELECT 1 FROM payments_v2 WHERE account_id=a.id)
+          OR EXISTS (SELECT 1 FROM supplier_payments WHERE account_id=a.id)
+          OR EXISTS (SELECT 1 FROM shipment_costs WHERE account_id=a.id)
+          OR EXISTS (SELECT 1 FROM account_transactions WHERE account_id=a.id AND (transfer_id IS NOT NULL OR link_type IS NOT NULL)) THEN
+          RAISE EXCEPTION 'linked';
+        END IF;
+        UPDATE account_transactions SET reversed_by=NULL WHERE account_id=a.id;
+        DELETE FROM account_transactions WHERE account_id=a.id;
+        DELETE FROM financial_accounts WHERE id=a.id;
+        gone := gone || a.name || '; ';
+      EXCEPTION WHEN OTHERS THEN
+        UPDATE financial_accounts SET active=0 WHERE id=a.id;
+        hidden := hidden || a.name || '; ';
+      END;
+    END LOOP;
+    -- расчёт как в Excel убран: план больше не входит в себестоимость
+    UPDATE inventory_units_v2 SET landed_cost_minor=landed_cost_minor-planned_cost_minor WHERE planned_cost_minor<>0 AND cost_override_minor IS NULL AND status<>'delivered';
+    UPDATE inventory_units_v2 SET planned_cost_minor=0 WHERE planned_cost_minor<>0;
+    DELETE FROM purchase_order_plan;
+    SELECT id INTO who FROM staff WHERE role='owner' AND active=1 ORDER BY created_at LIMIT 1;
+    INSERT INTO audit_logs(id,actor_id,action,entity_id,detail) VALUES (gen_random_uuid()::text, COALESCE(who,'system'), 'accounts.e2e_cleanup', 'financial_accounts',
+      'Тестовые кассы e2e. Удалены: ' || COALESCE(NULLIF(gone,''),'нет') || ' Скрыты: ' || COALESCE(NULLIF(hidden,''),'нет'));
+    INSERT INTO schema_migrations(id) VALUES('e2e-accounts-20261112');
+  END IF;
+END $$;
 `;
