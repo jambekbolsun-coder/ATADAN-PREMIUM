@@ -10,7 +10,7 @@ import { HttpError } from "../../lib/security";
 import { getSiteSettings } from "../../lib/site-settings";
 import { getLeaseTermSettings } from "../../lib/leasing-public";
 import { formatLeaseTerm, LEASE_TERM_HARD_MAX, leaseTermChoices } from "../../lib/leasing";
-import { audit, newId, num, query, safeJson, text } from "./db-kit";
+import { audit, mediaUrl, newId, num, query, safeJson, text } from "./db-kit";
 import { canRecords, listRecords } from "./records-admin";
 
 export const canSite = (a: Actor) => canUseSection(a, "site-settings");
@@ -63,8 +63,8 @@ export async function analytics(days: number) {
 /**
  * Банки и ставки (Маркетинг → Страницы сайта → Банки и ставки).
  * Банк = запись admin_records kind='leasing_terms', те же «Программы банков», что в разделе Лизинг:
- * одно хранилище, поэтому два раздела не расходятся. Здесь меняются только название, годовая ставка,
- * минимальный первый взнос, комиссия в %, включён ли банк и порядок показа. Остальные поля программы
+ * одно хранилище, поэтому два раздела не расходятся. Здесь меняются только название, логотип, сайт банка,
+ * годовая ставка, минимальный первый взнос, комиссия в %, включён ли банк и порядок показа. Остальные поля программы
  * (страховка, опции, даты действия и т.д.) сохраняются как есть.
  * Включён = status 'published' (виден в калькуляторе), выключен = 'hidden'.
  * Удаление = архив: заявки, где банк уже выбран, не теряют ссылку.
@@ -72,7 +72,7 @@ export async function analytics(days: number) {
 export const canBanks = (a: Actor) => canRecords(a, "leasing_terms");
 const BANK_DENIED = "Банки и ставки меняют владелец, директор или сотрудник с доступом «Лизинг»";
 
-export type Bank = { id: string; name: string; annualRate: number | null; minDownPercent: number | null; commissionPercent: number | null; active: boolean; status: string; sortOrder: number; version: number; extras: string[] };
+export type Bank = { id: string; name: string; logo: string; website: string; annualRate: number | null; minDownPercent: number | null; commissionPercent: number | null; active: boolean; status: string; sortOrder: number; version: number; extras: string[] };
 
 /** Дополнительные условия, которые меняются только в разделе Лизинг (показываем подсказкой). */
 const EXTRAS: [string, string][] = [["fixedCommission", "фикс. комиссия"], ["markupPercent", "удорожание"], ["insurance", "страховка"], ["processingFee", "оформление"], ["delivery", "доставка"], ["options", "опции"], ["zeroPercent", "0%"], ["startsAt", "дата начала"], ["endsAt", "дата окончания"]];
@@ -81,13 +81,27 @@ const pct = (v: string | undefined) => (v === undefined || v === "" || !Number.i
 export async function listBanks(): Promise<Bank[]> {
   const rows = await listRecords("leasing_terms");
   return rows.map((r) => ({
-    id: r.id, name: r.title, status: r.status, active: r.status === "published", sortOrder: r.sort_order, version: r.version,
+    id: r.id, name: r.title, logo: r.data.logo ?? "", website: r.data.website ?? "", status: r.status, active: r.status === "published", sortOrder: r.sort_order, version: r.version,
     annualRate: pct(r.data.annualRate), minDownPercent: pct(r.data.minDownPercent), commissionPercent: pct(r.data.commissionPercent),
     extras: EXTRAS.filter(([k]) => { const v = r.data[k]; return !!v && v !== "0" && v !== "Нет"; }).map(([, label]) => label),
   }));
 }
 
-export type BankInput = { id?: string; version?: number; name: string; annualRate: string; minDownPercent: string; commissionPercent: string; active: boolean; sortOrder: string };
+export type BankInput = { id?: string; version?: number; name: string; logo: string; website: string; annualRate: string; minDownPercent: string; commissionPercent: string; active: boolean; sortOrder: string };
+
+/** Официальный сайт банка: только http(s), без пробелов; «bakai.kg» → https://bakai.kg. */
+export function bankWebsite(value: unknown) {
+  let s = text(value, 300);
+  if (!s) return "";
+  if (!/^https?:\/\//i.test(s)) s = `https://${s}`;
+  try {
+    const url = new URL(s);
+    if (!/^https?:$/.test(url.protocol) || !url.hostname.includes(".") || /[\s"'<>]/.test(s)) throw new Error("bad");
+    return url.toString();
+  } catch {
+    throw new HttpError(400, "Сайт банка: вставьте адрес, например https://www.bakai.kg");
+  }
+}
 
 export async function saveBank(actor: Actor, input: BankInput) {
   if (!canBanks(actor)) throw new HttpError(403, BANK_DENIED);
@@ -98,7 +112,9 @@ export async function saveBank(actor: Actor, input: BankInput) {
   const commission = num(input.commissionPercent, "Комиссия, %", { max: 100, optional: true }) ?? 0;
   const sortOrder = num(input.sortOrder, "Порядок", { max: 100_000, int: true, optional: true });
   const status = input.active ? "published" : "hidden";
-  const fields = { annualRate: String(annualRate), minDownPercent: String(minDown), commissionPercent: String(commission) };
+  const logo = mediaUrl(input.logo, "Логотип банка");
+  const website = bankWebsite(input.website);
+  const fields = { logo, website, annualRate: String(annualRate), minDownPercent: String(minDown), commissionPercent: String(commission) };
   const checkDown = (data: Record<string, string>) => {
     const maxDown = Number(data.maxDownPercent || 90);
     if (Number.isFinite(maxDown) && minDown > maxDown) throw new HttpError(400, `Минимальный взнос ${minDown}% больше максимального (${maxDown}%). Уменьшите взнос или поменяйте максимум в разделе Лизинг`);

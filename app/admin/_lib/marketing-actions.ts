@@ -115,7 +115,7 @@ export async function saveSiteAction(_p: ActionResult | null, form: FormData): P
 export async function saveBankAction(id: string | null, version: number, _p: ActionResult | null, form: FormData): Promise<ActionResult> {
   const actor = await requireStaff("/admin/marketing/pages?tab=banks");
   return run(() => site.saveBank(actor, {
-    id: id ?? undefined, version, name: f(form, "name"), annualRate: f(form, "annualRate"), minDownPercent: f(form, "minDownPercent"),
+    id: id ?? undefined, version, name: f(form, "name"), logo: f(form, "logo"), website: f(form, "website"), annualRate: f(form, "annualRate"), minDownPercent: f(form, "minDownPercent"),
     commissionPercent: f(form, "commissionPercent"), active: form.get("active") === "on", sortOrder: f(form, "sortOrder"),
   }), id ? "Банк сохранён" : "Банк добавлен");
 }

@@ -10,8 +10,10 @@ import {
   CalendarClock,
   Check,
   ChevronDown,
+  ExternalLink,
   FileText,
-  Send,
+  Landmark,
+  MessageCircle,
 } from "lucide-react";
 import { FormEvent, useId, useRef, useState } from "react";
 import {
@@ -47,6 +49,16 @@ const percent = (value: number) =>
 const money = (value: number) =>
   new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value) +
   " сом";
+const bankTerms = (p: LeaseProgram, minDown: number) =>
+  [p.zeroPercent ? "без процентов" : `${percent(p.annualRate)} годовых`, `взнос от ${percent(minDown)}`, p.commissionPercent > 0 ? `комиссия ${percent(p.commissionPercent)}` : ""].filter(Boolean).join(" · ");
+
+/** Логотип банка; без картинки: кружок с первой буквой названия. */
+function BankLogo({ program }: { program: LeaseProgram }) {
+  return program.logo
+    // eslint-disable-next-line @next/next/no-img-element
+    ? <img className="lease-bank-logo" src={program.logo} alt="" width={40} height={40} loading="lazy" decoding="async" />
+    : <span className="lease-bank-logo is-letter" aria-hidden>{program.name.trim().charAt(0).toUpperCase()}</span>;
+}
 export function FinanceCalculator({
   tractors = [],
   tractor,
@@ -60,6 +72,7 @@ export function FinanceCalculator({
 }) {
   const settings = useSiteSettings(),
     headingId = useId(),
+    banksId = useId(),
     [slug, setSlug] = useState(tractor?.slug ?? tractors[0]?.slug ?? ""),
     [programId, setProgramId] = useState(config.programs[0]?.id ?? "default"),
     [downMode, setDownMode] = useState<"percent" | "amount">("percent"),
@@ -175,6 +188,45 @@ export function FinanceCalculator({
     calculationError =
       cause instanceof Error ? cause.message : "Проверьте условия";
   }
+  /**
+   * Платёж по другому банку при тех же цене, взносе, сроке и опциях. Если у банка минимальный взнос выше,
+   * берётся его минимум. Нужен для строк сравнения банков под калькулятором.
+   */
+  function quote(p: LeaseProgram) {
+    if (!(basePrice > 0) || model?.enabled === false) return null;
+    const pMinDown = promotion?.reducedDownPercent ?? model?.minDownPercent ?? p.minDownPercent;
+    const rules = { price: basePrice, minPercent: pMinDown, maxPercent: p.maxDownPercent, minAmount: p.minDownAmount };
+    const pOptions = model?.options?.length ? model.options : p.options;
+    try {
+      return {
+        minDown: pMinDown,
+        result: calculateInstallment({
+          price: basePrice, options: pOptions.filter((item) => chosen.includes(item.name)), delivery: p.delivery, discount,
+          downMode, downValue: normalizeDownPayment(downValue, downMode, rules), months,
+          markupPercent: model?.markupPercent ?? p.markupPercent, annualRate: model?.annualRate ?? p.annualRate,
+          fixedCommission: model?.fixedCommission ?? p.fixedCommission, commissionPercent: model?.commissionPercent ?? p.commissionPercent,
+          insurance: p.insurance, processingFee: p.processingFee, includeDelivery: p.includeDelivery, includeInsurance: p.includeInsurance,
+          includeCommission: p.includeCommission, discountOrder: p.discountOrder, rounding: p.rounding, zeroPercent: Boolean(promotion?.zeroPercent || p.zeroPercent),
+        }),
+      };
+    } catch {
+      return null;
+    }
+  }
+  const quotes = config.programs.map((p) => ({ program: p, quote: p.id === program.id && result ? { minDown, result } : quote(p) }));
+  // «Выгоднее»: меньше всего заплатить за весь срок (взнос + договор), только если банков несколько и лучший один
+  const totals = quotes.filter((x) => x.quote).map((x) => x.quote!.result.contractTotal + x.quote!.result.downPayment);
+  const bestTotal = totals.length > 1 ? Math.min(...totals) : null;
+  const bestId = bestTotal !== null && totals.filter((t) => t === bestTotal).length === 1 ? quotes.find((x) => x.quote && x.quote.result.contractTotal + x.quote.result.downPayment === bestTotal)?.program.id : undefined;
+  function chooseProgram(id: string) {
+    const next = config.programs.find((item) => item.id === id);
+    if (!next) return;
+    setProgramId(id);
+    const nextMin = promotion?.reducedDownPercent ?? model?.minDownPercent ?? next.minDownPercent;
+    // взнос клиента сохраняем, если банк его допускает; иначе поднимаем до минимума банка
+    setDownValue(normalizeDownPayment(downValue, downMode, { price: basePrice, minPercent: nextMin, maxPercent: next.maxDownPercent, minAmount: next.minDownAmount }));
+    setChosen((current) => current.filter((name) => (model?.options?.length ? model.options : next.options).some((o) => o.name === name)));
+  }
   function chooseModel(value: string) {
     setSlug(value);
     setEstimatedPrice(0);
@@ -228,9 +280,22 @@ export function FinanceCalculator({
       setNotice(successMessage);
       setApplicationOpen(false);
       requestKey.current = crypto.randomUUID();
+      const downPercent = basePrice ? (result.downPayment / basePrice) * 100 : 0;
+      const city = String(form.get("city") || "").trim(), comment = String(form.get("comment") || "").trim();
       window.location.assign(managerWhatsAppUrl(settings.phone, {
-        name: String(form.get("name") || ""), phone: String(form.get("phone") || ""), model: selected.model,
-        message: [`Лизинг на ${formatLeaseTerm(months)}.${config.programs.length ? ` Банк: ${program.name}.` : ""} Предварительная стоимость: ${money(basePrice)}. Первый взнос: ${money(result.downPayment)}. Платёж в месяц: ${money(result.monthly)}.`, termsUnconfirmed ? "Ставку и комиссии требуется уточнить." : "", String(form.get("city") || ""), String(form.get("comment") || "")].filter(Boolean).join("\n"),
+        name: String(form.get("name") || ""), phone: String(form.get("phone") || ""),
+        headline: `Хочу Changfa ${selected.model}${selected.hp ? ` (${selected.hp} л.с.)` : ""} в лизинг.`,
+        message: [
+          config.programs.length ? `Банк: ${program.name}, ${zeroPercent ? "без процентов" : `${percent(effectiveRate)} годовых`}` : "",
+          `Цена: ${publishedPrice ? money(basePrice) : `≈ ${money(basePrice)} (ориентировочно)`}`,
+          `Первый взнос: ${percent(Math.round(downPercent * 10) / 10)} (${money(result.downPayment)})`,
+          `Срок: ${formatLeaseTerm(months)}`,
+          `Платёж в месяц: ≈ ${money(result.monthly)}`,
+          selectedOptions.length ? `Опции: ${selectedOptions.map((o) => o.name).join(", ")}` : "",
+          termsUnconfirmed ? "Ставку и комиссии нужно уточнить." : `Всего по договору: ≈ ${money(result.contractTotal + result.downPayment)}`,
+          city ? `Город: ${city}` : "",
+          comment,
+        ].filter(Boolean).join("\n"),
         path: window.location.href,
       }));
     } catch (cause) {
@@ -284,40 +349,18 @@ export function FinanceCalculator({
             </label>
           ) : null}
           {config.programs.length ? (
-            <div className="lease-bank">
-              <label>
-                <span>Банк</span>
-                <select
-                  value={program.id}
-                  onChange={(event) => {
-                    const next = config.programs.find(
-                      (item) => item.id === event.target.value,
-                    );
-                    setProgramId(event.target.value);
-                    setDownMode("percent");
-                    if (next) {
-                      setDownValue(
-                        promotion?.reducedDownPercent ??
-                          model?.minDownPercent ??
-                          next.minDownPercent,
-                      );
-                      setChosen([]);
-                    }
-                  }}
-                >
-                  {config.programs.map((item) => (
-                    <option value={item.id} key={item.id}>
-                      {item.name} · {item.zeroPercent ? "0%" : `${percent(item.annualRate)} годовых`}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <p className="lease-bank-terms">
-                {zeroPercent ? "Без процентов" : `Ставка ${percent(effectiveRate)} годовых`}
-                {" · "}первый взнос от {percent(minDown)}
-                {" · "}
-                {effectiveCommission > 0 ? `комиссия ${percent(effectiveCommission)}` : "без комиссии в %"}
-              </p>
+            <div className="lease-bank-current">
+              <BankLogo program={program} />
+              <span>
+                <small>Банк</small>
+                <strong>{program.name}</strong>
+                <em>
+                  {zeroPercent ? "без процентов" : `${percent(effectiveRate)} годовых`}
+                  {" · "}взнос от {percent(minDown)}
+                  {effectiveCommission > 0 ? ` · комиссия ${percent(effectiveCommission)}` : ""}
+                </em>
+              </span>
+              {config.programs.length > 1 ? <a href={`#${banksId}`}>Сравнить банки</a> : null}
             </div>
           ) : null}
           {selected ? (
@@ -559,37 +602,72 @@ export function FinanceCalculator({
               setApplicationOpen((value) => !value);
             }}
           >
-            <Send size={18} />
-            Оставить заявку
+            <MessageCircle size={18} />
+            Написать менеджеру
           </button>
         </aside>
       </div>
+      {config.programs.length ? (
+        <section className="lease-banks" id={banksId} aria-labelledby={`${banksId}-t`}>
+          <div className="lease-banks-head">
+            <strong id={`${banksId}-t`}><Landmark size={17} aria-hidden /> Банки-партнёры</strong>
+            <span>{selected ? `Changfa ${selected.model} · ` : ""}{formatMonths(months)} · платёж в месяц по каждому банку</span>
+          </div>
+          <ul>
+            {quotes.map(({ program: p, quote: q }) => {
+              const active = p.id === program.id;
+              return (
+                <li key={p.id} className={`lease-bank-row${active ? " active" : ""}`}>
+                  <button type="button" aria-pressed={active} onClick={() => chooseProgram(p.id)}>
+                    <BankLogo program={p} />
+                    <span className="lease-bank-name">
+                      <strong>{p.name}{p.id === bestId ? <em className="lease-bank-best">Выгоднее</em> : null}</strong>
+                      <small>{bankTerms(p, q?.minDown ?? p.minDownPercent)}</small>
+                    </span>
+                    <span className="lease-bank-pay">
+                      <strong>{q ? `≈ ${money(q.result.monthly)}` : "Н/Д"}</strong>
+                      <small>{q ? "в месяц" : "нужна цена"}</small>
+                    </span>
+                    <span className="lease-bank-check" aria-hidden>{active ? <Check size={16} /> : null}</span>
+                  </button>
+                  {p.website ? <a className="lease-bank-site" href={p.website} target="_blank" rel="noopener noreferrer nofollow">Сайт банка <ExternalLink size={13} aria-hidden /></a> : null}
+                </li>
+              );
+            })}
+          </ul>
+          <p>Банки, с которыми работает ATADAN. Нажмите на банк, чтобы посчитать по нему. Расчёт предварительный: ставку и одобрение подтверждает банк.</p>
+        </section>
+      ) : null}
       {applicationOpen && result ? (
         <form className="lease-application" onSubmit={submit}>
           <div>
-            <span>Заявка на Changfa {selected?.model}</span>
-            <h3>Контакты для заявки</h3>
+            <span>Changfa {selected?.model}{config.programs.length ? ` · ${program.name}` : ""} · {formatMonths(months)} · ≈ {money(result.monthly)} в месяц</span>
+            <h3>Как к вам обращаться</h3>
+            <p className="lease-application-note">Откроется WhatsApp менеджера, расчёт уже будет в сообщении.</p>
           </div>
           <label>
             <span>Имя</span>
-            <input name="name" required minLength={2} />
+            <input name="name" required minLength={2} autoComplete="name" />
           </label>
           <PhoneInput />
-          <label>
-            <span>Город или район</span>
-            <input name="city" required />
-          </label>
-          <label className="full">
-            <span>Комментарий</span>
-            <textarea name="comment" rows={3} />
-          </label>
+          <details className="lease-application-more full">
+            <summary>Добавить город или комментарий</summary>
+            <label>
+              <span>Город или район</span>
+              <input name="city" />
+            </label>
+            <label>
+              <span>Комментарий</span>
+              <textarea name="comment" rows={2} />
+            </label>
+          </details>
           <label className="lease-consent full">
             <input name="consent" type="checkbox" required />
             <span>Согласен на обработку данных для связи по заявке.</span>
           </label>
           <button className="primary-btn" disabled={busy} type="submit">
-            <Send />
-            {busy ? "Отправляем…" : "Отправить заявку"}
+            <MessageCircle />
+            {busy ? "Открываем WhatsApp…" : "Написать менеджеру в WhatsApp"}
           </button>
         </form>
       ) : null}

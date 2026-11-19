@@ -11,7 +11,7 @@ import { approximateSomPrice, getUsdKgsRate } from "../../lib/exchange-rate";
 export async function POST(request:Request){
   try{
     sameOrigin(request);const body=await jsonBody(request,20_000);if(body.consent!==true)throw new HttpError(400,"Необходимо согласие на обработку данных");
-    const name=cleanText(body.name,120,true),phone=cleanText(body.phone,40,true),normalizedPhone=normalizePhone(phone),city=cleanText(body.city,120,true),comment=cleanText(body.comment??"",1200),tractorSlug=cleanText(body.tractorSlug,120,true),sourcePath=cleanText(body.sourcePath??"/finance",300,true),programId=cleanText(body.programId,100,true),downMode=body.downMode==="amount"?"amount":"percent",downValue=Number(body.downValue),months=Math.round(Number(body.months));
+    const name=cleanText(body.name,120,true),phone=cleanText(body.phone,40,true),normalizedPhone=normalizePhone(phone),city=cleanText(body.city??"",120),comment=cleanText(body.comment??"",1200),tractorSlug=cleanText(body.tractorSlug,120,true),sourcePath=cleanText(body.sourcePath??"/finance",300,true),programId=cleanText(body.programId,100,true),downMode=body.downMode==="amount"?"amount":"percent",downValue=Number(body.downValue),months=Math.round(Number(body.months));
     if(name.length<2||!validPublicPhone(phone))throw new HttpError(400,"Укажите имя и корректный номер телефона");
     await ensureDb();const forwarded=request.headers.get("x-forwarded-for")?.split(",")[0]??"local";await rateLimit(`lease:${forwarded}`,6,900);
     const [catalog,config,{settings},usdKgsRate]=await Promise.all([getCatalog(),getLeasingPublicConfig(),getSiteSettings(),getUsdKgsRate()]);const tractor=catalog.find(item=>item.slug===tractorSlug);if(!tractor)throw new HttpError(400,"Модель не найдена");

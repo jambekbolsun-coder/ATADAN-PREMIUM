@@ -10,6 +10,7 @@ import { bankActiveAction, deleteBankAction, saveBankAction, saveLeaseTermAction
 import { formatLeaseTerm, LEASE_TERM_HARD_MAX, leaseTermChoices } from "../../../../lib/leasing";
 import { ActionButton, ActionDialog, Field } from "../../../_ui/forms";
 import { Badge, Card, Notice } from "../../../_ui/ui";
+import { BankLogoField } from "./bank-logo-field";
 
 const pct = (v: number | null) => (v === null ? "не задано" : `${v.toLocaleString("ru-RU")}%`);
 
@@ -19,6 +20,12 @@ function BankFields({ bank }: { bank?: Bank }) {
     <div className="ax-grid" style={{ gap: 12 }}>
       <Field label="Название банка" htmlFor={id("name")}>
         <input id={id("name")} name="name" className="ax-input" defaultValue={bank?.name ?? ""} placeholder="Айыл Банк" required minLength={2} maxLength={120} />
+      </Field>
+      <Field label="Логотип" hint="Квадратная или круглая картинка PNG, JPG или WEBP. Сохраните лого с сайта банка и загрузите сюда. Без логотипа на сайте будет кружок с первой буквой">
+        <BankLogoField initial={bank?.logo ?? ""} />
+      </Field>
+      <Field label="Официальный сайт банка" htmlFor={id("site")} hint="Ссылка «Сайт банка» под калькулятором. Например: https://www.bakai.kg">
+        <input id={id("site")} name="website" className="ax-input" inputMode="url" defaultValue={bank?.website ?? ""} placeholder="https://" maxLength={300} />
       </Field>
       <div className="ax-grid ax-g2" style={{ gap: 12 }}>
         <Field label="Годовая ставка, %" htmlFor={id("rate")} hint="Например: 6">
@@ -69,7 +76,16 @@ export function BanksSection({ banks, maxMonths, termVersion, canEdit }: { banks
                   <tr key={b.id}>
                     <td className="r num">{b.sortOrder}</td>
                     <td>
-                      <b>{b.name}</b>
+                      <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                        {b.logo
+                          // eslint-disable-next-line @next/next/no-img-element
+                          ? <img src={b.logo} alt="" width={34} height={34} style={{ width: 34, height: 34, objectFit: "contain", borderRadius: 9, background: "#fff", border: "1px solid var(--border)", flex: "none" }} />
+                          : <span aria-hidden style={{ width: 34, height: 34, borderRadius: 9, display: "grid", placeItems: "center", background: "var(--brand-soft)", color: "var(--brand)", fontWeight: 700, flex: "none" }}>{b.name.trim().charAt(0).toUpperCase()}</span>}
+                        <span>
+                          <b>{b.name}</b>
+                          {b.website ? <div className="ax-small"><a href={b.website} target="_blank" rel="noopener noreferrer">{new URL(b.website).hostname.replace(/^www\./, "")} ↗</a></div> : <div className="ax-small">сайт не указан</div>}
+                        </span>
+                      </div>
                       {b.extras.length ? <div className="ax-small">Доп. условия: {b.extras.join(", ")}. <Link href={`/admin/marketing/leasing?edit=${b.id}`}>Открыть в разделе Лизинг</Link></div> : null}
                     </td>
                     <td className="r num">{pct(b.annualRate)}</td>

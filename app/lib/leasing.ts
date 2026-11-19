@@ -79,7 +79,8 @@ export function salePrice(price: number | null, discount = 0) {
 }
 
 export type LeaseOption={name:string;price:number};
-export type LeaseProgram={id:string;name:string;programType:string;currency:string;termsMonths:number[];minDownPercent:number;maxDownPercent:number;minDownAmount:number;downPaymentMode:string;markupPercent:number;annualRate:number;fixedCommission:number;commissionPercent:number;insurance:number;processingFee:number;delivery:number;includeDelivery:boolean;includeInsurance:boolean;includeCommission:boolean;discountOrder:"before"|"after";rounding:1|10|100;zeroPercent:boolean;options:LeaseOption[];notes:string};
+/** logo: картинка банка (/api/media, /images или https), website: официальный сайт банка; пусто, если не указаны. */
+export type LeaseProgram={id:string;name:string;logo?:string;website?:string;programType:string;currency:string;termsMonths:number[];minDownPercent:number;maxDownPercent:number;minDownAmount:number;downPaymentMode:string;markupPercent:number;annualRate:number;fixedCommission:number;commissionPercent:number;insurance:number;processingFee:number;delivery:number;includeDelivery:boolean;includeInsurance:boolean;includeCommission:boolean;discountOrder:"before"|"after";rounding:1|10|100;zeroPercent:boolean;options:LeaseOption[];notes:string};
 export type LeaseModelTerms={tractorSlug:string;enabled:boolean;price?:number;minDownPercent?:number;termsMonths?:number[];markupPercent?:number;annualRate?:number;fixedCommission?:number;commissionPercent?:number;discount?:number;maxFinancing?:number;options?:LeaseOption[];notes?:string};
 export type LeasePromotion={id:string;name:string;tractorSlugs:string[];discountType:"percent"|"amount";discount:number;reducedDownPercent?:number;zeroPercent:boolean;gift:string;startsAt:string;endsAt:string};
 /** maxMonths: максимальный срок лизинга на сайте (клиент выбирает от 1 до maxMonths). */

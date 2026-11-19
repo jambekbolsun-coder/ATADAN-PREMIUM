@@ -2721,3 +2721,42 @@ html,body{max-width:100%;overflow-x:hidden;overflow-x:clip}img,video,iframe{max-
 @media(max-width:1100px){.public-parts-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:760px){.public-parts-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.public-parts-filter select,.public-parts-filter input{min-width:0;flex:1 1 100%}}
 @media(max-width:440px){.public-parts-grid{grid-template-columns:1fr}}
+
+/* Банки-партнёры в калькуляторе лизинга: текущий банк и строки сравнения */
+.lease-bank-logo{width:40px;height:40px;flex:none;border-radius:11px;border:1px solid #dbe5dd;background:#fff;object-fit:contain;padding:3px}
+.lease-bank-logo.is-letter{display:grid;place-items:center;padding:0;background:#e6f0e8;color:#215f33;font-weight:850;font-size:1rem}
+.lease-bank-current{display:flex;align-items:center;gap:11px;padding:10px 12px;border:1px solid #d6e2d8;border-radius:12px;background:#fff}
+.lease-bank-current>span{display:grid;gap:1px;min-width:0;flex:1}
+.lease-bank-current small{color:#6b7d71;font-size:.62rem;font-weight:700}
+.lease-bank-current strong{color:#17321f;font-size:.82rem}
+.lease-bank-current em{font-style:normal;color:#4f6656;font-size:.66rem;font-weight:650}
+.lease-bank-current a{flex:none;color:#215f33;font-size:.66rem;font-weight:800;text-decoration:underline;text-underline-offset:3px}
+.lease-banks{margin-top:16px;padding:14px;border:1px solid #d3dfd5;border-radius:16px;background:#fff}
+.lease-banks-head{display:flex;flex-wrap:wrap;align-items:baseline;justify-content:space-between;gap:4px 12px;margin:0 2px 10px}
+.lease-banks-head strong{display:inline-flex;align-items:center;gap:7px;color:#17321f;font-size:.8rem}
+.lease-banks-head span{color:#6b7d71;font-size:.64rem;font-weight:650}
+.lease-banks ul{list-style:none;margin:0;padding:0;display:grid;gap:7px}
+.lease-bank-row{position:relative;display:grid}
+.lease-bank-row>button{display:grid;grid-template-columns:40px minmax(0,1fr) auto 22px;align-items:center;gap:11px;width:100%;min-height:58px;padding:8px 12px;border:1px solid #dbe5dd;border-radius:12px;background:#fbfdfb;color:inherit;font:inherit;text-align:left;cursor:pointer;transition:border-color .15s,background .15s}
+.lease-bank-row>button:hover{border-color:#9dbba6}
+.lease-bank-row>button:focus-visible{outline:3px solid #7da78c;outline-offset:2px}
+.lease-bank-row.active>button{border-color:#215f33;background:#eef6f0;box-shadow:inset 0 0 0 1px #215f33}
+.lease-bank-name{display:grid;gap:2px;min-width:0}
+.lease-bank-name strong{display:flex;flex-wrap:wrap;align-items:center;gap:6px;color:#17321f;font-size:.78rem}
+.lease-bank-name small{color:#5c7064;font-size:.63rem;font-weight:650;line-height:1.35}
+.lease-bank-best{font-style:normal;padding:2px 7px;border-radius:999px;background:#215f33;color:#fff;font-size:.56rem;font-weight:800;letter-spacing:.01em}
+.lease-bank-pay{display:grid;justify-items:end;gap:1px;white-space:nowrap}
+.lease-bank-pay strong{color:#17321f;font-size:.86rem}
+.lease-bank-pay small{color:#6b7d71;font-size:.6rem;font-weight:650}
+.lease-bank-check{width:22px;height:22px;border-radius:50%;border:1.5px solid #c3d3c7;display:grid;place-items:center;color:#fff}
+.lease-bank-row.active .lease-bank-check{background:#215f33;border-color:#215f33}
+.lease-bank-site{justify-self:end;display:inline-flex;align-items:center;gap:4px;margin:3px 4px 0 0;color:#215f33;font-size:.62rem;font-weight:750;text-decoration:none}
+.lease-bank-site:hover{text-decoration:underline}
+.lease-banks>p{margin:10px 2px 0;color:#6b7d71;font-size:.62rem;line-height:1.5}
+.lease-application-note{margin:2px 0 0;color:#5c7064;font-size:.68rem}
+.lease-application-more{display:grid;gap:10px}
+.lease-application-more summary{cursor:pointer;color:#215f33;font-size:.68rem;font-weight:750}
+.lease-application-more[open]{grid-template-columns:repeat(2,minmax(0,1fr))}
+.lease-application-more[open] summary{grid-column:1/-1}
+.lease-application-more label{display:grid;gap:6px;color:#52675a;font-size:.68rem;font-weight:780}
+@media(max-width:560px){.lease-bank-row>button{grid-template-columns:36px minmax(0,1fr) auto;gap:9px;padding:8px 10px}.lease-bank-logo{width:36px;height:36px}.lease-bank-check{display:none}.lease-application-more[open]{grid-template-columns:1fr}.lease-bank-current a{display:none}}

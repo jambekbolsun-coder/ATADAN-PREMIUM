@@ -133,18 +133,19 @@ try {
   await page.getByRole("slider").fill("50");
   await page
     .locator(".lease-summary")
-    .getByRole("button", { name: "Оставить заявку" })
+    .getByRole("button", { name: "Написать менеджеру" })
     .click();
   const lease = page.locator(".lease-application");
   await lease.locator("[name=name]").fill("Лизинг Тест");
   await lease
     .getByRole("textbox", { name: "Номер телефона без кода страны" })
     .fill("700221133");
+  await lease.locator("summary").click();
   await lease.locator("[name=city]").fill("Ош");
   await lease.getByRole("checkbox").check();
-  await lease.getByRole("button", { name: "Отправить заявку" }).click();
+  await lease.getByRole("button", { name: "Написать менеджеру в WhatsApp" }).click();
   await page.waitForURL("https://wa.me/**");
-  assert.match(new URL(page.url()).searchParams.get("text"), /Лизинг на 7 лет/);
+  assert.match(new URL(page.url()).searchParams.get("text"), /в лизинг\.[\s\S]*Срок: [\s\S]*Платёж в месяц/);
   pass("Leasing saves and transfers calculation into WhatsApp");
   await page.goto(base + "/service");
   await page
