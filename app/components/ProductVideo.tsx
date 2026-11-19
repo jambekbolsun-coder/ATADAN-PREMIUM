@@ -20,6 +20,12 @@ const modelVideoSlugs: Record<string, string> = {
 
 type VideoQuality = "hd" | "720";
 
+const videoLabels = {
+  ru: { kicker: "CHANGFA · ВИДЕО МОДЕЛИ", quality: "Качество видео", current: "Текущее качество видео", video: "ВИДЕО", seconds: "10 СЕК" },
+  ky: { kicker: "CHANGFA · МОДЕЛДИН ВИДЕОСУ", quality: "Видеонун сапаты", current: "Видеонун учурдагы сапаты", video: "ВИДЕО", seconds: "10 СЕКУНД" },
+  en: { kicker: "CHANGFA · MODEL VIDEO", quality: "Video quality", current: "Current video quality", video: "VIDEO", seconds: "10 SEC" },
+} as const;
+
 export function ProductVideo({ tractor }: { tractor: Tractor }) {
   const [failed, setFailed] = useState(false);
   const [pausedByUser, setPausedByUser] = useState(false);
@@ -82,8 +88,9 @@ export function ProductVideo({ tractor }: { tractor: Tractor }) {
     ky: pausedByUser ? "Видеону улантуу" : "Видеону токтотуу",
     en: pausedByUser ? "Resume video" : "Pause video",
   }[locale];
+  const labels = videoLabels[locale];
   const qualityLabel = tractor.videoUrl
-    ? "ВИДЕО"
+    ? labels.video
     : quality === "720"
       ? "HD · 720p"
       : "FULL HD · 1080p";
@@ -103,12 +110,12 @@ export function ProductVideo({ tractor }: { tractor: Tractor }) {
   return (
     <section className="product-video section-shell">
       <header>
-        <span className="section-label">CHANGFA · ВИДЕО МОДЕЛИ</span>
+        <span className="section-label">{labels.kicker}</span>
         <h2>{title}</h2>
         <p>{note}</p>
         {!tractor.videoUrl ? (
           <label className="video-quality-select">
-            <span>Качество видео</span>
+            <span>{labels.quality}</span>
             <select
               value={quality}
               onChange={(event) => {
@@ -149,9 +156,9 @@ export function ProductVideo({ tractor }: { tractor: Tractor }) {
           </span>
           <span
             className="product-video-quality"
-            aria-label="Текущее качество видео"
+            aria-label={labels.current}
           >
-            10 СЕК · {qualityLabel}
+            {labels.seconds} · {qualityLabel}
           </span>
           <button type="button" onClick={toggle} aria-label={pauseLabel}>
             {pausedByUser ? (

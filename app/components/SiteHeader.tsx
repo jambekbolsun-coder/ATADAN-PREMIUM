@@ -57,17 +57,17 @@ export function SiteHeader() {
       <div className="header-utility">
         <div>
           <span><ShieldCheck size={13} />{t("home.kicker")}</span>
-          <nav aria-label="Социальные сети и контакты">
+          <nav aria-label={t("ui.header.social")}>
             <a href={settings.instagram} target="_blank" rel="noreferrer"><Instagram size={13} />@atadan_kg</a>
             <a href={phoneHref}><Phone size={13} />{settings.phone}</a>
           </nav>
         </div>
       </div>
       <div className="site-header">
-        <Link href="/" className="brand" aria-label="ATADAN Changfa: на главную">
+        <Link href="/" className="brand" aria-label={t("ui.header.home")}>
           <Image src="/atadan-logo-cropped.png" alt="ATADAN Changfa" width={260} height={90} priority />
         </Link>
-        <nav className="desktop-nav" aria-label="Основная навигация">
+        <nav className="desktop-nav" aria-label={t("ui.header.mainNav")}>
           {nav.map(([label, href]) => <Link href={href} className={isActive(href) ? "active" : ""} aria-current={isActive(href) ? "page" : undefined} key={href}>{t(label)}</Link>)}
         </nav>
         <div className="header-actions">
@@ -81,7 +81,7 @@ export function SiteHeader() {
       </div>
       <div className={`mobile-menu ${open ? "is-open" : ""}`} id="mobile-navigation" aria-hidden={!open}>
         <HeaderSearch mobile close={() => setOpen(false)} />
-        <nav aria-label="Мобильная навигация">
+        <nav aria-label={t("ui.header.mobileNav")}>
           {nav.map(([label, href], index) => <Link href={href} className={isActive(href) ? "active" : ""} aria-current={isActive(href) ? "page" : undefined} key={href} onClick={() => setOpen(false)}><span>0{index + 1}</span>{t(label)}</Link>)}
         </nav>
         <div className="mobile-language"><LanguageSwitcher compact /></div>

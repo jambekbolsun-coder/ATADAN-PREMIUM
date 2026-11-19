@@ -2726,7 +2726,7 @@ html,body{max-width:100%;overflow-x:hidden;overflow-x:clip}img,video,iframe{max-
 .lease-bank-logo{width:40px;height:40px;flex:none;border-radius:11px;border:1px solid #dbe5dd;background:#fff;object-fit:contain;padding:3px}
 .lease-bank-logo.is-letter{display:grid;place-items:center;padding:0;background:#e6f0e8;color:#215f33;font-weight:850;font-size:1rem}
 .lease-bank-current{display:flex;align-items:center;gap:11px;padding:10px 12px;border:1px solid #d6e2d8;border-radius:12px;background:#fff}
-.lease-bank-current>span{display:grid;gap:1px;min-width:0;flex:1}
+.lease-bank-current>span:not(.lease-bank-logo){display:grid;gap:1px;min-width:0;flex:1}
 .lease-bank-current small{color:#6b7d71;font-size:.62rem;font-weight:700}
 .lease-bank-current strong{color:#17321f;font-size:.82rem}
 .lease-bank-current em{font-style:normal;color:#4f6656;font-size:.66rem;font-weight:650}
@@ -2760,3 +2760,48 @@ html,body{max-width:100%;overflow-x:hidden;overflow-x:clip}img,video,iframe{max-
 .lease-application-more[open] summary{grid-column:1/-1}
 .lease-application-more label{display:grid;gap:6px;color:#52675a;font-size:.68rem;font-weight:780}
 @media(max-width:560px){.lease-bank-row>button{grid-template-columns:36px minmax(0,1fr) auto;gap:9px;padding:8px 10px}.lease-bank-logo{width:36px;height:36px}.lease-bank-check{display:none}.lease-application-more[open]{grid-template-columns:1fr}.lease-bank-current a{display:none}}
+/* Лизинг: варианты оплаты и цифры по расчёту */
+.lease-plans{padding:14px;border:1px solid #d7e1d8;border-radius:12px;display:grid;gap:7px}
+.lease-plans legend{padding:0 6px;color:#2e5d3a;font-size:.7rem;font-weight:850}
+.lease-plans>button{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:54px;padding:8px 12px;border:1px solid #dbe5dd;border-radius:11px;background:#fbfdfb;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.lease-plans>button:hover:not(:disabled){border-color:#9dbba6}
+.lease-plans>button:focus-visible{outline:3px solid #7da78c;outline-offset:2px}
+.lease-plans>button.active{border-color:#215f33;background:#eef6f0;box-shadow:inset 0 0 0 1px #215f33}
+.lease-plans>button:disabled{opacity:.55;cursor:not-allowed}
+.lease-plans>button>span{display:grid;gap:2px;min-width:0}
+.lease-plans strong{color:#17321f;font-size:.72rem}
+.lease-plans small{color:#68796e;font-size:.6rem;font-weight:650}
+.lease-plan-pay{text-align:right;justify-items:end}
+.lease-plans>p{margin:2px 2px 0;color:#6b7d71;font-size:.6rem}
+.lease-insights{margin-top:16px;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.lease-insights article{padding:15px;border:1px solid #d3dfd5;border-radius:16px;background:#fff;display:grid;align-content:start;gap:9px;min-width:0}
+.lease-insights h3{margin:0;display:flex;align-items:center;gap:7px;color:#17321f;font-size:.78rem}
+.lease-insights h3 svg{color:#2b7540;flex:none}
+.lease-insight-lead{margin:0;color:#213c2a;font-size:.72rem;font-weight:700;line-height:1.5}
+.lease-insight-note{margin:0;color:#6b7d71;font-size:.62rem;line-height:1.5}
+.lease-split{height:12px;border-radius:99px;background:#f0c48a;overflow:hidden}
+.lease-split span{display:block;height:100%;background:#2b7540;border-radius:99px 0 0 99px}
+.lease-split-legend{list-style:none;margin:0;padding:0;display:grid;gap:5px;color:#344c3a;font-size:.68rem}
+.lease-split-legend li{display:flex;align-items:center;gap:7px}
+.lease-split-legend i{width:10px;height:10px;border-radius:3px;background:#f0c48a;flex:none}
+.lease-split-legend i.is-debt{background:#2b7540}
+.lease-years{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.lease-years li{display:grid;grid-template-columns:78px minmax(0,1fr) auto;align-items:center;gap:8px;font-size:.64rem;color:#52675a}
+.lease-years i{height:8px;border-radius:99px;background:#edf2ee;overflow:hidden}
+.lease-years b{display:block;height:100%;background:#7fb08d;border-radius:99px}
+.lease-years strong{color:#213c2a;font-size:.64rem}
+.lease-own{margin:2px 0 0;padding:9px 11px;border-radius:10px;background:#eef6f0;color:#215f33;font-size:.7rem}
+.lease-terms-table{width:100%;border-collapse:collapse;font-size:.66rem}
+.lease-terms-table th{padding:5px 4px;color:#6b7d71;font-weight:700;text-align:right;border-bottom:1px solid #e1e8e2}
+.lease-terms-table td{padding:5px 4px;text-align:right;color:#213c2a;border-bottom:1px solid #eef2ee}
+.lease-terms-table th:first-child,.lease-terms-table td:first-child{text-align:left}
+.lease-terms-table tr.active td{background:#eef6f0;font-weight:800}
+.lease-terms-table button{min-height:32px;padding:0 4px;border:0;background:transparent;color:#215f33;font:inherit;font-weight:800;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.lease-insight-action{justify-self:start;min-height:40px;padding:0 14px;border:1px solid #215f33;border-radius:9px;background:#fff;color:#215f33;font:inherit;font-size:.68rem;font-weight:800;cursor:pointer}
+.lease-insight-action:hover{background:#eef6f0}
+.lease-payback label{display:grid;gap:5px;color:#52675a;font-size:.64rem;font-weight:750}
+.lease-payback input{min-height:42px;padding:0 11px;border:1px solid #cbd7cc;border-radius:9px;font:inherit}
+@media(max-width:560px){.lease-plans>button{flex-direction:column;align-items:flex-start}.lease-plan-pay{text-align:left;justify-items:start}.lease-years li{grid-template-columns:70px minmax(0,1fr) auto}}
+.lease-workspace-pro .lease-summary{align-self:start;align-content:start;position:sticky;top:96px}
+@media(max-width:760px){.lease-workspace-pro .lease-summary{position:static}}
+.lease-split-legend.is-text li{display:list-item;margin-left:16px;list-style:disc}

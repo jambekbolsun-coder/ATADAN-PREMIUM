@@ -8,20 +8,31 @@ import {
   BadgePercent,
   Calculator,
   CalendarClock,
+  CalendarRange,
   Check,
   ChevronDown,
+  Coins,
   ExternalLink,
   FileText,
   Landmark,
   MessageCircle,
+  PiggyBank,
+  Scale,
+  Sprout,
 } from "lucide-react";
 import { FormEvent, useId, useRef, useState } from "react";
 import {
   calculateInstallment,
   convertDownPayment,
+  LEASE_SCHEDULE_INFO,
+  LEASE_SCHEDULES,
+  leaseScheduleProblem,
+  type InstallmentInput,
+  type LeaseSchedule,
   downPaymentLimits,
   formatLeaseTerm,
   formatMonths,
+  formatYearCount,
   formatYears,
   LEASE_TERM_DEFAULT_MAX,
   leaseTermChoices,
@@ -44,13 +55,20 @@ const emptyConfig: LeasePublicConfig = {
   promotions: [],
   maxMonths: LEASE_TERM_DEFAULT_MAX,
 };
-const percent = (value: number) =>
+// Сообщение менеджеру в WhatsApp всегда на русском (его читают менеджеры), поэтому здесь свои русские форматтеры.
+const ruPercent = (value: number) =>
   new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(value) + "%";
-const money = (value: number) =>
+const ruMoney = (value: number) =>
   new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(value) +
   " сом";
-const bankTerms = (p: LeaseProgram, minDown: number) =>
-  [p.zeroPercent ? "без процентов" : `${percent(p.annualRate)} годовых`, `взнос от ${percent(minDown)}`, p.commissionPercent > 0 ? `комиссия ${percent(p.commissionPercent)}` : ""].filter(Boolean).join(" · ");
+type Installment = ReturnType<typeof calculateInstallment>;
+/** Обычный платёж (для льготного периода: первый после льготы). */
+const regularRow = (r: Installment) => r.schedule[Math.min(r.graceMonths, r.schedule.length - 1)];
+function ruPaymentText(r: Installment) {
+  if (r.scheduleKind === "grace") return `${r.graceMonths} мес. по ${ruMoney(r.firstPayment)}, потом ${ruMoney(r.monthly)}`;
+  if (r.scheduleKind === "differentiated") return `от ${ruMoney(r.firstPayment)} до ${ruMoney(r.lastPayment)}`;
+  return `${ruMoney(r.monthly)} ${r.periodMonths === 3 ? "раз в квартал" : r.periodMonths === 6 ? "раз в полгода" : "в месяц"}`;
+}
 
 /** Логотип банка; без картинки: кружок с первой буквой названия. */
 function BankLogo({ program }: { program: LeaseProgram }) {
@@ -80,12 +98,35 @@ export function FinanceCalculator({
       config.programs[0]?.minDownPercent ?? settings.downPercent,
     ),
     [chosen, setChosen] = useState<string[]>([]),
+    [schedule, setSchedule] = useState<LeaseSchedule>("monthly"),
+    [hectarePrice, setHectarePrice] = useState(1500),
     [scheduleOpen, setScheduleOpen] = useState(false),
     [applicationOpen, setApplicationOpen] = useState(false),
     [busy, setBusy] = useState(false),
     [notice, setNotice] = useState(""),
     [error, setError] = useState("");
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
+  // Числа и подписи на языке сайта: ru и ky с пробелами (1 033 398 сом), en через запятую (1,033,398 som).
+  const numberLocale = locale === "en" ? "en-US" : "ru-RU";
+  const percent = (value: number) => new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 2 }).format(value) + "%";
+  const money = (value: number) => `${new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 0 }).format(value)} ${t("lease.som")}`;
+  const perPeriod = (period: number) => t(period === 3 ? "lease.per.quarter" : period === 6 ? "lease.per.half" : "lease.per.month");
+  const perPeriodShort = (period: number) => t(period === 3 ? "lease.perShort.quarter" : period === 6 ? "lease.perShort.half" : "lease.perShort.month");
+  const monthsText = (n: number) => formatMonths(n, locale);
+  const termText = (n: number) => formatYears(n, locale) || formatMonths(n, locale);
+  /** Как выглядит платёж по варианту: «18 407 сом в месяц», «6 мес. по 6 300, потом 19 550». */
+  const paymentText = (r: Installment) =>
+    r.scheduleKind === "grace"
+      ? t("lease.pay.grace", { n: r.graceMonths, first: money(r.firstPayment), regular: money(r.monthly) })
+      : r.scheduleKind === "differentiated"
+        ? t("lease.pay.diff", { first: money(r.firstPayment), last: money(r.lastPayment) })
+        : `${money(r.monthly)} ${perPeriod(r.periodMonths)}`;
+  const rateText = (p: { zeroPercent: boolean; rate: number }) => (p.zeroPercent ? t("lease.noInterest") : t("lease.yearRate", { rate: percent(p.rate) }));
+  const bankTerms = (p: LeaseProgram, minDown: number) =>
+    [rateText({ zeroPercent: p.zeroPercent, rate: p.annualRate }), t("lease.downFrom", { p: percent(minDown) }), p.commissionPercent > 0 ? t("lease.commission", { p: percent(p.commissionPercent) }) : ""].filter(Boolean).join(" · ");
+  const scheduleProblemText = (kind: LeaseSchedule, problem: string) =>
+    !problem ? "" : kind === "quarterly" ? t("lease.problem.multiple3") : kind === "semiannual" ? t("lease.problem.multiple6") : t("lease.problem.grace", { n: graceMonthsFor(program) });
+  const graceMonthsFor = (p: LeaseProgram) => p.graceMonths ?? 6;
   const [estimatedPrice, setEstimatedPrice] = useState(0);
   // Срок: от 1 месяца до максимума из админки (по умолчанию 84). Изначально выбран максимум.
   const maxMonths = normalizeLeaseMaxMonths(config.maxMonths),
@@ -159,60 +200,78 @@ export function FinanceCalculator({
     minAmount: program.minDownAmount,
   };
   const downLimits = downPaymentLimits(downRules, downMode);
-  let result: ReturnType<typeof calculateInstallment> | null = null,
-    calculationError = "";
-  try {
-    if (basePrice > 0 && model?.enabled !== false)
-      result = calculateInstallment({
-        price: basePrice,
-        options: selectedOptions,
-        delivery: program.delivery,
-        discount,
-        downMode,
-        downValue,
-        months,
-        markupPercent: model?.markupPercent ?? program.markupPercent,
-        annualRate: effectiveRate,
-        fixedCommission: model?.fixedCommission ?? program.fixedCommission,
-        commissionPercent: effectiveCommission,
-        insurance: program.insurance,
-        processingFee: program.processingFee,
-        includeDelivery: program.includeDelivery,
-        includeInsurance: program.includeInsurance,
-        includeCommission: program.includeCommission,
-        discountOrder: program.discountOrder,
-        rounding: program.rounding,
-        zeroPercent,
-      });
-  } catch (cause) {
-    calculationError =
-      cause instanceof Error ? cause.message : "Проверьте условия";
-  }
+  // Как платить: только варианты, которые даёт банк; если вариант не подходит к сроку, считаем «каждый месяц».
+  const allowedSchedules = program.schedules ?? [...LEASE_SCHEDULES],
+    graceMonths = program.graceMonths ?? 6,
+    activeSchedule: LeaseSchedule = allowedSchedules.includes(schedule) && !leaseScheduleProblem(schedule, months, graceMonths) ? schedule : "monthly";
+  const canCalculate = basePrice > 0 && model?.enabled !== false;
   /**
-   * Платёж по другому банку при тех же цене, взносе, сроке и опциях. Если у банка минимальный взнос выше,
-   * берётся его минимум. Нужен для строк сравнения банков под калькулятором.
+   * Те же цена, скидка, опции, взнос и срок по любому банку. Если у банка минимальный взнос выше, берётся его минимум.
+   * over: другой срок, взнос или вариант оплаты (для сравнения сроков, подсказки по взносу и вариантов оплаты).
    */
-  function quote(p: LeaseProgram) {
-    if (!(basePrice > 0) || model?.enabled === false) return null;
+  function inputFor(p: LeaseProgram, over: { months?: number; downValue?: number; schedule?: LeaseSchedule } = {}): InstallmentInput {
     const pMinDown = promotion?.reducedDownPercent ?? model?.minDownPercent ?? p.minDownPercent;
     const rules = { price: basePrice, minPercent: pMinDown, maxPercent: p.maxDownPercent, minAmount: p.minDownAmount };
     const pOptions = model?.options?.length ? model.options : p.options;
+    const wanted = over.schedule ?? activeSchedule;
+    return {
+      price: basePrice, options: pOptions.filter((item) => chosen.includes(item.name)), delivery: p.delivery, discount,
+      downMode, downValue: normalizeDownPayment(over.downValue ?? downValue, downMode, rules), months: over.months ?? months,
+      markupPercent: model?.markupPercent ?? p.markupPercent, annualRate: model?.annualRate ?? p.annualRate,
+      fixedCommission: model?.fixedCommission ?? p.fixedCommission, commissionPercent: model?.commissionPercent ?? p.commissionPercent,
+      insurance: p.insurance, processingFee: p.processingFee, includeDelivery: p.includeDelivery, includeInsurance: p.includeInsurance,
+      includeCommission: p.includeCommission, discountOrder: p.discountOrder, rounding: p.rounding, zeroPercent: Boolean(promotion?.zeroPercent || p.zeroPercent),
+      schedule: (p.schedules ?? [...LEASE_SCHEDULES]).includes(wanted) ? wanted : "monthly", graceMonths: p.graceMonths,
+    };
+  }
+  function calc(p: LeaseProgram, over: Parameters<typeof inputFor>[1] = {}) {
+    if (!canCalculate) return null;
     try {
-      return {
-        minDown: pMinDown,
-        result: calculateInstallment({
-          price: basePrice, options: pOptions.filter((item) => chosen.includes(item.name)), delivery: p.delivery, discount,
-          downMode, downValue: normalizeDownPayment(downValue, downMode, rules), months,
-          markupPercent: model?.markupPercent ?? p.markupPercent, annualRate: model?.annualRate ?? p.annualRate,
-          fixedCommission: model?.fixedCommission ?? p.fixedCommission, commissionPercent: model?.commissionPercent ?? p.commissionPercent,
-          insurance: p.insurance, processingFee: p.processingFee, includeDelivery: p.includeDelivery, includeInsurance: p.includeInsurance,
-          includeCommission: p.includeCommission, discountOrder: p.discountOrder, rounding: p.rounding, zeroPercent: Boolean(promotion?.zeroPercent || p.zeroPercent),
-        }),
-      };
+      return calculateInstallment(inputFor(p, over));
     } catch {
       return null;
     }
   }
+  let result: Installment | null = null,
+    calculationError = "";
+  try {
+    if (canCalculate) result = calculateInstallment(inputFor(program));
+  } catch {
+    calculationError = t("lease.err.check");
+  }
+  /** Платёж по другому банку для строк сравнения банков под калькулятором. */
+  function quote(p: LeaseProgram) {
+    const r = calc(p);
+    return r ? { minDown: promotion?.reducedDownPercent ?? model?.minDownPercent ?? p.minDownPercent, result: r } : null;
+  }
+  // Варианты оплаты по выбранному банку
+  const variants = allowedSchedules.map((kind) => {
+    const problem = leaseScheduleProblem(kind, months, graceMonths);
+    return { kind, problem, result: problem ? null : calc(program, { schedule: kind }) };
+  });
+  // Сравнение сроков: 3 года, 5 лет, максимум и текущий срок
+  const compareTerms = [...new Set([36, 60, maxMonths, months].filter((m) => m >= 1 && m <= maxMonths))].sort((a, b) => a - b);
+  const termRows = compareTerms.map((m) => ({ months: m, result: calc(program, { months: m }) })).filter((row) => row.result);
+  // Подсказка: взнос на 10% больше
+  const downPercentNow = result && basePrice ? (result.downPayment / basePrice) * 100 : 0;
+  const nextDownPercent = Math.round(downPercentNow + 10);
+  const nextDownValue = downMode === "percent" ? nextDownPercent : Math.round((basePrice * nextDownPercent) / 100);
+  const nextDown = result && nextDownPercent <= program.maxDownPercent ? calc(program, { downValue: nextDownValue }) : null;
+  // Остаток долга на конец каждого года и дата, когда трактор полностью ваш
+  const yearBalances = result
+    ? Array.from({ length: Math.floor((months - 1) / 12) }, (_, i) => {
+        const end = (i + 1) * 12,
+          row = [...result!.schedule].reverse().find((item) => item.month <= end);
+        return { year: i + 1, balance: row ? row.balance : result!.debt };
+      })
+    : [];
+  const ownDate = new Date();
+  ownDate.setMonth(ownDate.getMonth() + months);
+  // Кыргызский формат собираем сами: не во всех браузерах есть кыргызские названия месяцев.
+  const KY_MONTHS = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"];
+  const ownText = locale === "ky"
+    ? `${ownDate.getFullYear()}-жылдын ${KY_MONTHS[ownDate.getMonth()]} айы`
+    : ownDate.toLocaleDateString(locale === "en" ? "en-US" : "ru-RU", { month: "long", year: "numeric" });
   const quotes = config.programs.map((p) => ({ program: p, quote: p.id === program.id && result ? { minDown, result } : quote(p) }));
   // «Выгоднее»: меньше всего заплатить за весь срок (взнос + договор), только если банков несколько и лучший один
   const totals = quotes.filter((x) => x.quote).map((x) => x.quote!.result.contractTotal + x.quote!.result.downPayment);
@@ -271,12 +330,13 @@ export function FinanceCalculator({
           exchangeRate: convertedEstimate ? usdKgsRate?.value : undefined,
           exchangeRateDate: convertedEstimate ? usdKgsRate?.date : undefined,
           options: chosen,
+          schedule: result.scheduleKind,
           sourcePath: window.location.pathname,
         }),
       });
       const body = (await response.json()) as { error?: string };
       if (!response.ok)
-        throw new Error(body.error || "Не удалось отправить заявку");
+        throw new Error(body.error || t("lease.err.send"));
       setNotice(successMessage);
       setApplicationOpen(false);
       requestKey.current = crypto.randomUUID();
@@ -286,13 +346,15 @@ export function FinanceCalculator({
         name: String(form.get("name") || ""), phone: String(form.get("phone") || ""),
         headline: `Хочу Changfa ${selected.model}${selected.hp ? ` (${selected.hp} л.с.)` : ""} в лизинг.`,
         message: [
-          config.programs.length ? `Банк: ${program.name}, ${zeroPercent ? "без процентов" : `${percent(effectiveRate)} годовых`}` : "",
-          `Цена: ${publishedPrice ? money(basePrice) : `≈ ${money(basePrice)} (ориентировочно)`}`,
-          `Первый взнос: ${percent(Math.round(downPercent * 10) / 10)} (${money(result.downPayment)})`,
+          config.programs.length ? `Банк: ${program.name}, ${zeroPercent ? "без процентов" : `${ruPercent(effectiveRate)} годовых`}` : "",
+          `Цена: ${publishedPrice ? ruMoney(basePrice) : `≈ ${ruMoney(basePrice)} (ориентировочно)`}`,
+          `Первый взнос: ${ruPercent(Math.round(downPercent * 10) / 10)} (${ruMoney(result.downPayment)})`,
           `Срок: ${formatLeaseTerm(months)}`,
-          `Платёж в месяц: ≈ ${money(result.monthly)}`,
+          `Как платить: ${LEASE_SCHEDULE_INFO[result.scheduleKind].title.toLowerCase()}`,
+          `Платёж: ≈ ${ruPaymentText(result)}`,
           selectedOptions.length ? `Опции: ${selectedOptions.map((o) => o.name).join(", ")}` : "",
-          termsUnconfirmed ? "Ставку и комиссии нужно уточнить." : `Всего по договору: ≈ ${money(result.contractTotal + result.downPayment)}`,
+          termsUnconfirmed ? "Ставку и комиссии нужно уточнить." : `Переплата: ≈ ${ruMoney(result.overpayment)}`,
+          termsUnconfirmed ? "" : `Всего по договору: ≈ ${ruMoney(result.contractTotal + result.downPayment)}`,
           city ? `Город: ${city}` : "",
           comment,
         ].filter(Boolean).join("\n"),
@@ -302,7 +364,7 @@ export function FinanceCalculator({
       setError(
         cause instanceof Error
           ? cause.message
-          : "Нет соединения. Попробуйте ещё раз.",
+          : t("lease.err.network"),
       );
     } finally {
       setBusy(false);
@@ -318,31 +380,27 @@ export function FinanceCalculator({
       <header className="lease-heading">
         <span className="section-label">
           <Calculator size={18} />
-          Лизинг и рассрочка
+          {t("lease.label")}
         </span>
         <h2 id={headingId}>
           {selected
-            ? `Рассчитайте Changfa ${selected.model}`
-            : "Предварительный расчёт"}
+            ? t("lease.titleModel", { model: selected.model })
+            : t("lease.titleNone")}
         </h2>
-        <p>
-          Срок лизинга от 1 до {maxMonths} месяцев. Выберите
-          {config.programs.length ? " банк," : ""} срок и первый взнос ·
-          платёж пересчитывается автоматически.
-        </p>
+        <p>{t(config.programs.length ? "lease.introBanks" : "lease.intro", { max: maxMonths })}</p>
       </header>
       <div className="lease-layout">
         <div className="lease-controls">
           {!tractor && tractors.length ? (
             <label>
-              <span>Модель трактора</span>
+              <span>{t("lease.model")}</span>
               <select
                 value={slug}
                 onChange={(event) => chooseModel(event.target.value)}
               >
                 {tractors.map((item) => (
                   <option value={item.slug} key={item.slug}>
-                    Changfa {item.model} · {item.hp} л.с.
+                    Changfa {item.model} · {item.hp} {t("lease.hp")}
                   </option>
                 ))}
               </select>
@@ -352,15 +410,13 @@ export function FinanceCalculator({
             <div className="lease-bank-current">
               <BankLogo program={program} />
               <span>
-                <small>Банк</small>
+                <small>{t("lease.bank")}</small>
                 <strong>{program.name}</strong>
                 <em>
-                  {zeroPercent ? "без процентов" : `${percent(effectiveRate)} годовых`}
-                  {" · "}взнос от {percent(minDown)}
-                  {effectiveCommission > 0 ? ` · комиссия ${percent(effectiveCommission)}` : ""}
+                  {[rateText({ zeroPercent, rate: effectiveRate }), t("lease.downFrom", { p: percent(minDown) }), effectiveCommission > 0 ? t("lease.commission", { p: percent(effectiveCommission) }) : ""].filter(Boolean).join(" · ")}
                 </em>
               </span>
-              {config.programs.length > 1 ? <a href={`#${banksId}`}>Сравнить банки</a> : null}
+              {config.programs.length > 1 ? <a href={`#${banksId}`}>{t("lease.compareBanks")}</a> : null}
             </div>
           ) : null}
           {selected ? (
@@ -372,27 +428,28 @@ export function FinanceCalculator({
                 height={120}
               />
               <div>
-                <small>Выбранная модель</small>
+                <small>{t("lease.selected")}</small>
                 <strong>Changfa {selected.model}</strong>
                 <span>
                   {publishedPrice
                     ? money(publishedPrice)
                     : selected.approximatePriceUsd
-                      ? `${formatApproximateUsdPrice(selected.approximatePriceUsd)} · ${basePrice ? `≈ ${money(basePrice)}` : "укажите стоимость в сомах"}`
-                      : basePrice ? `≈ ${money(basePrice)}` : "Цена по запросу"} ·{" "}
-                  {selected.inStock ? "в наличии" : "под заказ"}
+                      ? `${formatApproximateUsdPrice(selected.approximatePriceUsd)} · ${basePrice ? `≈ ${money(basePrice)}` : t("lease.enterSomPrice")}`
+                      : basePrice ? `≈ ${money(basePrice)}` : t("lease.priceOnRequest")} ·{" "}
+                  {selected.inStock ? t("lease.inStock") : t("lease.onOrder")}
                 </span>
               </div>
             </div>
           ) : null}
           {!publishedPrice && convertedEstimate && usdKgsRate ? (
             <p className="lease-rate-note">
-              Ориентировочная цена пересчитана по <a href="https://www.nbkr.kg/index1.jsp?item=1562&lang=RUS" target="_blank" rel="noreferrer">официальному курсу НБКР</a> на {usdKgsRate.date}: 1 $ = {new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 4 }).format(usdKgsRate.value)} сом. Курс и итоговая цена могут измениться.
+              {t("lease.rateNote", { date: usdKgsRate.date, rate: new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 4 }).format(usdKgsRate.value) })}{" "}
+              <a href="https://www.nbkr.kg/index1.jsp?item=1562&lang=RUS" target="_blank" rel="noreferrer">{t("lease.rateSource")}</a>
             </p>
           ) : null}
           {!publishedPrice && !convertedEstimate ? (
             <label className="lease-estimate">
-              <span>Ориентировочная стоимость, сом</span>
+              <span>{t("lease.estimateLabel")}</span>
               <input
                 type="number"
                 min="1"
@@ -407,10 +464,10 @@ export function FinanceCalculator({
                     ),
                   )
                 }
-                placeholder="Введите стоимость для расчёта"
+                placeholder={t("lease.estimatePlaceholder")}
               />
               <small>
-                {selected?.approximatePriceUsd ? `${formatApproximateUsdPrice(selected.approximatePriceUsd)}. Курс сейчас недоступен: введите стоимость в сомах для предварительного расчёта.` : "Введите ориентировочную стоимость для предварительного расчёта."}
+                {selected?.approximatePriceUsd ? t("lease.estimateNoRate", { usd: formatApproximateUsdPrice(selected.approximatePriceUsd) }) : t("lease.estimateHelp")}
               </small>
             </label>
           ) : null}
@@ -420,25 +477,20 @@ export function FinanceCalculator({
               <div>
                 <strong>{promotion.name}</strong>
                 <span>
-                  {promotion.zeroPercent ? "0% рассрочка · " : ""}
-                  {promotion.gift || `Скидка ${money(discount)}`}
+                  {promotion.zeroPercent ? `${t("lease.zeroPromo")} · ` : ""}
+                  {promotion.gift || t("lease.discount", { sum: money(discount) })}
                 </span>
               </div>
             </div>
           ) : null}
           {!basePrice ? (
-            <p className="lease-help">
-              Укажите стоимость в сомах, чтобы увидеть предварительный платёж,
-              или запросите предложение менеджера.
-            </p>
+            <p className="lease-help">{t("lease.needPrice")}</p>
           ) : null}
           {model?.enabled === false ? (
-            <p className="lease-help">
-              Для этой модели программа сейчас недоступна.
-            </p>
+            <p className="lease-help">{t("lease.modelUnavailable")}</p>
           ) : null}
           <fieldset className="lease-down">
-            <legend>Первоначальный взнос</legend>
+            <legend>{t("lease.down")}</legend>
             <div className="lease-segmented">
               <button
                 type="button"
@@ -448,7 +500,7 @@ export function FinanceCalculator({
                   setDownMode("percent");
                 }}
               >
-                Процент
+                {t("lease.downPercent")}
               </button>
               <button
                 type="button"
@@ -458,11 +510,11 @@ export function FinanceCalculator({
                   setDownMode("amount");
                 }}
               >
-                Сумма
+                {t("lease.downAmount")}
               </button>
             </div>
             <label>
-              <span>{downMode === "percent" ? "Взнос, %" : "Взнос, сом"}</span>
+              <span>{t(downMode === "percent" ? "lease.downPercentLabel" : "lease.downAmountLabel")}</span>
               <input
                 type="number"
                 min={downLimits.min}
@@ -473,7 +525,7 @@ export function FinanceCalculator({
               />
             </label>
             <input
-              aria-label="Первоначальный взнос · ползунок"
+              aria-label={t("lease.downSlider")}
               type="range"
               min={downLimits.min}
               max={downLimits.max}
@@ -483,17 +535,17 @@ export function FinanceCalculator({
             />
           </fieldset>
           <fieldset className="lease-term">
-            <legend>Срок лизинга</legend>
+            <legend>{t("lease.term")}</legend>
             <div className="lease-term-value" aria-live="polite">
               <CalendarClock aria-hidden />
               <span>
-                <strong>{formatMonths(months)}</strong>
+                <strong>{monthsText(months)}</strong>
                 <small>
-                  {formatYears(months) || `можно от 1 до ${maxMonths} мес.`}
+                  {formatYears(months, locale) || t("lease.termRange", { max: maxMonths })}
                 </small>
               </span>
             </div>
-            <div className="lease-term-quick" role="group" aria-label="Быстрый выбор срока">
+            <div className="lease-term-quick" role="group" aria-label={t("lease.termQuick")}>
               {termChoices.map((value) => (
                 <button
                   key={value}
@@ -502,12 +554,12 @@ export function FinanceCalculator({
                   aria-pressed={value === months}
                   onClick={() => setChosenMonths(value)}
                 >
-                  {value} мес.
+                  {t("lease.monthShort", { n: value })}
                 </button>
               ))}
             </div>
             <input
-              aria-label="Срок лизинга в месяцах · ползунок"
+              aria-label={t("lease.termSlider")}
               type="range"
               min={1}
               max={maxMonths}
@@ -520,13 +572,47 @@ export function FinanceCalculator({
               }
             />
             <div className="lease-term-scale" aria-hidden>
-              <span>1 мес.</span>
-              <span>{maxMonths} мес.</span>
+              <span>{t("lease.monthShort", { n: 1 })}</span>
+              <span>{t("lease.monthShort", { n: maxMonths })}</span>
             </div>
           </fieldset>
+          {result && !termsUnconfirmed && variants.length > 1 ? (
+            <fieldset className="lease-plans">
+              <legend>{t("lease.plans")}</legend>
+              {variants.map((v) => {
+                const active = v.kind === activeSchedule;
+                return (
+                  <button
+                    key={v.kind}
+                    type="button"
+                    className={active ? "active" : ""}
+                    aria-pressed={active}
+                    disabled={!v.result}
+                    onClick={() => setSchedule(v.kind)}
+                  >
+                    <span>
+                      <strong>{t(`lease.plan.${v.kind}`)}</strong>
+                      <small>{v.kind === "grace" ? t("lease.plan.graceHint", { n: graceMonths }) : t(`lease.plan.${v.kind}Hint`)}</small>
+                    </span>
+                    <span className="lease-plan-pay">
+                      {v.result ? (
+                        <>
+                          <strong>{paymentText(v.result)}</strong>
+                          <small>{t("lease.overpay", { sum: money(v.result.overpayment) })}</small>
+                        </>
+                      ) : (
+                        <small>{scheduleProblemText(v.kind, v.problem)}</small>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+              <p>{t("lease.plansNote")}</p>
+            </fieldset>
+          ) : null}
           {options.length ? (
             <fieldset className="lease-options">
-              <legend>Дополнительные опции</legend>
+              <legend>{t("lease.options")}</legend>
               {options.map((option) => (
                 <label key={option.name}>
                   <input
@@ -547,51 +633,77 @@ export function FinanceCalculator({
           ) : null}
         </div>
         <aside className="lease-summary" aria-live="polite">
-          <span>{termsUnconfirmed ? "Базовый платёж в месяц" : "Платёж в месяц"}</span>
+          <span>
+            {termsUnconfirmed
+              ? t("lease.sum.basePerMonth")
+              : result?.scheduleKind === "grace"
+                ? t("lease.sum.afterGrace")
+                : result?.scheduleKind === "differentiated"
+                  ? t("lease.sum.first")
+                  : t("lease.sum.payment", { per: perPeriod(result?.periodMonths ?? 1) })}
+          </span>
           <strong>
-            {result ? money(result.monthly) : "Н/Д"}
-            <small>{termsUnconfirmed ? "без ставки и комиссий" : "ежемесячно"}</small>
+            {result ? money(result.monthly) : t("lease.sum.na")}
+            <small>
+              {termsUnconfirmed
+                ? t("lease.sum.noRate")
+                : result
+                  ? [
+                      result.scheduleKind === "grace" ? t("lease.sum.graceFirst", { n: result.graceMonths, sum: money(result.firstPayment) }) : "",
+                      result.scheduleKind === "differentiated" ? t("lease.sum.diffLast", { sum: money(result.lastPayment) }) : "",
+                      t("lease.sum.perDay", { sum: money(Math.round(result.monthly / (result.periodMonths * 30))) }),
+                    ].filter(Boolean).join(" · ")
+                  : t("lease.sum.monthly")}
+            </small>
           </strong>
           <dl>
             <div>
-              <dt>Цена трактора</dt>
-              <dd>{basePrice ? money(basePrice) : "Н/Д"}</dd>
+              <dt>{t("lease.sum.price")}</dt>
+              <dd>{basePrice ? money(basePrice) : t("lease.sum.na")}</dd>
             </div>
             {config.programs.length ? (
               <div>
-                <dt>Банк</dt>
+                <dt>{t("lease.bank")}</dt>
                 <dd>{program.name}</dd>
               </div>
             ) : null}
             <div>
-              <dt>Срок</dt>
-              <dd>{formatMonths(months)}</dd>
+              <dt>{t("lease.sum.term")}</dt>
+              <dd>{monthsText(months)}</dd>
             </div>
             <div>
-              <dt>Первый взнос</dt>
-              <dd>{result ? money(result.downPayment) : "Н/Д"}</dd>
+              <dt>{t("lease.sum.down")}</dt>
+              <dd>{result ? money(result.downPayment) : t("lease.sum.na")}</dd>
             </div>
             <div>
-              <dt>К финансированию</dt>
-              <dd>{result ? money(result.financed) : "Н/Д"}</dd>
+              <dt>{t("lease.sum.financed")}</dt>
+              <dd>{result ? money(result.financed) : t("lease.sum.na")}</dd>
             </div>
+            {!termsUnconfirmed && result && result.interest > 0 ? <div>
+              <dt>{t("lease.sum.interest")}</dt>
+              <dd>{money(result.interest)}</dd>
+            </div> : null}
+            {!termsUnconfirmed && result && result.fees > 0 ? <div>
+              <dt>{t("lease.sum.fees")}</dt>
+              <dd>{money(result.fees)}</dd>
+            </div> : null}
             {!termsUnconfirmed ? <div>
-              <dt>Общая переплата</dt>
-              <dd>{result ? money(result.overpayment) : "Н/Д"}</dd>
+              <dt>{t("lease.sum.overpay")}</dt>
+              <dd>{result ? money(result.overpayment) : t("lease.sum.na")}</dd>
             </div> : null}
             <div>
-              <dt>{termsUnconfirmed ? "Базовая стоимость" : "Всего по договору"}</dt>
+              <dt>{t(termsUnconfirmed ? "lease.sum.baseTotal" : "lease.sum.total")}</dt>
               <dd>
                 {result
                   ? money(result.contractTotal + result.downPayment)
-                  : "Н/Д"}
+                  : t("lease.sum.na")}
               </dd>
             </div>
           </dl>
           <p>
             {termsUnconfirmed
-              ? `Это деление ориентировочной стоимости после первого взноса на выбранный срок: ${formatMonths(months)}. Ставка, комиссии, график и итоговая сумма будут согласованы с менеджером.`
-              : `${!publishedPrice ? "Расчёт по ориентировочной стоимости. " : ""}Расчёт предварительный. Финальные условия, одобрение и договор подтверждаются менеджером.`}
+              ? t("lease.sum.noteUnconfirmed", { term: monthsText(months) })
+              : `${!publishedPrice ? `${t("lease.sum.noteEstimate")} ` : ""}${t("lease.sum.note")}`}
           </p>
           <button
             className="primary-btn"
@@ -603,71 +715,40 @@ export function FinanceCalculator({
             }}
           >
             <MessageCircle size={18} />
-            Написать менеджеру
+            {t("lease.writeManager")}
           </button>
         </aside>
       </div>
-      {config.programs.length ? (
-        <section className="lease-banks" id={banksId} aria-labelledby={`${banksId}-t`}>
-          <div className="lease-banks-head">
-            <strong id={`${banksId}-t`}><Landmark size={17} aria-hidden /> Банки-партнёры</strong>
-            <span>{selected ? `Changfa ${selected.model} · ` : ""}{formatMonths(months)} · платёж в месяц по каждому банку</span>
-          </div>
-          <ul>
-            {quotes.map(({ program: p, quote: q }) => {
-              const active = p.id === program.id;
-              return (
-                <li key={p.id} className={`lease-bank-row${active ? " active" : ""}`}>
-                  <button type="button" aria-pressed={active} onClick={() => chooseProgram(p.id)}>
-                    <BankLogo program={p} />
-                    <span className="lease-bank-name">
-                      <strong>{p.name}{p.id === bestId ? <em className="lease-bank-best">Выгоднее</em> : null}</strong>
-                      <small>{bankTerms(p, q?.minDown ?? p.minDownPercent)}</small>
-                    </span>
-                    <span className="lease-bank-pay">
-                      <strong>{q ? `≈ ${money(q.result.monthly)}` : "Н/Д"}</strong>
-                      <small>{q ? "в месяц" : "нужна цена"}</small>
-                    </span>
-                    <span className="lease-bank-check" aria-hidden>{active ? <Check size={16} /> : null}</span>
-                  </button>
-                  {p.website ? <a className="lease-bank-site" href={p.website} target="_blank" rel="noopener noreferrer nofollow">Сайт банка <ExternalLink size={13} aria-hidden /></a> : null}
-                </li>
-              );
-            })}
-          </ul>
-          <p>Банки, с которыми работает ATADAN. Нажмите на банк, чтобы посчитать по нему. Расчёт предварительный: ставку и одобрение подтверждает банк.</p>
-        </section>
-      ) : null}
       {applicationOpen && result ? (
         <form className="lease-application" onSubmit={submit}>
           <div>
-            <span>Changfa {selected?.model}{config.programs.length ? ` · ${program.name}` : ""} · {formatMonths(months)} · ≈ {money(result.monthly)} в месяц</span>
-            <h3>Как к вам обращаться</h3>
-            <p className="lease-application-note">Откроется WhatsApp менеджера, расчёт уже будет в сообщении.</p>
+            <span>Changfa {selected?.model}{config.programs.length ? ` · ${program.name}` : ""} · {monthsText(months)} · ≈ {paymentText(result)}</span>
+            <h3>{t("lease.app.title")}</h3>
+            <p className="lease-application-note">{t("lease.app.note")}</p>
           </div>
           <label>
-            <span>Имя</span>
+            <span>{t("lease.app.name")}</span>
             <input name="name" required minLength={2} autoComplete="name" />
           </label>
           <PhoneInput />
           <details className="lease-application-more full">
-            <summary>Добавить город или комментарий</summary>
+            <summary>{t("lease.app.more")}</summary>
             <label>
-              <span>Город или район</span>
+              <span>{t("lease.app.city")}</span>
               <input name="city" />
             </label>
             <label>
-              <span>Комментарий</span>
+              <span>{t("lease.app.comment")}</span>
               <textarea name="comment" rows={2} />
             </label>
           </details>
           <label className="lease-consent full">
             <input name="consent" type="checkbox" required />
-            <span>Согласен на обработку данных для связи по заявке.</span>
+            <span>{t("lease.app.consent")}</span>
           </label>
           <button className="primary-btn" disabled={busy} type="submit">
             <MessageCircle />
-            {busy ? "Открываем WhatsApp…" : "Написать менеджеру в WhatsApp"}
+            {busy ? t("lease.app.busy") : t("lease.app.submit")}
           </button>
         </form>
       ) : null}
@@ -682,6 +763,139 @@ export function FinanceCalculator({
           {error || calculationError}
         </p>
       ) : null}
+      {config.programs.length ? (
+        <section className="lease-banks" id={banksId} aria-labelledby={`${banksId}-t`}>
+          <div className="lease-banks-head">
+            <strong id={`${banksId}-t`}><Landmark size={17} aria-hidden /> {t("lease.banks.title")}</strong>
+            <span>{selected ? `Changfa ${selected.model} · ` : ""}{t("lease.banks.sub", { term: monthsText(months) })}</span>
+          </div>
+          <ul>
+            {quotes.map(({ program: p, quote: q }) => {
+              const active = p.id === program.id;
+              return (
+                <li key={p.id} className={`lease-bank-row${active ? " active" : ""}`}>
+                  <button type="button" aria-pressed={active} onClick={() => chooseProgram(p.id)}>
+                    <BankLogo program={p} />
+                    <span className="lease-bank-name">
+                      <strong>{p.name}{p.id === bestId ? <em className="lease-bank-best">{t("lease.banks.best")}</em> : null}</strong>
+                      <small>{bankTerms(p, q?.minDown ?? p.minDownPercent)}</small>
+                    </span>
+                    <span className="lease-bank-pay">
+                      <strong>{q ? `≈ ${money(q.result.monthly)}` : t("lease.sum.na")}</strong>
+                      <small>{q ? `${perPeriod(q.result.periodMonths)}${termsUnconfirmed ? "" : ` · ${t("lease.overpay", { sum: money(q.result.overpayment) })}`}` : t("lease.banks.needPrice")}</small>
+                    </span>
+                    <span className="lease-bank-check" aria-hidden>{active ? <Check size={16} /> : null}</span>
+                  </button>
+                  {p.website ? <a className="lease-bank-site" href={p.website} target="_blank" rel="noopener noreferrer nofollow">{t("lease.banks.site")} <ExternalLink size={13} aria-hidden /></a> : null}
+                </li>
+              );
+            })}
+          </ul>
+          <p>{t("lease.banks.note")}</p>
+        </section>
+      ) : null}
+      {result && !termsUnconfirmed ? (
+        <section className="lease-insights" aria-label={t("lease.ins.aria")}>
+          <article>
+            <h3><Coins size={17} aria-hidden /> {t("lease.ins.split")}</h3>
+            {result.interest > 0 ? (() => {
+              const row = regularRow(result),
+                share = row.payment ? Math.round((row.principal / row.payment) * 100) : 100;
+              return (
+                <>
+                  <p className="lease-insight-lead">{t("lease.ins.from", { sum: money(row.payment) })}</p>
+                  <div className="lease-split" aria-hidden>
+                    <span style={{ width: `${share}%` }} />
+                  </div>
+                  <ul className="lease-split-legend">
+                    <li><i className="is-debt" /> {t("lease.ins.debt", { sum: money(row.principal) })}</li>
+                    <li><i /> {t("lease.ins.interest", { sum: money(row.interest) })}</li>
+                  </ul>
+                  <p className="lease-insight-note">{t("lease.ins.less", { sum: money(result.schedule.at(-1)!.interest) })}</p>
+                </>
+              );
+            })() : <p className="lease-insight-note">{t("lease.ins.zero")}</p>}
+          </article>
+          <article>
+            <h3><CalendarRange size={17} aria-hidden /> {t("lease.ins.years")}</h3>
+            {yearBalances.length ? (
+              <ul className="lease-years">
+                {yearBalances.map((row) => (
+                  <li key={row.year}>
+                    <span>{t("lease.ins.after", { years: formatYearCount(row.year, locale) })}</span>
+                    <i aria-hidden><b style={{ width: `${result.debt ? Math.max(2, Math.round((row.balance / result.debt) * 100)) : 0}%` }} /></i>
+                    <strong>{money(row.balance)}</strong>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <p className="lease-own">{t("lease.ins.own")} <strong>{ownText}</strong></p>
+          </article>
+          <article>
+            <h3><Scale size={17} aria-hidden /> {t("lease.ins.terms")}</h3>
+            <table className="lease-terms-table">
+              <thead>
+                <tr><th>{t("lease.ins.colTerm")}</th><th>{t("lease.ins.colPay")}</th><th>{t("lease.ins.colOver")}</th></tr>
+              </thead>
+              <tbody>
+                {termRows.map((row) => (
+                  <tr key={row.months} className={row.months === months ? "active" : ""}>
+                    <td>
+                      <button type="button" onClick={() => setChosenMonths(row.months)} aria-pressed={row.months === months}>
+                        {termText(row.months)}
+                      </button>
+                    </td>
+                    <td>{money(row.result!.monthly)}</td>
+                    <td>{money(row.result!.overpayment)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="lease-insight-note">{t("lease.ins.termsNote")}</p>
+          </article>
+          <article>
+            <h3><PiggyBank size={17} aria-hidden /> {t("lease.ins.more")}</h3>
+            {nextDown && nextDown.monthly < result.monthly ? (
+              <>
+                <p className="lease-insight-lead">
+                  {t("lease.ins.moreLead", { next: nextDownPercent, sum: money(nextDown.downPayment), cur: Math.round(downPercentNow) })}
+                </p>
+                <ul className="lease-split-legend is-text">
+                  <li>{t("lease.ins.morePay", { pay: money(nextDown.monthly), diff: money(result.monthly - nextDown.monthly) })}</li>
+                  <li>{t("lease.ins.moreOver", { sum: money(result.overpayment - nextDown.overpayment) })}</li>
+                </ul>
+                <button type="button" className="lease-insight-action" onClick={() => setDownValue(nextDownValue)}>
+                  {t("lease.ins.moreBtn", { p: nextDownPercent })}
+                </button>
+              </>
+            ) : (
+              <p className="lease-insight-note">{t("lease.ins.maxDown")}</p>
+            )}
+          </article>
+          <article className="lease-payback">
+            <h3><Sprout size={17} aria-hidden /> {t("lease.ins.payback")}</h3>
+            <label>
+              <span>{t("lease.ins.hectare")}</span>
+              <input
+                type="number"
+                min={100}
+                max={100000}
+                step={100}
+                value={hectarePrice || ""}
+                onChange={(event) => setHectarePrice(Math.max(0, Math.min(100000, Math.round(Number(event.target.value)) || 0)))}
+              />
+            </label>
+            {hectarePrice >= 100 ? (
+              <p className="lease-insight-lead">
+                {t("lease.ins.paybackText", { per: perPeriodShort(result.periodMonths), n: Math.ceil(regularRow(result).payment / hectarePrice) })}
+              </p>
+            ) : (
+              <p className="lease-insight-note">{t("lease.ins.enterPrice")}</p>
+            )}
+            <p className="lease-insight-note">{t("lease.ins.paybackNote")}</p>
+          </article>
+        </section>
+      ) : null}
       {result ? (
         <div className="lease-schedule">
           <button
@@ -690,21 +904,23 @@ export function FinanceCalculator({
             onClick={() => setScheduleOpen((value) => !value)}
           >
             <FileText />
-            Предварительный график платежей
+            {t("lease.schedule")}
             <ChevronDown />
           </button>
           {scheduleOpen ? (
             <div
               className="table-scroll"
               role="region"
-              aria-label="Предварительный график платежей"
+              aria-label={t("lease.schedule")}
             >
               <table>
                 <thead>
                   <tr>
-                    <th>Месяц</th>
-                    <th>Платёж</th>
-                    <th>Остаток</th>
+                    <th>{t("lease.sch.month")}</th>
+                    <th>{t("lease.sch.payment")}</th>
+                    <th>{t("lease.sch.interest")}</th>
+                    <th>{t("lease.sch.debt")}</th>
+                    <th>{t("lease.sch.balance")}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -712,6 +928,8 @@ export function FinanceCalculator({
                     <tr key={row.month}>
                       <td>{row.month}</td>
                       <td>{money(row.payment)}</td>
+                      <td>{money(row.interest)}</td>
+                      <td>{money(row.principal)}</td>
                       <td>{money(row.balance)}</td>
                     </tr>
                   ))}

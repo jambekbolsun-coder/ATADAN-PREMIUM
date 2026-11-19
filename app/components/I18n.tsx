@@ -8,6 +8,7 @@ export type Locale = "ru" | "ky" | "en";
 import { copy } from "../data/site-copy";
 import { useSiteSettings } from "./SiteSettings";
 import { localizedPath } from "../lib/i18n-routing";
+import { localizedAddress } from "../lib/format";
 
 type I18nValue = {
   locale: Locale;
@@ -76,13 +77,20 @@ export function useI18n() {
   return context;
 }
 
+/** Адрес офиса из настроек сайта на текущем языке. */
+export function useLocalizedAddress() {
+  const { locale } = useI18n();
+  const settings = useSiteSettings();
+  return localizedAddress(settings, locale);
+}
+
 export function Trans({ id, values }: { id: string; values?: Record<string, string | number> }) {
   const { t } = useI18n();
   return <>{t(id, values)}</>;
 }
 
 export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
   const detailsRef = useRef<HTMLDetailsElement>(null);
   const names: Record<Locale, string> = { ru: "Русский", ky: "Кыргызча", en: "English" };
   const codes: Record<Locale, string> = { ru: "RU", ky: "KG", en: "EN" };
@@ -105,9 +113,9 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   }, []);
 
   return <details ref={detailsRef} className={`language-switcher language-select ${compact ? "compact" : ""}`}>
-    <summary aria-label={`Язык: ${names[locale]}`} aria-haspopup="listbox"><FlagIcon locale={locale} /><span>{names[locale]}</span><ChevronDown className="language-chevron" size={15} aria-hidden="true" /></summary>
-    <div className="language-options" aria-label="Language / Язык / Тил">
-      <span className="language-options-label">Выберите язык</span>
+    <summary aria-label={t("ui.lang.current", { name: names[locale] })} aria-haspopup="listbox"><FlagIcon locale={locale} /><span>{names[locale]}</span><ChevronDown className="language-chevron" size={15} aria-hidden="true" /></summary>
+    <div className="language-options" aria-label={t("ui.lang.options")}>
+      <span className="language-options-label">{t("ui.lang.choose")}</span>
       {(["ru", "ky", "en"] as Locale[]).map((item) => <button type="button" className={locale === item ? "active" : ""} aria-pressed={locale === item} onClick={(event) => { setLocale(item); event.currentTarget.closest("details")?.removeAttribute("open"); }} key={item}><FlagIcon locale={item} /><span>{names[item]}<small>{codes[item]}</small></span>{locale === item ? <Check className="language-check" aria-hidden="true" /> : null}</button>)}
     </div>
   </details>;

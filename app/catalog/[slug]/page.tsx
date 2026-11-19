@@ -7,13 +7,14 @@ import { getUsdKgsRate } from "../../lib/exchange-rate";
 import { getRequestLocale } from "../../lib/locale-server";
 import { localizeTractor } from "../../lib/tractor-localization";
 import { jsonLd, publicMetadata, SITE_URL } from "../../lib/seo";
+import { copy } from "../../data/site-copy";
 
 export const dynamic = "force-dynamic";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const [tractor,locale] = await Promise.all([getTractor(slug),getRequestLocale()]);
-  if (!tractor) return { title: "Модель не найдена | ATADAN",robots:{index:false,follow:false} };
+  if (!tractor) return { title: copy[locale]["ui.catalog.notFoundMeta"],robots:{index:false,follow:false} };
   const localized=localizeTractor(tractor,locale);
   const hp=locale==="en"?"hp":locale==="ky"?"а.к.":"л.с.";
   return publicMetadata({path:`/catalog/${tractor.slug}`,locale,title:`Changfa ${tractor.model}: ${tractor.hp} ${hp} | ATADAN`,description:localized.description,image:tractor.image});

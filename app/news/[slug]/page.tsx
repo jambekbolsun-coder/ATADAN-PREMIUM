@@ -5,11 +5,12 @@ import { getNewsPost, getNewsPosts } from "../../lib/news";
 import { getTractor } from "../../lib/catalog";
 import { getRequestLocale } from "../../lib/locale-server";
 import { jsonLd, publicMetadata, SITE_URL } from "../../lib/seo";
+import { copy } from "../../data/site-copy";
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const [post,locale] = await Promise.all([getNewsPost(slug),getRequestLocale()]);
-  if (!post) return { title: "Материал не найден: ATADAN",robots:{index:false,follow:false} };
+  if (!post) return { title: copy[locale]["ui.meta.articleNotFound"],robots:{index:false,follow:false} };
   return publicMetadata({path:`/news/${post.slug}`,locale,title:`${post.title[locale]} | ATADAN`,description:post.excerpt[locale],image:post.coverImage,type:"article",publishedTime:post.publishedAt});
 }
 

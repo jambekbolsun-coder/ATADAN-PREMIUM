@@ -1,9 +1,11 @@
 "use client";
 import { useId, useState } from "react";
 import { phoneCountries } from "../lib/customer-input";
+import { useI18n } from "./I18n";
 
 export function PhoneInput() {
   const id = useId();
+  const { t } = useI18n();
   const [countryId, setCountryId] = useState("KG");
   const [number, setNumber] = useState("");
   const country = phoneCountries.find((item) => item.id === countryId)!;
@@ -26,10 +28,10 @@ export function PhoneInput() {
   }
   return (
     <div className="phone-field">
-      <label htmlFor={id}>Телефон</label>
+      <label htmlFor={id}>{t("lead.phone")}</label>
       <div className="phone-country">
         <select
-          aria-label="Страна телефона"
+          aria-label={t("ui.phone.country")}
           value={countryId}
           onChange={(event) => {
             setCountryId(event.target.value);
@@ -38,7 +40,7 @@ export function PhoneInput() {
         >
           {phoneCountries.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.name} ({item.code})
+              {t(`ui.phone.country.${item.id}`)} ({item.code})
             </option>
           ))}
         </select>
@@ -50,17 +52,17 @@ export function PhoneInput() {
           type="tel"
           inputMode="tel"
           autoComplete="tel-national"
-          aria-label="Номер телефона без кода страны"
+          aria-label={t("ui.phone.number")}
           aria-describedby={`${id}-example`}
           required
           value={number}
           onChange={(event) => update(event.target.value)}
           pattern={`[0-9]{${country.length}}`}
-          title={`Введите ${country.length} цифр. Пример: ${country.code} ${country.example}`}
+          title={t("ui.phone.hint", { count: country.length, example: `${country.code} ${country.example}` })}
           placeholder={country.example}
         />
       </div>
-      <small className="phone-example" id={`${id}-example`}>Например: {country.code} {country.example}</small>
+      <small className="phone-example" id={`${id}-example`}>{t("ui.phone.example", { example: `${country.code} ${country.example}` })}</small>
       <input type="hidden" name="phone" value={`${country.code}${number}`} />
     </div>
   );

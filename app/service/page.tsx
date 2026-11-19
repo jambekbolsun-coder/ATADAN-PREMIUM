@@ -14,10 +14,12 @@ import { getPublishedRecords } from "../lib/public-records";
 import Image from "next/image";
 import { getRequestLocale } from "../lib/locale-server";
 import { pageMetadata } from "../lib/seo";
+import { copy } from "../data/site-copy";
 
 export async function generateMetadata(){return pageMetadata("service","/service",await getRequestLocale())}
 export default async function ServicePage() {
-  const materials = await getPublishedRecords("service_pages");
+  const [materials, locale] = await Promise.all([getPublishedRecords("service_pages"), getRequestLocale()]);
+  const t = (key: string) => copy[locale]?.[key] ?? copy.ru[key] ?? key;
   return (
     <main>
       <PageHero
@@ -61,8 +63,8 @@ export default async function ServicePage() {
       {materials.length ? (
         <section className="section-shell public-service-materials">
           <header>
-            <span>Полезные материалы</span>
-            <h2>Сервис Changfa подробно</h2>
+            <span>{t("ui.service.materialsLabel")}</span>
+            <h2>{t("ui.service.materialsTitle")}</h2>
           </header>
           <div>
             {materials.map((item) => (
@@ -80,11 +82,11 @@ export default async function ServicePage() {
                     />
                   </span>
                 ) : null}
-                <span>{item.category || "Сервис"}</span>
+                <span>{item.category || t("nav.service")}</span>
                 <h3>{item.title}</h3>
                 <p>{item.subtitle}</p>
                 <b>
-                  Подробнее <ArrowUpRight />
+                  {t("product.details")} <ArrowUpRight />
                 </b>
               </Link>
             ))}

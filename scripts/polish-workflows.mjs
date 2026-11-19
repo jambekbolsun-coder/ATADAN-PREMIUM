@@ -145,7 +145,7 @@ try {
   await lease.getByRole("checkbox").check();
   await lease.getByRole("button", { name: "Написать менеджеру в WhatsApp" }).click();
   await page.waitForURL("https://wa.me/**");
-  assert.match(new URL(page.url()).searchParams.get("text"), /в лизинг\.[\s\S]*Срок: [\s\S]*Платёж в месяц/);
+  assert.match(new URL(page.url()).searchParams.get("text"), /в лизинг\.[\s\S]*Срок: [\s\S]*Как платить: [\s\S]*Платёж: ≈ [\s\S]*Переплата: /);
   pass("Leasing saves and transfers calculation into WhatsApp");
   await page.goto(base + "/service");
   await page

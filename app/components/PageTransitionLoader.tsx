@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AtadanLoader } from "./AtadanLoader";
+import { useI18n } from "./I18n";
 
 export function PageTransitionLoader() {
   const [visible, setVisible] = useState(false);
+  const { t } = useI18n();
   const navigating = useRef(false);
 
   useEffect(() => {
@@ -41,5 +43,5 @@ export function PageTransitionLoader() {
     };
   }, []);
 
-  return visible ? <AtadanLoader className="atadan-loader-transition" detail="Открываем следующий раздел" /> : null;
+  return visible ? <AtadanLoader className="atadan-loader-transition" label={t("ui.loader.label")} detail={t("ui.loader.next")} /> : null;
 }

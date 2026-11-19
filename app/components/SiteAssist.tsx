@@ -78,6 +78,17 @@ const ui = {
     ask: "Message a manager",
   },
 } as const;
+const regionKeys: Record<(typeof regions)[number], string> = {
+  "Баткенская область": "ui.region.batken",
+  "Джалал-Абадская область": "ui.region.jalalabad",
+  "Иссык-Кульская область": "ui.region.issykkul",
+  "Нарынская область": "ui.region.naryn",
+  "Ошская область": "ui.region.osh",
+  "Таласская область": "ui.region.talas",
+  "Чуйская область": "ui.region.chuy",
+  "г. Бишкек": "ui.region.bishkekCity",
+  "г. Ош": "ui.region.oshCity",
+};
 export type SiteFaq = {
   id: string;
   question: string;
@@ -86,7 +97,7 @@ export type SiteFaq = {
   buttonUrl?: string;
 };
 export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
-  const { locale } = useI18n(),
+  const { locale, t } = useI18n(),
     l = ui[locale],
     settings = useSiteSettings();
   const [quiz, setQuiz] = useState(false),
@@ -217,7 +228,7 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
               <button
                 type="button"
                 onClick={() => setAssistant(false)}
-                aria-label="Закрыть"
+                aria-label={t("ui.common.close")}
               >
                 <X />
               </button>
@@ -250,7 +261,7 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
                               : undefined
                           }
                         >
-                          {item.buttonLabel || "Подробнее"}
+                          {item.buttonLabel || t("product.details")}
                         </a>
                       ) : null}
                     </p>
@@ -327,15 +338,13 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
             </span>
             <div
               className="quiz-progress"
-              aria-label={`Вопрос ${step + 1} из 2`}
+              aria-label={t("ui.quiz.step", { current: step + 1, total: 2 })}
             >
               <i style={{ width: `${(step + 1) * 50}%` }} />
             </div>
-            <p>Вопрос {step + 1} из 2</p>
+            <p>{t("ui.quiz.step", { current: step + 1, total: 2 })}</p>
             <h2 id="quiz-title">
-              {step === 0
-                ? "Какой мощности трактор вам нужен?"
-                : "Из какого вы региона?"}
+              {step === 0 ? t("ui.quiz.power") : t("ui.quiz.region")}
             </h2>
             <div className="quiz-options">
               {step === 0
@@ -348,7 +357,9 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
                         setStep(1);
                       }}
                     >
-                      {range.label}
+                      {range.max >= 999
+                        ? `${range.min}+ ${t("common.hp")}`
+                        : `${range.min}–${range.max} ${t("common.hp")}`}
                       <ChevronRight />
                     </button>
                   ))
@@ -365,7 +376,7 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
                         );
                       }}
                     >
-                      {region}
+                      {t(regionKeys[region])}
                       <ChevronRight />
                     </button>
                   ))}

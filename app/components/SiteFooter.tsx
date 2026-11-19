@@ -12,13 +12,14 @@ import {
   MessageCircle,
   Phone,
 } from "lucide-react";
-import { useI18n } from "./I18n";
+import { useI18n, useLocalizedAddress } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
 import { OPEN_PRIVACY_SETTINGS_EVENT } from "./CookieConsent";
 
 export function SiteFooter() {
   const { t } = useI18n();
   const settings = useSiteSettings();
+  const address = useLocalizedAddress();
   const phoneHref = "tel:" + settings.phone.replace(/[^+\d]/g, "");
   const whatsappHref = "https://wa.me/" + settings.phone.replace(/\D/g, "");
   return (
@@ -55,7 +56,7 @@ export function SiteFooter() {
               height={90}
             />
           </div>
-          <span>Official Changfa distributor</span>
+          <span>{t("ui.footer.distributor")}</span>
         </div>
         <div>
           <strong>{t("footer.navigation")}</strong>
@@ -76,7 +77,7 @@ export function SiteFooter() {
           </a>
           <span>
             <MapPin size={15} />
-            {settings.address}
+            {address}
           </span>
           {settings.email ? (
             <a href={`mailto:${settings.email}`}>
@@ -100,9 +101,9 @@ export function SiteFooter() {
         </div>
       </div>
       <div className="footer-legal">
-        <Link href="/privacy">Политика конфиденциальности</Link>
-        <Link href="/terms">Условия использования</Link>
-        <Link href="/cookies">Политика cookie</Link>
+        <Link href="/privacy">{t("ui.legal.privacy")}</Link>
+        <Link href="/terms">{t("ui.legal.terms")}</Link>
+        <Link href="/cookies">{t("ui.legal.cookies")}</Link>
         <button
           type="button"
           onClick={() =>
@@ -110,7 +111,7 @@ export function SiteFooter() {
           }
         >
           <Cookie size={14} />
-          Настроить cookie
+          {t("ui.legal.cookieSettings")}
         </button>
       </div>
       <div className="footer-bottom">

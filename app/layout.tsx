@@ -7,7 +7,7 @@ import { getSiteSettings } from "./lib/site-settings";
 import { SiteSettingsProvider } from "./components/SiteSettings";
 import { getPublishedRecords } from "./lib/public-records";
 import { getRequestLocale } from "./lib/locale-server";
-import { FALLBACK_IMAGE, jsonLd, SITE_URL } from "./lib/seo";
+import { FALLBACK_IMAGE, jsonLd, publicPageCopy, SITE_URL } from "./lib/seo";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -19,10 +19,17 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-export const metadata: Metadata = {
+const ogLocale = { ru: "ru_KG", ky: "ky_KG", en: "en_US" } as const;
+const siteTitle = { ru: "ATADAN Changfa: тракторы в Кыргызстане", ky: "ATADAN Changfa: Кыргызстандагы тракторлор", en: "ATADAN Changfa: tractors in Kyrgyzstan" } as const;
+
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getRequestLocale();
+  const title = siteTitle[locale];
+  const description = publicPageCopy.home.description[locale];
+  return {
   metadataBase: new URL("https://atadan.kg"),
-  title: "ATADAN Changfa: тракторы в Кыргызстане",
-  description: "Каталог тракторов Changfa, подбор техники, финансирование, новости и сервис ATADAN в Кыргызстане.",
+  title,
+  description,
   robots: { index: true, follow: true },
   verification: {
     google: "8J9ahNKhEvSgCU1xLVscRs92YMvSNYbj45OckHEls7k",
@@ -33,19 +40,20 @@ export const metadata: Metadata = {
     apple: "/icons/atadan-app-192.png",
   },
   openGraph: {
-    title: "ATADAN Changfa: тракторы в Кыргызстане",
-    description: "Каталог тракторов Changfa, финансирование, новости и сервис ATADAN.",
+    title,
+    description,
     type: "website",
-    locale: "ru_KG",
-    images: [{ url: FALLBACK_IMAGE, width: 1916, height: 817, alt: "Трактор Changfa в поле: ATADAN" }],
+    locale: ogLocale[locale],
+    images: [{ url: FALLBACK_IMAGE, width: 1916, height: 817, alt: title }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "ATADAN Changfa: тракторы в Кыргызстане",
-    description: "Каталог тракторов Changfa, финансирование, новости и сервис ATADAN.",
+    title,
+    description,
     images: [FALLBACK_IMAGE],
   },
-};
+  };
+}
 
 export default async function RootLayout({
   children,

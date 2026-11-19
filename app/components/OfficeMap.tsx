@@ -2,7 +2,7 @@
 
 import { ArrowUpRight, MapPin, Navigation } from "lucide-react";
 import { useState } from "react";
-import { useI18n } from "./I18n";
+import { useI18n, useLocalizedAddress } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
 
 const labels = {
@@ -33,7 +33,8 @@ const labels = {
 } as const;
 
 export function OfficeMap() {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
+  const address = useLocalizedAddress();
   const l = labels[locale];
   const settings = useSiteSettings();
   const [loaded, setLoaded] = useState(false);
@@ -51,7 +52,7 @@ export function OfficeMap() {
         <span className="section-label">{l.kicker}</span>
         <h2>{l.title}</h2>
         <p>
-          {settings.address}. {visitNote}
+          {address}. {visitNote}
         </p>
         <a href={directions} target="_blank" rel="noreferrer">
           <Navigation aria-hidden="true" />
@@ -59,14 +60,14 @@ export function OfficeMap() {
           <ArrowUpRight aria-hidden="true" />
         </a>
         <small>
-          {settings.address} · {settings.phone}
+          {address} · {settings.phone}
           {settings.workingHours ? ` · ${settings.workingHours}` : ""}
         </small>
       </div>
       <div className={`office-map ${loaded ? "is-loaded" : ""}`}>
         {loaded ? (
           <iframe
-            title="Карта офиса ATADAN"
+            title={t("ui.map.title")}
             loading="lazy"
             referrerPolicy="no-referrer"
             src="https://www.openstreetmap.org/export/embed.html?bbox=74.57313%2C42.875964%2C74.59313%2C42.885964&layer=mapnik&marker=42.880964%2C74.583130"

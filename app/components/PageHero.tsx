@@ -24,7 +24,7 @@ export function PageHero({ image, video, kickerId, titleId, subtitleId, values, 
       {video ? <ViewportVideo src={video} poster={image} label={t(titleId, values)} className="page-hero-video" priority /> : <ResponsiveHeroMedia image={image} priority />}
       <div className="page-hero-overlay" />
       <div className="page-hero-content">
-        <nav className="page-breadcrumb" aria-label="Хлебные крошки">
+        <nav className="page-breadcrumb" aria-label={t("ui.breadcrumbs")}>
           <Link href="/">ATADAN</Link><ChevronRight size={14} />
           <span>{t(pageLabelId ?? titleId)}</span>
         </nav>

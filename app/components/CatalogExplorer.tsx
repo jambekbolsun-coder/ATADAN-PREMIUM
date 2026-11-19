@@ -84,7 +84,7 @@ export function CatalogExplorer({
               checked={range === index}
               onChange={() => setRange(index)}
             />
-            <span>{index === 0 ? t("catalog.allPower") : item.label}</span>
+            <span>{index === 0 ? t("catalog.allPower") : item.max >= 999 ? `${item.min}+ ${t("common.hp")}` : `${item.min}–${item.max} ${t("common.hp")}`}</span>
           </label>
         ))}
       </fieldset>
@@ -100,14 +100,14 @@ export function CatalogExplorer({
         </label>
       </fieldset>
       <fieldset>
-        <legend>Подборка</legend>
+        <legend>{t("ui.catalog.selection")}</legend>
         <label className="switch-row">
           <input
             type="checkbox"
             checked={popularOnly}
             onChange={(event) => setPopularOnly(event.target.checked)}
           />
-          <span>Популярные модели</span>
+          <span>{t("ui.catalog.popular")}</span>
         </label>
       </fieldset>
       <button

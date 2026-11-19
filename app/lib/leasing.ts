@@ -32,17 +32,28 @@ function plural(n: number, one: string, few: string, many: string) {
   if (b >= 2 && b <= 4) return few;
   return many;
 }
-export const formatMonths = (months: number) => `${months} ${plural(months, "месяц", "месяца", "месяцев")}`;
-/** «7 лет» для срока, кратного году, иначе пустая строка. */
-export function formatYears(months: number) {
-  if (months < 12 || months % 12 !== 0) return "";
-  const years = months / 12;
+type TermLocale = "ru" | "ky" | "en";
+/** «84 месяца» / «84 ай» / «84 months». */
+export function formatMonths(months: number, locale: TermLocale = "ru") {
+  if (locale === "ky") return `${months} ай`;
+  if (locale === "en") return `${months} ${months === 1 ? "month" : "months"}`;
+  return `${months} ${plural(months, "месяц", "месяца", "месяцев")}`;
+}
+/** Годы: «7 лет» / «7 жыл» / «7 years». */
+export function formatYearCount(years: number, locale: TermLocale = "ru") {
+  if (locale === "ky") return `${years} жыл`;
+  if (locale === "en") return `${years} ${years === 1 ? "year" : "years"}`;
   return `${years} ${plural(years, "год", "года", "лет")}`;
 }
+/** «7 лет» для срока, кратного году, иначе пустая строка. */
+export function formatYears(months: number, locale: TermLocale = "ru") {
+  if (months < 12 || months % 12 !== 0) return "";
+  return formatYearCount(months / 12, locale);
+}
 /** «7 лет (84 месяца)», «1 год (12 месяцев)», «18 месяцев». */
-export function formatLeaseTerm(months: number) {
-  const years = formatYears(months);
-  return years ? `${years} (${formatMonths(months)})` : formatMonths(months);
+export function formatLeaseTerm(months: number, locale: TermLocale = "ru") {
+  const years = formatYears(months, locale);
+  return years ? `${years} (${formatMonths(months, locale)})` : formatMonths(months, locale);
 }
 
 export type LeaseInput = { price: number; downPercent: number; months: number; annualRate: number; fee: number; method: "annuity" | "differentiated" };
@@ -79,13 +90,44 @@ export function salePrice(price: number | null, discount = 0) {
 }
 
 export type LeaseOption={name:string;price:number};
+/**
+ * Как платить: каждый месяц равными частями (аннуитет), раз в квартал, 2 раза в год,
+ * льготный период (первые месяцы только проценты), убывающий платёж (долг равными частями + проценты с остатка).
+ */
+export const LEASE_SCHEDULES=["monthly","quarterly","semiannual","grace","differentiated"] as const;
+export type LeaseSchedule=typeof LEASE_SCHEDULES[number];
+export const LEASE_SCHEDULE_INFO:Record<LeaseSchedule,{title:string;hint:string;period:1|3|6}>={
+  monthly:{title:"Каждый месяц",hint:"Одинаковый платёж каждый месяц",period:1},
+  quarterly:{title:"Раз в квартал",hint:"Платёж раз в 3 месяца",period:3},
+  semiannual:{title:"2 раза в год",hint:"Например, после урожая",period:6},
+  grace:{title:"Льготный период",hint:"Сначала только проценты",period:1},
+  differentiated:{title:"Убывающий платёж",hint:"Каждый месяц платёж меньше",period:1},
+};
+export const LEASE_GRACE_DEFAULT=6;
+export const normalizeGraceMonths=(value:unknown)=>{const n=Math.round(Number(value));return Number.isFinite(n)&&n>=1?Math.min(24,n):LEASE_GRACE_DEFAULT};
+export function isLeaseSchedule(value:unknown):value is LeaseSchedule{return typeof value==="string"&&(LEASE_SCHEDULES as readonly string[]).includes(value)}
+/** Список вариантов из админки («monthly, quarterly»); пусто или мусор: все варианты. Каждый месяц есть всегда. */
+export function parseLeaseSchedules(value:unknown):LeaseSchedule[]{
+  const list=String(value??"").split(/[,;\s]+/).filter(isLeaseSchedule);
+  if(!list.length)return [...LEASE_SCHEDULES];
+  return LEASE_SCHEDULES.filter(item=>item==="monthly"||list.includes(item));
+}
+/** Почему вариант нельзя выбрать на этот срок; пустая строка: можно. */
+export function leaseScheduleProblem(schedule:LeaseSchedule,months:number,graceMonths:number=LEASE_GRACE_DEFAULT){
+  if(schedule==="quarterly"&&(months<3||months%3))return "Нужен срок, кратный 3 месяцам";
+  if(schedule==="semiannual"&&(months<6||months%6))return "Нужен срок, кратный 6 месяцам";
+  if(schedule==="grace"&&months<=normalizeGraceMonths(graceMonths))return `Нужен срок больше ${normalizeGraceMonths(graceMonths)} мес.`;
+  return "";
+}
 /** logo: картинка банка (/api/media, /images или https), website: официальный сайт банка; пусто, если не указаны. */
-export type LeaseProgram={id:string;name:string;logo?:string;website?:string;programType:string;currency:string;termsMonths:number[];minDownPercent:number;maxDownPercent:number;minDownAmount:number;downPaymentMode:string;markupPercent:number;annualRate:number;fixedCommission:number;commissionPercent:number;insurance:number;processingFee:number;delivery:number;includeDelivery:boolean;includeInsurance:boolean;includeCommission:boolean;discountOrder:"before"|"after";rounding:1|10|100;zeroPercent:boolean;options:LeaseOption[];notes:string};
+export type LeaseProgram={id:string;name:string;logo?:string;website?:string;programType:string;currency:string;termsMonths:number[];minDownPercent:number;maxDownPercent:number;minDownAmount:number;downPaymentMode:string;markupPercent:number;annualRate:number;fixedCommission:number;commissionPercent:number;insurance:number;processingFee:number;delivery:number;includeDelivery:boolean;includeInsurance:boolean;includeCommission:boolean;discountOrder:"before"|"after";rounding:1|10|100;zeroPercent:boolean;options:LeaseOption[];notes:string;schedules?:LeaseSchedule[];graceMonths?:number};
 export type LeaseModelTerms={tractorSlug:string;enabled:boolean;price?:number;minDownPercent?:number;termsMonths?:number[];markupPercent?:number;annualRate?:number;fixedCommission?:number;commissionPercent?:number;discount?:number;maxFinancing?:number;options?:LeaseOption[];notes?:string};
 export type LeasePromotion={id:string;name:string;tractorSlugs:string[];discountType:"percent"|"amount";discount:number;reducedDownPercent?:number;zeroPercent:boolean;gift:string;startsAt:string;endsAt:string};
 /** maxMonths: максимальный срок лизинга на сайте (клиент выбирает от 1 до maxMonths). */
 export type LeasePublicConfig={programs:LeaseProgram[];models:LeaseModelTerms[];promotions:LeasePromotion[];maxMonths:number};
-export type InstallmentInput={price:number;options:LeaseOption[];delivery:number;discount:number;downMode:"percent"|"amount";downValue:number;months:number;markupPercent:number;annualRate:number;fixedCommission:number;commissionPercent:number;insurance:number;processingFee:number;includeDelivery:boolean;includeInsurance:boolean;includeCommission:boolean;discountOrder:"before"|"after";rounding:1|10|100;zeroPercent:boolean};
+export type InstallmentInput={price:number;options:LeaseOption[];delivery:number;discount:number;downMode:"percent"|"amount";downValue:number;months:number;markupPercent:number;annualRate:number;fixedCommission:number;commissionPercent:number;insurance:number;processingFee:number;includeDelivery:boolean;includeInsurance:boolean;includeCommission:boolean;discountOrder:"before"|"after";rounding:1|10|100;zeroPercent:boolean;schedule?:LeaseSchedule;graceMonths?:number};
+/** Строка графика: month = номер месяца, в котором платёж (для квартала 3, 6, 9...). */
+export type InstallmentRow={month:number;payment:number;principal:number;interest:number;balance:number};
 
 export type DownPaymentRules={price:number;minPercent:number;maxPercent:number;minAmount:number};
 
@@ -125,10 +167,37 @@ export function calculateInstallment(input:InstallmentInput){
   const downBase=input.discountOrder==="before"?price+optionsTotal+delivery-discount:price+optionsTotal+delivery;
   const downPayment=Math.round(Math.min(price+optionsTotal+delivery-discount,input.downMode==="percent"?downBase*Math.max(0,Math.min(100,input.downValue))/100:clampMoney(input.downValue)));
   const financed=Math.round(Math.max(0,price+optionsTotal+delivery-discount-downPayment));
-  const rateMarkup=Math.round(input.zeroPercent?0:financed*(Math.max(0,input.markupPercent)+Math.max(0,input.annualRate)*months/12)/100);
+  // Удорожание (наценка программы) разово добавляется к долгу; проценты банк берёт только с остатка долга.
+  const markup=Math.round(input.zeroPercent?0:financed*Math.max(0,input.markupPercent)/100),debt=financed+markup;
   const commission=Math.round(input.includeCommission?clampMoney(input.fixedCommission)+financed*Math.max(0,input.commissionPercent)/100:0);
+  // Комиссия, страховка и оформление платятся один раз при оформлении, в ежемесячный платёж не входят.
   const insurance=Math.round(input.includeInsurance?clampMoney(input.insurance):0),processingFee=Math.round(clampMoney(input.processingFee)),fees=commission+insurance+processingFee;
-  const contractTotal=Math.round(financed+rateMarkup+fees),step=[1,10,100].includes(input.rounding)?input.rounding:1,monthly=Math.ceil(contractTotal/months/step)*step;
-  let balance=contractTotal;const schedule=Array.from({length:months},(_,index)=>{const payment=index===months-1?balance:Math.min(balance,monthly);balance=Math.max(0,Math.round(balance-payment));return {month:index+1,payment,balance}});
-  return {price,optionsTotal,delivery,discount,downPayment,financed,markup:rateMarkup,commission,insurance,processingFee,overpayment:rateMarkup+fees,contractTotal,monthly,schedule};
+  const step=[1,10,100].includes(input.rounding)?input.rounding:1,graceMonths=normalizeGraceMonths(input.graceMonths);
+  const kind:LeaseSchedule=isLeaseSchedule(input.schedule)&&!leaseScheduleProblem(input.schedule,months,graceMonths)?input.schedule:"monthly";
+  const schedule=amortize(debt,input.zeroPercent?0:Math.max(0,Math.min(100,input.annualRate||0)),months,kind,graceMonths,step);
+  const interest=schedule.reduce((sum,row)=>sum+row.interest,0),paid=schedule.reduce((sum,row)=>sum+row.payment,0);
+  const graceCount=kind==="grace"?graceMonths:0,regular=schedule[Math.min(graceCount,schedule.length-1)];
+  return {price,optionsTotal,delivery,discount,downPayment,financed,markup,debt,commission,insurance,processingFee,fees,interest,overpayment:markup+interest+fees,contractTotal:paid+fees,
+    /** Обычный платёж за период: для квартала за квартал; для льготного периода платёж после льготы; для убывающего первый (самый большой). */
+    monthly:regular?.payment??0,firstPayment:schedule[0]?.payment??0,lastPayment:schedule.at(-1)?.payment??0,periodMonths:LEASE_SCHEDULE_INFO[kind].period,scheduleKind:kind,graceMonths:graceCount,schedule};
+}
+
+/**
+ * График как в банке: ставка за период = годовая / 12 × месяцев в периоде, процент начисляется на остаток долга.
+ * Аннуитет: платёж = долг × i / (1 − (1 + i)^−n); сверено с калькулятором АБанка до сома.
+ * Суммы в целых сомах, последний платёж закрывает остаток копеечных округлений.
+ */
+function amortize(debt:number,annualRate:number,months:number,kind:LeaseSchedule,graceMonths:number,step:number):InstallmentRow[]{
+  const period=LEASE_SCHEDULE_INFO[kind].period,count=Math.max(1,Math.round(months/period)),rate=annualRate/100*period/12;
+  const grace=kind==="grace"?Math.min(graceMonths,count-1):0,amortCount=count-grace;
+  const annuity=rate?debt*rate/-Math.expm1(-amortCount*Math.log1p(rate)):debt/amortCount;
+  const regular=step===1?Math.round(annuity):Math.ceil(annuity/step)*step,equalPrincipal=Math.round(debt/count);
+  const rows:InstallmentRow[]=[];let balance=debt;
+  for(let k=1;k<=count;k++){
+    const interest=Math.round(balance*rate);
+    const principal=k<=grace?0:k===count?balance:Math.max(0,Math.min(balance,kind==="differentiated"?equalPrincipal:regular-interest));
+    balance-=principal;
+    rows.push({month:k*period,payment:principal+interest,principal,interest,balance});
+  }
+  return rows;
 }

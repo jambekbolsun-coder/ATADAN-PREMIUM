@@ -4,7 +4,6 @@ import { CheckCircle2, LoaderCircle, MessageCircle } from "lucide-react";
 import { FormEvent, useState } from "react";
 import { PhoneInput } from "./PhoneInput";
 import { useSiteSettings } from "./SiteSettings";
-import { successMessage } from "../lib/customer-input";
 import { managerWhatsAppUrl } from "../lib/whatsapp";
 import { useI18n } from "./I18n";
 import { Link } from "./SiteLink";
@@ -14,16 +13,19 @@ const consentCopy = {
     start: "Я согласен(на) на обработку данных согласно",
     link: "политике конфиденциальности",
     error: "Подтвердите согласие на обработку данных",
+    whatsapp: "Продолжить в WhatsApp",
   },
   ky: {
     start: "Маалыматтарды иштетүүгө макулмун:",
     link: "купуялык саясаты",
     error: "Маалыматтарды иштетүүгө макулдукту ырастаңыз",
+    whatsapp: "WhatsAppта улантуу",
   },
   en: {
     start: "I agree to data processing under the",
     link: "privacy policy",
     error: "Please confirm your consent to data processing",
+    whatsapp: "Continue in WhatsApp",
   },
 } as const;
 
@@ -90,8 +92,11 @@ export function LeadForm({
         body: JSON.stringify(payload),
       });
       const data = (await response.json()) as { error?: string };
-      if (!response.ok)
-        throw new Error(data.error ?? "Не удалось отправить заявку");
+      if (!response.ok) {
+        setError(locale === "ru" && data.error ? data.error : t("ui.lead.error"));
+        setState("error");
+        return;
+      }
       const url = managerWhatsAppUrl(settings.phone, {
         ...payload,
         model: tractorModel,
@@ -101,10 +106,8 @@ export function LeadForm({
       setState("success");
       formElement.reset();
       window.location.assign(url);
-    } catch (cause) {
-      setError(
-        cause instanceof Error ? cause.message : "Не удалось отправить заявку",
-      );
+    } catch {
+      setError(t("ui.lead.error"));
       setState("error");
     }
   }
@@ -114,9 +117,9 @@ export function LeadForm({
       <div className="form-success" role="status">
         <CheckCircle2 />
         <div>
-          <strong>{successMessage}</strong>
+          <strong>{t("ui.lead.successManager")}</strong>
           <a className="lead-whatsapp" href={whatsappUrl}>
-            Продолжить в WhatsApp
+            {consentCopy[locale].whatsapp}
           </a>
         </div>
       </div>
@@ -139,14 +142,14 @@ export function LeadForm({
         />
       </label>
       <label>
-        <span>{manager ? "ФИО" : t("lead.name")}</span>
+        <span>{manager ? t("ui.lead.fullName") : t("lead.name")}</span>
         <input
           name="name"
           minLength={2}
           maxLength={120}
           required
           placeholder={
-            manager ? "Фамилия, имя, отчество" : t("lead.namePlaceholder")
+            manager ? t("ui.lead.fullNamePlaceholder") : t("lead.namePlaceholder")
           }
           autoComplete="name"
         />
@@ -154,7 +157,7 @@ export function LeadForm({
       <PhoneInput />
       {!compact ? (
         <label className="wide">
-          <span>{manager ? "Описание" : t("lead.message")}</span>
+          <span>{manager ? t("ui.lead.description") : t("lead.message")}</span>
           <textarea
             name="message"
             maxLength={1000}
@@ -192,11 +195,11 @@ export function LeadForm({
         {state === "loading"
           ? t("lead.sending")
           : manager
-            ? "Написать менеджеру"
+            ? t("contacts.manager")
             : t("lead.send")}
       </button>
       <p className="lead-handoff-note wide">
-        После отправки откроется WhatsApp с вашей заявкой.
+        {t("ui.lead.handoff")}
       </p>
     </form>
   );

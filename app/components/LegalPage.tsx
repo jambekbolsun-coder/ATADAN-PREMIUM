@@ -2,7 +2,7 @@
 
 import { ArrowUpRight, CheckCircle2, Cookie, FileText, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import { Link } from "./SiteLink";
-import { useI18n } from "./I18n";
+import { useI18n, useLocalizedAddress } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
 import { OPEN_PRIVACY_SETTINGS_EVENT } from "./CookieConsent";
 
@@ -51,15 +51,16 @@ const content: Record<"ru" | "ky" | "en", Record<LegalKind, { kicker: string; ti
 const icons = [ShieldCheck, LockKeyhole, CheckCircle2, FileText, Cookie, Mail];
 
 export function LegalPage({ kind }: { kind: LegalKind }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
+  const address = useLocalizedAddress();
   const settings = useSiteSettings();
   const page = content[locale][kind];
   return <main className="legal-page">
     <section className="legal-hero"><div className="section-shell"><span>{page.kicker}</span><h1>{page.title}</h1><p>{page.intro}</p><small>{page.updated}</small></div></section>
     <section className="section-shell legal-layout">
-      <aside><strong>ATADAN · Changfa</strong><p>{settings.address}<br/>{settings.phone}</p><nav><Link href="/privacy">Privacy</Link><Link href="/terms">Terms</Link><Link href="/cookies">Cookie</Link></nav></aside>
+      <aside><strong>ATADAN · Changfa</strong><p>{address}<br/>{settings.phone}</p><nav><Link href="/privacy">{t("ui.legal.navPrivacy")}</Link><Link href="/terms">{t("ui.legal.navTerms")}</Link><Link href="/cookies">{t("ui.legal.navCookies")}</Link></nav></aside>
       <div className="legal-blocks">{page.blocks.map((block,index)=>{const Icon=icons[index%icons.length];return <article key={block.title}><i><Icon aria-hidden="true"/></i><div><span>{String(index+1).padStart(2,"0")}</span><h2>{block.title}</h2><p>{block.text}</p>{block.points?<ul>{block.points.map(point=><li key={point}>{point}</li>)}</ul>:null}</div></article>})}
-        <div className="legal-contact"><div><strong>ATADAN</strong><p>{settings.phone} · {settings.address}</p></div>{kind==="cookies"?<button type="button" onClick={()=>window.dispatchEvent(new Event(OPEN_PRIVACY_SETTINGS_EVENT))}><Cookie aria-hidden="true"/>Настроить cookie</button>:<a href={`https://wa.me/${settings.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer">Связаться <ArrowUpRight aria-hidden="true"/></a>}</div>
+        <div className="legal-contact"><div><strong>ATADAN</strong><p>{settings.phone} · {address}</p></div>{kind==="cookies"?<button type="button" onClick={()=>window.dispatchEvent(new Event(OPEN_PRIVACY_SETTINGS_EVENT))}><Cookie aria-hidden="true"/>{t("ui.legal.cookieSettings")}</button>:<a href={`https://wa.me/${settings.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer">{t("nav.contact")} <ArrowUpRight aria-hidden="true"/></a>}</div>
       </div>
     </section>
   </main>;

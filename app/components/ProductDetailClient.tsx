@@ -59,9 +59,9 @@ export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRat
             <div><Sprout /><span>{t("product.area")}<strong>{localized.farmArea}</strong></span></div>
             <div><BadgeCheck /><span>{t("product.drive")}<strong>4×4</strong></span></div>
           </div>
-          <div className={`buy-price ${discount && tractor.price ? "has-discount" : ""}`}><span>{t("product.cost")}</span>{discount && tractor.price ? <del>{formatPrice(tractor.price)}</del> : null}<strong>{salePrice ? formatPrice(salePrice) : formatApproximateUsdPrice(tractor.approximatePriceUsd)}</strong><small>{!salePrice && tractor.approximatePriceUsd ? "Ориентировочная цена в долларах. Точную стоимость подтвердит менеджер." : t("product.costNote")}</small></div>
+          <div className={`buy-price ${discount && tractor.price ? "has-discount" : ""}`}><span>{t("product.cost")}</span>{discount && tractor.price ? <del>{formatPrice(tractor.price, locale)}</del> : null}<strong>{salePrice ? formatPrice(salePrice, locale) : formatApproximateUsdPrice(tractor.approximatePriceUsd, locale)}</strong><small>{!salePrice && tractor.approximatePriceUsd ? t("ui.product.usdNote") : t("product.costNote")}</small></div>
           <div className="installment-panel"><Banknote /><div><span>{t("product.installment")}</span><strong><a href="#leasing" onClick={()=>trackAnalyticsEvent({path:window.location.pathname,tractorSlug:tractor.slug,eventType:"model_interest"})}>{t("finance.calcCta")}</a></strong></div></div>
-          <div className="buy-actions"><a className="primary-btn" href="#request" onClick={()=>trackAnalyticsEvent({path:window.location.pathname,tractorSlug:tractor.slug,eventType:"model_interest"})}><MessageCircle size={19}/>Написать менеджеру</a><a className="call-action" href="tel:+996706131404" onClick={()=>trackAnalyticsEvent({path:window.location.pathname,tractorSlug:tractor.slug,eventType:"model_interest"})}>{t("product.phone")}</a></div>
+          <div className="buy-actions"><a className="primary-btn" href="#request" onClick={()=>trackAnalyticsEvent({path:window.location.pathname,tractorSlug:tractor.slug,eventType:"model_interest"})}><MessageCircle size={19}/>{t("contacts.manager")}</a><a className="call-action" href="tel:+996706131404" onClick={()=>trackAnalyticsEvent({path:window.location.pathname,tractorSlug:tractor.slug,eventType:"model_interest"})}>{t("product.phone")}</a></div>
           <div className="buy-assurance"><ShieldCheck size={18} /><span>{t("product.assurance")}</span></div>
         </aside>
       </div>
@@ -94,7 +94,7 @@ export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRat
     </section>
 
     <div className="section-shell product-lease"><FinanceCalculator tractor={tractor} config={leasingConfig} usdKgsRate={usdKgsRate}/></div>
-    <section className="product-request-v3" id="request"><div className="section-shell product-request-inner"><div><span className="section-label light">Changfa {tractor.model}</span><h2>Обсудите модель с менеджером</h2><p>Укажите ваши контакты и задачу. Подготовим предложение по выбранному трактору и продолжим разговор в WhatsApp.</p></div><LeadForm tractorSlug={tractor.slug} tractorModel={tractor.model} manager /></div></section>
+    <section className="product-request-v3" id="request"><div className="section-shell product-request-inner"><div><span className="section-label light">Changfa {tractor.model}</span><h2>{t("ui.product.discussTitle")}</h2><p>{t("ui.product.discussText")}</p></div><LeadForm tractorSlug={tractor.slug} tractorModel={tractor.model} manager /></div></section>
 
     <section className="related-v3 section-shell"><div className="editorial-heading"><div><span className="section-label">{t("product.relatedLabel")}</span><h2>{t("product.relatedTitle")}</h2></div><Link className="text-link" href="/catalog">{t("product.allCatalog")}<ArrowUpRight size={17} /></Link></div><div className="catalog-grid related-grid">{related.map((item) => <TractorCard tractor={item} key={item.slug} />)}</div></section>
   </main>;

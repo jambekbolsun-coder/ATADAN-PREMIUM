@@ -71,7 +71,7 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
     <section className="catalog-preview section-shell" id="lineup">
       <div className="editorial-heading">
         <div><span className="section-label">{t("home.catalogLabel")}</span><h2>{t("home.catalogTitle")}</h2></div>
-        <div><p>{t("home.catalogText")}</p><div className="editorial-links"><Link className="text-link" href="/catalog">{t("home.allModels")}<ArrowUpRight size={18} /></Link><Link className="text-link popular-link" href="/catalog?popular=1">Популярные модели<ArrowUpRight size={18} /></Link></div></div>
+        <div><p>{t("home.catalogText")}</p><div className="editorial-links"><Link className="text-link" href="/catalog">{t("home.allModels")}<ArrowUpRight size={18} /></Link><Link className="text-link popular-link" href="/catalog?popular=1">{t("ui.catalog.popular")}<ArrowUpRight size={18} /></Link></div></div>
       </div>
       <div className="featured-grid-v3">{featured.map((tractor, index) => <TractorCard tractor={tractor} featured={index === 0} key={tractor.slug} />)}</div>
     </section>

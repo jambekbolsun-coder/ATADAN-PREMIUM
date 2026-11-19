@@ -8,6 +8,13 @@ import type { NewsPost, Tractor } from "../types";
 import { Link } from "./SiteLink";
 import { useI18n } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
+import { localizeTractor } from "../lib/tractor-localization";
+
+const authorKeys: Record<string, string> = {
+  "Экспертная команда ATADAN": "ui.news.author.expert",
+  "Сервисная команда ATADAN": "ui.news.author.service",
+  "Редакция ATADAN": "ui.news.author.editorial",
+};
 
 const articleUi = {
   ru: { back: "Все материалы", read: "минут чтения", updated: "Опубликовано", contents: "В этой статье", expert: "Нужен совет по вашему хозяйству?", expertText: "Расскажите о площади, работах и навесном оборудовании. Менеджер ATADAN сравнит подходящие модели без давления.", ask: "Задать вопрос", relatedModel: "Модель по теме", catalog: "Смотреть трактор", source: "Источник производителя", share: "Поделиться", copied: "Ссылка скопирована", more: "Читайте дальше" },
@@ -32,7 +39,7 @@ function parseArticle(value: string) {
 }
 
 export function NewsArticleClient({ post, related, tractor }: { post: NewsPost; related: NewsPost[]; tractor: Tractor | null }) {
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const settings = useSiteSettings();
   const labels = articleUi[locale];
   const [progress, setProgress] = useState(0);
@@ -75,7 +82,7 @@ export function NewsArticleClient({ post, related, tractor }: { post: NewsPost; 
           <span className="article-category">{newsCategoryLabels[locale][post.category]}</span>
           <h1>{title}</h1>
           <p>{excerpt}</p>
-          <div className="article-meta"><span><CalendarDays size={16} />{labels.updated} {new Date(`${post.publishedAt}T12:00:00`).toLocaleDateString(locale === "ky" ? "ky-KG" : locale === "en" ? "en-GB" : "ru-RU", { day: "numeric", month: "long", year: "numeric" })}</span><span><Clock3 size={16} />{post.readingMinutes} {labels.read}</span><span><UserRound size={16} />{post.author}</span></div>
+          <div className="article-meta"><span><CalendarDays size={16} />{labels.updated} {new Date(`${post.publishedAt}T12:00:00`).toLocaleDateString(locale === "ky" ? "ky-KG" : locale === "en" ? "en-GB" : "ru-RU", { day: "numeric", month: "long", year: "numeric" })}</span><span><Clock3 size={16} />{post.readingMinutes} {labels.read}</span><span><UserRound size={16} />{authorKeys[post.author] ? t(authorKeys[post.author]) : post.author}</span></div>
         </div>
         <button type="button" className="article-share" onClick={share}>{copied ? <Check size={17} /> : <Share2 size={17} />}{copied ? labels.copied : labels.share}</button>
       </div>
@@ -87,11 +94,11 @@ export function NewsArticleClient({ post, related, tractor }: { post: NewsPost; 
       <aside className="article-toc"><span>{labels.contents}</span><nav>{sections.filter((section) => section.heading).map((section, index) => <a href={`#section-${index}`} key={section.heading}><i>{String(index + 1).padStart(2, "0")}</i>{section.heading}</a>)}</nav></aside>
       <article className="news-article-body">
         {sections.map((section, index) => <section id={`section-${index}`} key={`${section.heading}-${index}`}>{section.heading ? <h2>{section.heading}</h2> : null}{section.paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}</section>)}
-        {post.gallery && post.gallery.length > 1 ? <div className="article-gallery">{post.gallery.slice(1, 3).map((image, index) => <div key={image}><Image src={image} alt={`${title}, фото ${index + 2}`} fill sizes="(max-width: 720px) 100vw, 34vw" /></div>)}</div> : null}
+        {post.gallery && post.gallery.length > 1 ? <div className="article-gallery">{post.gallery.slice(1, 3).map((image, index) => <div key={image}><Image src={image} alt={t("ui.news.photo", { title, n: index + 2 })} fill sizes="(max-width: 720px) 100vw, 34vw" /></div>)}</div> : null}
         {post.sourceUrl ? <a className="article-source" href={post.sourceUrl} target="_blank" rel="noreferrer"><ExternalLink size={16} />{labels.source}</a> : null}
         <section className="article-expert-cta"><div><span>ATADAN · Changfa</span><h2>{labels.expert}</h2><p>{labels.expertText}</p></div><a href={`https://wa.me/${settings.phone.replace(/\D/g,"")}?text=${whatsappText}`} target="_blank" rel="noreferrer"><MessageCircle size={19} />{labels.ask}</a></section>
       </article>
-      {tractor ? <aside className="article-tractor-card"><span>{labels.relatedModel}</span><div><Image src={tractor.image} alt={`Changfa ${tractor.model}`} fill sizes="280px" /></div><h3>Changfa {tractor.model}</h3><p>{tractor.hp} л.с. · {tractor.farmArea}</p><Link href={`/catalog/${tractor.slug}`}>{labels.catalog}<ArrowUpRight size={17} /></Link></aside> : null}
+      {tractor ? <aside className="article-tractor-card"><span>{labels.relatedModel}</span><div><Image src={tractor.image} alt={`Changfa ${tractor.model}`} fill sizes="280px" /></div><h3>Changfa {tractor.model}</h3><p>{tractor.hp} {t("common.hp")} · {localizeTractor(tractor, locale).farmArea}</p><Link href={`/catalog/${tractor.slug}`}>{labels.catalog}<ArrowUpRight size={17} /></Link></aside> : null}
     </div>
 
     <section className="article-related section-shell"><div className="article-related-head"><span>{labels.more}</span><Link href="/news">{labels.back}<ArrowUpRight size={16} /></Link></div><div>{related.map((item) => <Link href={`/news/${item.slug}`} className="article-related-card" key={item.slug}><div><Image src={item.coverImage} alt={item.title[locale] || item.title.ru} fill sizes="(max-width: 720px) 100vw, 33vw" /></div><span>{newsCategoryLabels[locale][item.category]}</span><h3>{item.title[locale] || item.title.ru}</h3></Link>)}</div></section>

@@ -7,16 +7,19 @@ import { FounderLetter } from "../components/FounderLetter";
 import { OfficeMap } from "../components/OfficeMap";
 import { getRequestLocale } from "../lib/locale-server";
 import { pageMetadata } from "../lib/seo";
+import { copy } from "../data/site-copy";
 
 export async function generateMetadata(){return pageMetadata("about","/about",await getRequestLocale())}
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const locale = await getRequestLocale();
+  const t = (key: string) => copy[locale]?.[key] ?? copy.ru[key] ?? key;
   return <main className="about-page-v2">
     <PageHero image="/images/banners/about.webp" kickerId="about.kicker" titleId="about.title" subtitleId="about.subtitle" />
 
     <section className="section-shell about-story">
       <div><span className="section-label"><Trans id="about.work" /></span><h2><Trans id="about.storyTitle" /></h2><p><Trans id="about.story1" /></p><p><Trans id="about.story2" /></p><Link className="dark-btn" href="/catalog"><Trans id="about.catalog" /> <ArrowUpRight size={18} /></Link></div>
-      <div className="about-image about-image-photo"><Image src="/images/about/changfa-field-4k.webp" alt="Трактор Changfa в поле у гор" fill sizes="(max-width: 820px) 100vw, 52vw" /></div>
+      <div className="about-image about-image-photo"><Image src="/images/about/changfa-field-4k.webp" alt={t("ui.about.photoAlt")} fill sizes="(max-width: 820px) 100vw, 52vw" /></div>
     </section>
 
     <section className="about-comfort">
@@ -35,8 +38,8 @@ export default function AboutPage() {
     <section className="founder-message">
       <div className="section-shell founder-message-layout">
         <aside className="founder-profile">
-          <div className="founder-portrait"><Image src="/images/about/founder-portrait-4k.webp" alt="Islam Mirbek uulu: ATADAN" fill sizes="(max-width: 820px) 100vw, 38vw" /></div>
-          <div className="founder-identity"><span><Trans id="about.founderRole" /></span><h3><Trans id="about.founderName" /></h3><p>ATADAN · CHANGFA · Кыргызстан</p></div>
+          <div className="founder-portrait"><Image src="/images/about/founder-portrait-4k.webp" alt={`${t("about.founderName")}: ATADAN`} fill sizes="(max-width: 820px) 100vw, 38vw" /></div>
+          <div className="founder-identity"><span><Trans id="about.founderRole" /></span><h3><Trans id="about.founderName" /></h3><p>{t("ui.about.founderTag")}</p></div>
         </aside>
         <FounderLetter />
       </div>

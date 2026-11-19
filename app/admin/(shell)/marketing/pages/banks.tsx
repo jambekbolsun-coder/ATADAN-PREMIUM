@@ -7,7 +7,7 @@ import Link from "next/link";
 import { CalendarClock, Landmark, Pencil, Plus } from "lucide-react";
 import type { Bank } from "../../../_lib/site-admin";
 import { bankActiveAction, deleteBankAction, saveBankAction, saveLeaseTermAction } from "../../../_lib/marketing-actions";
-import { formatLeaseTerm, LEASE_TERM_HARD_MAX, leaseTermChoices } from "../../../../lib/leasing";
+import { formatLeaseTerm, LEASE_SCHEDULE_INFO, LEASE_SCHEDULES, LEASE_TERM_HARD_MAX, leaseTermChoices } from "../../../../lib/leasing";
 import { ActionButton, ActionDialog, Field } from "../../../_ui/forms";
 import { Badge, Card, Notice } from "../../../_ui/ui";
 import { BankLogoField } from "./bank-logo-field";
@@ -34,13 +34,25 @@ function BankFields({ bank }: { bank?: Bank }) {
         <Field label="Минимальный первый взнос, %" htmlFor={id("down")} hint="Клиент не сможет поставить меньше">
           <input id={id("down")} name="minDownPercent" className="ax-input num" inputMode="decimal" defaultValue={bank?.minDownPercent ?? ""} required />
         </Field>
-        <Field label="Комиссия, %" htmlFor={id("fee")} hint="От суммы финансирования. Пусто: без комиссии">
+        <Field label="Комиссия, %" htmlFor={id("fee")} hint="От суммы финансирования, платится один раз при оформлении. Пусто: без комиссии">
           <input id={id("fee")} name="commissionPercent" className="ax-input num" inputMode="decimal" defaultValue={bank?.commissionPercent ?? ""} />
         </Field>
         <Field label="Порядок показа" htmlFor={id("sort")} hint="Меньше число: выше в списке. Пусто: в конец">
           <input id={id("sort")} name="sortOrder" className="ax-input num" inputMode="numeric" defaultValue={bank ? String(bank.sortOrder) : ""} />
         </Field>
       </div>
+      <fieldset style={{ border: "1px solid var(--border)", borderRadius: 10, padding: "10px 12px", margin: 0 }}>
+        <legend className="ax-small" style={{ padding: "0 6px", fontWeight: 700 }}>Как можно платить (варианты под калькулятором)</legend>
+        {LEASE_SCHEDULES.map((kind) => (
+          <label key={kind} className="ax-check" style={{ borderBottom: 0 }}>
+            <input type="checkbox" name="schedules" value={kind} defaultChecked={kind === "monthly" || (bank ? bank.schedules.includes(kind) : true)} disabled={kind === "monthly"} />
+            {LEASE_SCHEDULE_INFO[kind].title}: <span className="ax-small">{kind === "monthly" ? "есть всегда" : LEASE_SCHEDULE_INFO[kind].hint.toLowerCase()}</span>
+          </label>
+        ))}
+        <Field label="Льготный период, месяцев" htmlFor={id("grace")} hint="Сколько первых месяцев клиент платит только проценты. Например: 6">
+          <input id={id("grace")} name="graceMonths" className="ax-input num" inputMode="numeric" defaultValue={bank?.graceMonths ?? 6} style={{ maxWidth: 140 }} />
+        </Field>
+      </fieldset>
       <label className="ax-check" style={{ borderBottom: 0 }}>
         <input type="checkbox" name="active" defaultChecked={bank ? bank.active : true} /> Показывать в калькуляторе на сайте
       </label>

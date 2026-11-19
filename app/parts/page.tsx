@@ -32,7 +32,7 @@ export default async function PartsPage({ searchParams }: PageProps<"/parts">) {
   const model = typeof sp.model === "string" ? sp.model.slice(0, 100) : "";
   const q = typeof sp.q === "string" ? sp.q.trim().slice(0, 60) : "";
   const [parts, catalog, locale] = await Promise.all([publicParts(model, q), getCatalog(), getRequestLocale()]);
-  const t = (k: string) => copy[locale]?.[k] ?? copy.ru[k] ?? k;
+  const t = (k: string, values: Record<string, string> = {}) => (copy[locale]?.[k] ?? copy.ru[k] ?? k).replace(/\{(\w+)\}/g, (_, key: string) => values[key] ?? `{${key}}`);
   const name = (slug: string) => catalog.find((t) => t.slug === slug)?.model ?? slug;
   const groups = [...new Set(parts.map((p) => p.category))];
 
@@ -65,8 +65,8 @@ export default async function PartsPage({ searchParams }: PageProps<"/parts">) {
                     <p className="public-parts-sku"><Trans id="parts.sku" />: {p.sku}</p>
                     {p.description ? <p>{p.description}</p> : null}
                     <p className="public-parts-fits"><Trans id="parts.fits" />: {models.length ? models.slice(0, 6).map(name).join(", ") + (models.length > 6 ? "…" : "") : <Trans id="parts.forAll" />}</p>
-                    <b>{Math.round(Number(p.price_minor) / 100).toLocaleString("ru-RU")} сом</b>
-                    <LeadModalButton message={`Запчасть: ${p.name}, артикул ${p.sku}${model ? `, трактор ${name(model)}` : ""}`} />
+                    <b>{Math.round(Number(p.price_minor) / 100).toLocaleString("ru-RU")} {t("ui.currency.som")}</b>
+                    <LeadModalButton message={`${t("ui.parts.request", { name: p.name, sku: p.sku })}${model ? t("ui.parts.requestTractor", { model: name(model) }) : ""}`} />
                   </article>
                 );
               })}
@@ -75,7 +75,7 @@ export default async function PartsPage({ searchParams }: PageProps<"/parts">) {
         )) : <p className="public-parts-empty"><Trans id="parts.empty" /></p>}
         <aside className="public-parts-ask">
           <p><Trans id="parts.ask" /></p>
-          <LeadModalButton message="Нужна запчасть. Модель трактора и VIN: " />
+          <LeadModalButton message={t("ui.parts.need")} />
         </aside>
       </section>
     </main>
