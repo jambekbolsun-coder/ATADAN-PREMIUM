@@ -39,6 +39,21 @@ const areas:Record<string,LocalizedText>={
   "от 250 га":text("от 250 га","250 га жогору","from 250 ha"),
 };
 
+/**
+ * Площадь, которую вписали в админке и которой нет в списке выше: «от 100 га», «До 300», «5–60 га».
+ * Переводим по правилам: «от» / «до» и единица «га».
+ */
+export function localizeFarmArea(value:string,locale:"ru"|"ky"|"en"){
+  const known=areas[value]?.[locale];
+  if(known)return known;
+  if(locale==="ru")return value;
+  const m=/^\s*(от|до)?\s*([\d\s.,–-]+?)\s*(га)?\s*$/i.exec(value);
+  if(!m)return value;
+  const prefix=(m[1]??"").toLowerCase(),num=m[2].trim();
+  if(locale==="en")return prefix==="от"?`from ${num} ha`:prefix==="до"?`up to ${num} ha`:`${num} ha`;
+  return prefix==="от"?`${num} га жогору`:prefix==="до"?`${num} га чейин`:`${num} га`;
+}
+
 const comforts:Record<string,LocalizedText>={
   "Простое управление, хорошая обзорность и удобная посадка":text("Простое управление, хорошая обзорность и удобная посадка","Жөнөкөй башкаруу, жакшы көрүнүш жана ыңгайлуу отуруу","Simple controls, good visibility and a comfortable seating position"),
   "Комфортная кабина, широкий обзор и удобное управление":text("Комфортная кабина, широкий обзор и удобное управление","Ыңгайлуу кабина, кең көрүнүш жана ыңгайлуу башкаруу","Comfortable cab, wide visibility and convenient controls"),
@@ -93,7 +108,7 @@ export function localizeTractor(tractor:Tractor,locale:Locale){
   };
   return {
     category:categories[tractor.category]?.[locale]??tractor.category,
-    farmArea:areas[tractor.farmArea]?.[locale]??tractor.farmArea,
+    farmArea:localizeFarmArea(tractor.farmArea,locale),
     description:description[locale]||tractor.description,
     comfort:comforts[tractor.comfort]?.[locale]??tractor.comfort,
     specs:localizeSpecs(tractor.specs,locale),
