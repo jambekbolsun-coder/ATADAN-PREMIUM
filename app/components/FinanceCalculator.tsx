@@ -48,6 +48,7 @@ import { useI18n } from "./I18n";
 import { approximateSomPrice, type UsdKgsRate } from "../lib/exchange-rate";
 import { formatApproximateUsdPrice } from "../lib/format";
 import { trackAnalyticsEvent } from "../lib/analytics-client";
+import { bestProgramId } from "../lib/lease-preview";
 
 const emptyConfig: LeasePublicConfig = {
   programs: [],
@@ -92,11 +93,13 @@ export function FinanceCalculator({
     headingId = useId(),
     banksId = useId(),
     [slug, setSlug] = useState(tractor?.slug ?? tractors[0]?.slug ?? ""),
-    [programId, setProgramId] = useState(config.programs[0]?.id ?? "default"),
+    // Сразу открываем самый выгодный банк (меньше всего заплатить за весь срок).
+    [programId, setProgramId] = useState(() => bestProgramId(tractor ?? tractors[0], config, usdKgsRate) ?? "default"),
     [downMode, setDownMode] = useState<"percent" | "amount">("percent"),
-    [downValue, setDownValue] = useState(
-      config.programs[0]?.minDownPercent ?? settings.downPercent,
-    ),
+    [downValue, setDownValue] = useState(() => {
+      const first = config.programs.find((p) => p.id === bestProgramId(tractor ?? tractors[0], config, usdKgsRate)) ?? config.programs[0];
+      return first?.minDownPercent ?? settings.downPercent;
+    }),
     [chosen, setChosen] = useState<string[]>([]),
     [schedule, setSchedule] = useState<LeaseSchedule>("monthly"),
     [hectarePrice, setHectarePrice] = useState(1500),
@@ -122,8 +125,6 @@ export function FinanceCalculator({
         ? t("lease.pay.diff", { first: money(r.firstPayment), last: money(r.lastPayment) })
         : `${money(r.monthly)} ${perPeriod(r.periodMonths)}`;
   const rateText = (p: { zeroPercent: boolean; rate: number }) => (p.zeroPercent ? t("lease.noInterest") : t("lease.yearRate", { rate: percent(p.rate) }));
-  const bankTerms = (p: LeaseProgram, minDown: number) =>
-    [rateText({ zeroPercent: p.zeroPercent, rate: p.annualRate }), t("lease.downFrom", { p: percent(minDown) }), p.commissionPercent > 0 ? t("lease.commission", { p: percent(p.commissionPercent) }) : ""].filter(Boolean).join(" · ");
   const scheduleProblemText = (kind: LeaseSchedule, problem: string) =>
     !problem ? "" : kind === "quarterly" ? t("lease.problem.multiple3") : kind === "semiannual" ? t("lease.problem.multiple6") : t("lease.problem.grace", { n: graceMonthsFor(program) });
   const graceMonthsFor = (p: LeaseProgram) => p.graceMonths ?? 6;
@@ -628,10 +629,46 @@ export function FinanceCalculator({
               ))}
             </fieldset>
           ) : null}
-          {program.notes || model?.notes ? (
-            <p className="lease-help">{model?.notes || program.notes}</p>
-          ) : null}
+          {model?.notes ? <p className="lease-help">{model.notes}</p> : null}
+          {!config.programs.length && program.notes ? <p className="lease-help">{program.notes}</p> : null}
         </div>
+        <div className="lease-side">
+        {config.programs.length ? (
+          <section className="lease-banks lease-banks-side" id={banksId} aria-labelledby={`${banksId}-t`}>
+            <div className="lease-banks-head">
+              <strong id={`${banksId}-t`}><Landmark size={17} aria-hidden /> {t("lease.banks.title")}</strong>
+              <span>{t("ui.bank.sub", { term: monthsText(months) })}</span>
+            </div>
+            <ul>
+              {quotes.map(({ program: p, quote: q }) => {
+                const active = p.id === program.id;
+                return (
+                  <li key={p.id} className={`lease-bank-tile${active ? " active" : ""}`}>
+                    <button type="button" aria-pressed={active} onClick={() => chooseProgram(p.id)}>
+                      <BankLogo program={p} />
+                      <span className="lease-bank-name">
+                        <strong>{p.name}</strong>
+                        <small>{[rateText({ zeroPercent: p.zeroPercent, rate: p.annualRate }), t("lease.downFrom", { p: percent(q?.minDown ?? p.minDownPercent) })].join(" · ")}</small>
+                        {p.id === bestId ? <em className="lease-bank-best">{t("lease.banks.best")}</em> : null}
+                      </span>
+                      <span className="lease-bank-pay">
+                        <strong>{q ? new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 0 }).format(q.result.monthly) : "–"}</strong>
+                        <small>{q ? t(q.result.periodMonths === 3 ? "ui.bank.som.quarter" : q.result.periodMonths === 6 ? "ui.bank.som.half" : "ui.bank.som.month") : t("lease.banks.needPrice")}</small>
+                      </span>
+                    </button>
+                    {active && (p.notes || p.website) ? (
+                      <div className="lease-bank-extra">
+                        {p.notes ? <details><summary>{t("ui.bank.about")}<ChevronDown size={15} aria-hidden /></summary><p>{p.notes}</p></details> : null}
+                        {p.website ? <a className="lease-bank-site" href={p.website} target="_blank" rel="noopener noreferrer nofollow">{t("lease.banks.site")} <ExternalLink size={13} aria-hidden /></a> : null}
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+            <p>{t("ui.bank.tap")}</p>
+          </section>
+        ) : null}
         <aside className="lease-summary" aria-live="polite">
           <span>
             {termsUnconfirmed
@@ -718,6 +755,7 @@ export function FinanceCalculator({
             {t("lease.writeManager")}
           </button>
         </aside>
+        </div>
       </div>
       {applicationOpen && result ? (
         <form className="lease-application" onSubmit={submit}>
@@ -762,37 +800,6 @@ export function FinanceCalculator({
         <p className="form-error" role="alert">
           {error || calculationError}
         </p>
-      ) : null}
-      {config.programs.length ? (
-        <section className="lease-banks" id={banksId} aria-labelledby={`${banksId}-t`}>
-          <div className="lease-banks-head">
-            <strong id={`${banksId}-t`}><Landmark size={17} aria-hidden /> {t("lease.banks.title")}</strong>
-            <span>{selected ? `Changfa ${selected.model} · ` : ""}{t("lease.banks.sub", { term: monthsText(months) })}</span>
-          </div>
-          <ul>
-            {quotes.map(({ program: p, quote: q }) => {
-              const active = p.id === program.id;
-              return (
-                <li key={p.id} className={`lease-bank-row${active ? " active" : ""}`}>
-                  <button type="button" aria-pressed={active} onClick={() => chooseProgram(p.id)}>
-                    <BankLogo program={p} />
-                    <span className="lease-bank-name">
-                      <strong>{p.name}{p.id === bestId ? <em className="lease-bank-best">{t("lease.banks.best")}</em> : null}</strong>
-                      <small>{bankTerms(p, q?.minDown ?? p.minDownPercent)}</small>
-                    </span>
-                    <span className="lease-bank-pay">
-                      <strong>{q ? `≈ ${money(q.result.monthly)}` : t("lease.sum.na")}</strong>
-                      <small>{q ? `${perPeriod(q.result.periodMonths)}${termsUnconfirmed ? "" : ` · ${t("lease.overpay", { sum: money(q.result.overpayment) })}`}` : t("lease.banks.needPrice")}</small>
-                    </span>
-                    <span className="lease-bank-check" aria-hidden>{active ? <Check size={16} /> : null}</span>
-                  </button>
-                  {p.website ? <a className="lease-bank-site" href={p.website} target="_blank" rel="noopener noreferrer nofollow">{t("lease.banks.site")} <ExternalLink size={13} aria-hidden /></a> : null}
-                </li>
-              );
-            })}
-          </ul>
-          <p>{t("lease.banks.note")}</p>
-        </section>
       ) : null}
       {result && !termsUnconfirmed ? (
         <section className="lease-insights" aria-label={t("lease.ins.aria")}>

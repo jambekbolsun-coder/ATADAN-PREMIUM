@@ -1,9 +1,11 @@
 "use client";
 
 import Image from "next/image";
-import { ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, Banknote, ChevronDown, Gauge, MessageCircle, ShieldCheck, Sprout, Wrench } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, Banknote, Gauge, MessageCircle, ShieldCheck, Sprout, Wrench } from "lucide-react";
 import { FinanceCalculator } from "./FinanceCalculator";
 import { ProductVideo } from "./ProductVideo";
+import { ProductSpecs } from "./ProductSpecs";
+import { leasePreview } from "../lib/lease-preview";
 import { useState } from "react";
 import type { Tractor } from "../types";
 import { formatApproximateUsdPrice, formatPrice } from "../lib/format";
@@ -23,9 +25,6 @@ export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRat
   const preferredIndex = rawGallery.findIndex((image) => !image.includes("/images/tractors"));
   const gallery = preferredIndex > 0 ? [rawGallery[preferredIndex], ...rawGallery.filter((_, index) => index !== preferredIndex)] : rawGallery;
   const [activeImage, setActiveImage] = useState(0);
-  const [specsOpen, setSpecsOpen] = useState(false);
-  const specs = localized.specs;
-  const visibleSpecs = specsOpen ? specs : specs.slice(0, 8);
   const discount = Math.min(90, Math.max(0, tractor.discountPercent ?? 0));
   const salePrice = tractor.price && discount ? Math.round(tractor.price * (1 - discount / 100)) : tractor.price;
 
@@ -82,20 +81,11 @@ export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRat
     </section> : null}
 
     <ProductVideo tractor={tractor}/>
-    <section className="product-specs-v3 section-shell">
-      <div className="specs-feed-card">
-        <div className="specs-heading"><div><span className="section-label">{t("product.specLabel")}</span><h2>{t("product.specTitle")}</h2></div><p>{t("product.specNote")}</p></div>
-        <div className={`specs-grid-v3 ${specsOpen ? "expanded" : ""}`}>{visibleSpecs.map(([label, value]) => <div key={label}><span>{label}</span><strong>{value}</strong></div>)}</div>
-        <div className="specs-footer">
-          {specs.length > 8 ? <button type="button" className={`specs-toggle ${specsOpen ? "open" : ""}`} onClick={() => setSpecsOpen((value) => !value)} aria-expanded={specsOpen}>{specsOpen ? t("product.hide") : t("product.showMore")}<ChevronDown size={18} /></button> : null}
-          {tractor.sourceUrl ? <a className="source-link-v3" href={tractor.sourceUrl} target="_blank" rel="noreferrer">{t("product.source")}<ArrowUpRight size={17} /></a> : null}
-        </div>
-      </div>
-    </section>
+    <ProductSpecs tractor={tractor} />
 
     <div className="section-shell product-lease"><FinanceCalculator tractor={tractor} config={leasingConfig} usdKgsRate={usdKgsRate}/></div>
     <section className="product-request-v3" id="request"><div className="section-shell product-request-inner"><div><span className="section-label light">Changfa {tractor.model}</span><h2>{t("ui.product.discussTitle")}</h2><p>{t("ui.product.discussText")}</p></div><LeadForm tractorSlug={tractor.slug} tractorModel={tractor.model} manager /></div></section>
 
-    <section className="related-v3 section-shell"><div className="editorial-heading"><div><span className="section-label">{t("product.relatedLabel")}</span><h2>{t("product.relatedTitle")}</h2></div><Link className="text-link" href="/catalog">{t("product.allCatalog")}<ArrowUpRight size={17} /></Link></div><div className="catalog-grid related-grid">{related.map((item) => <TractorCard tractor={item} key={item.slug} />)}</div></section>
+    <section className="related-v3 section-shell"><div className="editorial-heading"><div><span className="section-label">{t("product.relatedLabel")}</span><h2>{t("product.relatedTitle")}</h2></div><Link className="text-link" href="/catalog">{t("product.allCatalog")}<ArrowUpRight size={17} /></Link></div><div className="catalog-grid related-grid">{related.map((item) => <TractorCard tractor={item} key={item.slug} preview={leasePreview(item, leasingConfig, usdKgsRate)} />)}</div></section>
   </main>;
 }

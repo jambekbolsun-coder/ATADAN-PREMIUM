@@ -10,6 +10,7 @@ export type ModelFormValue = {
   discountPercent: string; promotionLabel: string; recommended: boolean; popular: boolean; sortOrder: string;
   image: string; images: string[]; videoUrl: string; description: string; comfort: string; equipment: string;
   specs: { k: string; v: string }[]; status: string; priceOnRequest: boolean;
+  cabin: string; gearbox: string;
 };
 
 const slugify = (v: string) => v.toLowerCase().replace(/[()]/g, "").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 90);
@@ -75,6 +76,10 @@ export function ModelForm({ initial, originalSlug, categories, slugLocked }: { i
         <h3 className="ax-card-h">Описание</h3>
         <Field label="Описание" htmlFor="m-desc"><textarea id="m-desc" className="ax-input" rows={5} value={v.description} onChange={(e) => set("description", e.target.value)} /></Field>
         <Field label="Комфорт и кабина" htmlFor="m-comf"><textarea id="m-comf" className="ax-input" rows={3} value={v.comfort} onChange={(e) => set("comfort", e.target.value)} /></Field>
+        <div className="ax-grid ax-g2" style={{ gap: 12 }}>
+          <Field label="Кабина" htmlFor="m-cabin" hint="Для фильтра и карточки в каталоге"><select id="m-cabin" className="ax-input" value={v.cabin} onChange={(e) => set("cabin", e.target.value)}><option value="">Сайт определит сам по характеристикам</option><option value="cab">Только с кабиной</option><option value="frame">Только с дугой</option><option value="both">Кабина или дуга на выбор</option></select></Field>
+          <Field label="Коробка передач коротко" htmlFor="m-gear" hint="Например: 12+12. Если пусто, сайт возьмёт из характеристик"><input id="m-gear" className="ax-input num" value={v.gearbox} onChange={(e) => set("gearbox", e.target.value)} placeholder="12+12" maxLength={20} /></Field>
+        </div>
         <Field label="Комплектация" htmlFor="m-eq" hint="По одному пункту в строке"><textarea id="m-eq" className="ax-input" rows={4} value={v.equipment} onChange={(e) => set("equipment", e.target.value)} /></Field>
       </section>
 

@@ -98,6 +98,7 @@ export type ModelInput = {
   image: string; images: string[]; videoUrl: string;
   description: string; comfort: string; equipment: string; specs: { k: string; v: string }[];
   status: string; priceNote?: string; priceOnRequest?: boolean;
+  cabin?: string; gearbox?: string;
 };
 
 export async function saveModel(actor: Actor, input: ModelInput) {
@@ -145,6 +146,8 @@ export async function saveModel(actor: Actor, input: ModelInput) {
       price, approximatePriceUsd: priceUsd ?? undefined, priceOnRequest: !!input.priceOnRequest, discountPercent: discount, promotionLabel: text(input.promotionLabel, 80) || null,
       inStock: false, recommended: !!input.recommended, popular: !!input.popular, status, sortOrder,
       image, images, videoUrl: videoUrl || null, description: text(input.description, 3000), comfort: text(input.comfort, 2000), equipment, specs,
+      cabin: input.cabin === "cab" || input.cabin === "frame" || input.cabin === "both" ? input.cabin : null,
+      gearbox: text(input.gearbox, 20) || null,
     };
     // служебные поля списка не храним
     for (const k of ["custom", "edited", "stock", "transit", "reserved", "sold", "cost_minor", "cost_version", "availableUnits", "usd_manual"]) delete (data as Record<string, unknown>)[k];

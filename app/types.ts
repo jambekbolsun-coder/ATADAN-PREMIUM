@@ -27,6 +27,10 @@ export type Tractor = {
   comfort: string;
   equipment?: string[];
   specs: Record<string, string>;
+  /** Кабина из админки: cab = только кабина, frame = только дуга, both = кабина или дуга на выбор. */
+  cabin?: "cab" | "frame" | "both" | null;
+  /** Коробка передач коротко из админки: «12+12». */
+  gearbox?: string | null;
 };
 
 export type Lead = {

@@ -42,7 +42,7 @@ export default async function ModelCard({ params, searchParams }: PageProps<"/ad
           slugLocked={!m.custom}
           categories={CATEGORIES.includes(m.category) ? CATEGORIES : [m.category, ...CATEGORIES]}
           initial={{
-            slug: m.slug, model: m.model, hp: String(m.hp), category: m.category, farmArea: m.farmArea ?? "", price: m.price ? String(m.price) : "", priceUsd: m.usd_manual ? String(m.usd_manual) : "", priceOnRequest: !!m.priceOnRequest,
+            slug: m.slug, model: m.model, hp: String(m.hp), category: m.category, farmArea: m.farmArea ?? "", price: m.price ? String(m.price) : "", priceUsd: m.usd_manual ? String(m.usd_manual) : "", priceOnRequest: !!m.priceOnRequest, cabin: m.cabin ?? "", gearbox: m.gearbox ?? "",
             discountPercent: m.discountPercent ? String(m.discountPercent) : "", promotionLabel: m.promotionLabel ?? "", recommended: !!m.recommended, popular: !!m.popular, sortOrder: String(m.sortOrder ?? 0),
             image: m.image ?? "", images: (m.images ?? []).filter((x) => x !== m.image), videoUrl: m.videoUrl ?? "", description: m.description ?? "", comfort: m.comfort ?? "", equipment: (m.equipment ?? []).join("\n"),
             specs: Object.entries(m.specs ?? {}).map(([k, v]) => ({ k, v: String(v) })), status: m.status,

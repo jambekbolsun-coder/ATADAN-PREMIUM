@@ -2,32 +2,83 @@
 
 import Image from "next/image";
 import { Link } from "./SiteLink";
-import { ArrowUpRight, Gauge, Sprout } from "lucide-react";
+import { Check, MessageCircle, Plus } from "lucide-react";
 import type { Tractor } from "../types";
 import { formatApproximateUsdPrice, formatPrice } from "../lib/format";
 import { useI18n } from "./I18n";
+import { useSiteSettings } from "./SiteSettings";
 import { localizeTractor } from "../lib/tractor-localization";
+import { tractorCabin, tractorGearbox, tractorMassKg, tractorTractionKn } from "../lib/tractor-facts";
+import type { LeasePreview } from "../lib/lease-preview";
 
-export function TractorCard({ tractor, featured = false }: { tractor: Tractor; featured?: boolean }) {
+type CompareControl = { active: boolean; full: boolean; onToggle: () => void };
+
+export function TractorCard({ tractor, featured = false, preview = null, compare }: { tractor: Tractor; featured?: boolean; preview?: LeasePreview | null; compare?: CompareControl }) {
   const { t, locale } = useI18n();
+  const settings = useSiteSettings();
   const localized = localizeTractor(tractor, locale);
   const discount = Math.min(90, Math.max(0, tractor.discountPercent ?? 0));
   const salePrice = tractor.price && discount ? Math.round(tractor.price * (1 - discount / 100)) : tractor.price;
+  const numberLocale = locale === "en" ? "en-US" : "ru-RU";
+  const num = (value: number) => new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 1 }).format(value);
+  const mass = tractorMassKg(tractor), traction = tractorTractionKn(tractor), gearbox = tractorGearbox(tractor), cabin = tractorCabin(tractor);
+  const tiles: Array<[string, string]> = [
+    [t("ui.card.power"), `${tractor.hp} ${t("common.hp")}`],
+    mass ? [t("ui.card.mass"), `${num(mass)} ${t("ui.card.kg")}`] : traction ? [t("ui.card.traction"), `${num(traction)} ${t("ui.card.kn")}`] : [t("ui.card.class"), localized.category],
+    gearbox ? [t("ui.card.gearbox"), gearbox] : [t("ui.card.drive"), "4×4"],
+    cabin ? [t("ui.card.cabin"), t(`ui.card.cabin.${cabin}`)] : [t("ui.card.class"), localized.category],
+  ];
+  const stockText = tractor.inStock ? (tractor.availableUnits ? t("ui.card.stockCount", { n: tractor.availableUnits }) : t("product.inStock")) : t("product.onOrder");
+  const href = `/catalog/${tractor.slug}`;
+  const whatsapp = `https://wa.me/${settings.phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Здравствуйте! Интересует Changfa ${tractor.model} (${tractor.hp} л.с.). Подскажите цену и наличие.`)}`;
 
   return (
-    <article className={`tractor-card ${featured ? "featured" : ""}`}>
-      <Link href={`/catalog/${tractor.slug}`} className="tractor-card-image" aria-label={t("ui.card.details", { model: tractor.model })}>
-        <span className={`stock-badge ${tractor.inStock ? "available" : "order"}`}>{tractor.inStock ? t("product.inStock") : t("product.onOrder")}</span>
+    <article className={`tractor-card tractor-card-v4 ${featured ? "featured" : ""}`}>
+      <Link href={href} className="tractor-card-image" aria-label={t("ui.card.details", { model: tractor.model })}>
+        <span className={`stock-badge ${tractor.inStock ? "available" : "order"}`}>{tractor.inStock ? <Check size={13} aria-hidden /> : null}{stockText}</span>
         {discount && tractor.price ? <span className="promotion-badge"><small>{tractor.promotionLabel || t("product.promo")}</small><strong>−{discount}%</strong></span> : null}
         <Image src={tractor.image} alt={t("ui.card.alt", { model: tractor.model })} width={620} height={470} sizes="(max-width: 760px) 92vw, (max-width: 1200px) 46vw, 31vw" />
       </Link>
       <div className="tractor-card-body">
-        <div className="tractor-kicker"><span>{localized.category}</span><span className={discount && tractor.price ? "sale-card-price" : "tractor-public-price"}>{discount && tractor.price ? <del>{formatPrice(tractor.price, locale)}</del> : null}{salePrice ? formatPrice(salePrice, locale) : formatApproximateUsdPrice(tractor.approximatePriceUsd, locale)}{!salePrice && tractor.approximatePriceUsd ? <small>{t("ui.card.approx")}</small> : null}</span></div>
-        <h3><Link href={`/catalog/${tractor.slug}`}>Changfa {tractor.model}</Link></h3>
-        <div className="tractor-meta"><span><Gauge size={17} aria-hidden="true" />{tractor.hp} {t("common.hp")}</span><span><Sprout size={17} aria-hidden="true" />{localized.farmArea}</span></div>
-        <p className="tractor-card-description">{localized.description}</p>
-        <div className="tractor-finance"><small>{t("product.installment")}</small><strong><Link href={`/catalog/${tractor.slug}#leasing`}>{t("finance.calcCta")}</Link></strong></div>
-        <Link className="details-link" href={`/catalog/${tractor.slug}`}>{t("product.details")} <ArrowUpRight size={17} aria-hidden="true" /></Link>
+        <h3><Link href={href}>Changfa {tractor.model}</Link></h3>
+        <p className="tractor-card-fit">{t("ui.card.fits", { area: localized.farmArea })}</p>
+        <dl className="tractor-card-specs">
+          {tiles.map(([label, value], index) => <div key={`${label}-${index}`}><dt>{label}</dt><dd>{value}</dd></div>)}
+        </dl>
+        <div className="tractor-card-money">
+          <div>
+            <small>{discount && tractor.price ? <del>{formatPrice(tractor.price, locale)}</del> : t("ui.card.price")}</small>
+            <strong>{salePrice ? formatPrice(salePrice, locale) : formatApproximateUsdPrice(tractor.approximatePriceUsd, locale)}</strong>
+          </div>
+          {preview ? (
+            <Link href={`${href}#leasing`} className="tractor-card-lease">
+              <small>{t("ui.card.lease", { p: num(preview.downPercent) })}</small>
+              <strong>{t("ui.card.perMonth", { sum: new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 0 }).format(preview.monthly) })}</strong>
+            </Link>
+          ) : (
+            <Link href={`${href}#leasing`} className="tractor-card-lease">
+              <small>{t("product.installment")}</small>
+              <strong>{t("finance.calcCta")}</strong>
+            </Link>
+          )}
+        </div>
+        <div className="tractor-card-actions">
+          <Link className="primary-btn" href={href}>{t("product.details")}</Link>
+          <a className="tractor-card-icon" href={whatsapp} target="_blank" rel="noopener noreferrer" aria-label={t("ui.card.whatsapp", { model: tractor.model })} title={t("ui.card.whatsapp", { model: tractor.model })}><MessageCircle size={19} aria-hidden /></a>
+          {compare ? (
+            <button
+              type="button"
+              className={`tractor-card-icon${compare.active ? " is-on" : ""}`}
+              aria-pressed={compare.active}
+              disabled={!compare.active && compare.full}
+              onClick={compare.onToggle}
+              aria-label={t(compare.active ? "ui.card.compareRemove" : "ui.card.compareAdd", { model: tractor.model })}
+              title={t(compare.active ? "ui.card.compareRemove" : compare.full ? "ui.card.compareFull" : "ui.card.compareAdd", { model: tractor.model })}
+            >
+              {compare.active ? <Check size={19} aria-hidden /> : <Plus size={19} aria-hidden />}
+            </button>
+          ) : null}
+        </div>
       </div>
     </article>
   );

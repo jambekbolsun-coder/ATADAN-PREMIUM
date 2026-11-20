@@ -1,12 +1,6 @@
 import { Link } from "../components/SiteLink";
-import {
-  ArrowUpRight,
-  ClipboardCheck,
-  Cog,
-  Headphones,
-  Phone,
-  Wrench,
-} from "lucide-react";
+import { ArrowUpRight, Cog, Phone } from "lucide-react";
+import { ServiceBlocks } from "../components/ServiceBlocks";
 import { Trans } from "../components/I18n";
 import { PageHero } from "../components/PageHero";
 import { LeadModalButton } from "../components/LeadModalButton";
@@ -28,38 +22,7 @@ export default async function ServicePage() {
         titleId="service.title"
         subtitleId="service.subtitle"
       />
-      <section className="section-shell service-grid">
-        <article>
-          <Wrench />
-          <span>01</span>
-          <h2>
-            <Trans id="service.maintenance" />
-          </h2>
-          <p>
-            <Trans id="service.maintenanceText" />
-          </p>
-        </article>
-        <article>
-          <ClipboardCheck />
-          <span>02</span>
-          <h2>
-            <Trans id="service.diagnostics" />
-          </h2>
-          <p>
-            <Trans id="service.diagnosticsText" />
-          </p>
-        </article>
-        <article>
-          <Headphones />
-          <span>03</span>
-          <h2>
-            <Trans id="service.support" />
-          </h2>
-          <p>
-            <Trans id="service.supportText" />
-          </p>
-        </article>
-      </section>
+      <ServiceBlocks />
       {materials.length ? (
         <section className="section-shell public-service-materials">
           <header>

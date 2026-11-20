@@ -1,6 +1,7 @@
 import type { Locale } from "../types";
 import { uiCopy } from "./site-copy-ui";
 import { leaseCopy } from "./site-copy-lease";
+import { v4Copy } from "./site-copy-v4";
 
 const baseCopy: Record<Locale, Record<string, string>> = {
   ru: {
@@ -724,7 +725,7 @@ const baseCopy: Record<Locale, Record<string, string>> = {
 
 /** Общий словарь сайта: основные фразы + интерфейс (site-copy-ui.ts) + калькулятор лизинга (site-copy-lease.ts). */
 export const copy: Record<Locale, Record<string, string>> = {
-  ru: { ...baseCopy.ru, ...uiCopy.ru, ...leaseCopy.ru },
-  ky: { ...baseCopy.ky, ...uiCopy.ky, ...leaseCopy.ky },
-  en: { ...baseCopy.en, ...uiCopy.en, ...leaseCopy.en },
+  ru: { ...baseCopy.ru, ...uiCopy.ru, ...leaseCopy.ru, ...v4Copy.ru },
+  ky: { ...baseCopy.ky, ...uiCopy.ky, ...leaseCopy.ky, ...v4Copy.ky },
+  en: { ...baseCopy.en, ...uiCopy.en, ...leaseCopy.en, ...v4Copy.en },
 };
