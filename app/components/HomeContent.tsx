@@ -4,6 +4,9 @@ import { Instagram } from "./BrandIcons";
 import { ArrowDown, ArrowUpRight, BadgeCheck, Banknote, Headphones, Pause, Play, ShieldCheck, Wrench } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { Tractor } from "../types";
+import type { LeasePublicConfig } from "../lib/leasing";
+import { leasePreview } from "../lib/lease-preview";
+import type { UsdKgsRate } from "../lib/exchange-rate";
 import { Link } from "./SiteLink";
 import { LeadForm } from "./LeadForm";
 import { MotionReveal } from "./MotionReveal";
@@ -19,15 +22,17 @@ const heroSlides = [
   { image: "/images/hero/changfa-lineup-4k.webp", key: "slide3", position: "center" },
 ] as const;
 
-export function HomeContent({ tractors }: { tractors: Tractor[] }) {
+export function HomeContent({ tractors, config, usdKgsRate }: { tractors: Tractor[]; config: LeasePublicConfig; usdKgsRate: UsdKgsRate | null }) {
   const { t } = useI18n();
   const settings = useSiteSettings();
   const whatsappHref = "https://wa.me/" + settings.phone.replace(/\D/g, "");
   const [activeSlide, setActiveSlide] = useState(0);
   const [paused, setPaused] = useState(false);
   const [interacting, setInteracting] = useState(false);
-  const featured = [...tractors].sort((a,b)=>b.hp-a.hp).slice(0, 4);
-  const recommended = tractors.filter(p => p.recommended).slice(0, 6);
+  // На главной три карточки в ряд, как в каталоге: сначала популярные, потом самые мощные.
+  const featured = [...tractors].sort((a,b)=>Number(Boolean(b.popular))-Number(Boolean(a.popular)) || b.hp-a.hp).slice(0, 3);
+  const featuredSlugs = new Set(featured.map((item) => item.slug));
+  const recommended = tractors.filter(p => p.recommended && !featuredSlugs.has(p.slug)).slice(0, 3);
   useEffect(() => {
     if (paused || interacting || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     const timer = window.setInterval(() => setActiveSlide((current) => (current + 1) % heroSlides.length), 3000);
@@ -73,9 +78,9 @@ export function HomeContent({ tractors }: { tractors: Tractor[] }) {
         <div><span className="section-label">{t("home.catalogLabel")}</span><h2>{t("home.catalogTitle")}</h2></div>
         <div><p>{t("home.catalogText")}</p><div className="editorial-links"><Link className="text-link" href="/catalog">{t("home.allModels")}<ArrowUpRight size={18} /></Link><Link className="text-link popular-link" href="/catalog?popular=1">{t("ui.catalog.popular")}<ArrowUpRight size={18} /></Link></div></div>
       </div>
-      <div className="featured-grid-v3">{featured.map((tractor, index) => <TractorCard tractor={tractor} featured={index === 0} key={tractor.slug} />)}</div>
+      <div className="featured-grid-v3 home-cards-v4">{featured.map((tractor) => <TractorCard tractor={tractor} preview={leasePreview(tractor, config, usdKgsRate)} key={tractor.slug} />)}</div>
     </section>
-    {recommended.length ? <section className="catalog-preview section-shell"><div className="editorial-heading"><h2>{t("home.recommended")}</h2></div><div className="featured-grid-v3">{recommended.map(p=><TractorCard tractor={p} key={p.slug}/>)}</div></section> : null}
+    {recommended.length ? <section className="catalog-preview section-shell"><div className="editorial-heading"><h2>{t("home.recommended")}</h2></div><div className="featured-grid-v3 home-cards-v4">{recommended.map(p=><TractorCard tractor={p} preview={leasePreview(p, config, usdKgsRate)} key={p.slug}/>)}</div></section> : null}
 
     <section className="support-story section-shell">
       <div className="support-photo">

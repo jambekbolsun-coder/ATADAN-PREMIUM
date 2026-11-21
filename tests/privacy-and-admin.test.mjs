@@ -32,12 +32,13 @@ test("lead consent is required and persisted with source metadata", async () => 
   assert.match(adminSchema,/ALTER TABLE leads ADD COLUMN IF NOT EXISTS utm_term/);
 });
 
-test("home highlights four strongest models and admin has three workspaces", async () => {
+test("home highlights three models (popular first, then strongest) and admin has three workspaces", async () => {
   const [home,portal]=await Promise.all([
     readFile(new URL("../app/components/HomeContent.tsx",import.meta.url),"utf8"),
     readFile(new URL("../app/components/AdminPortalHome.tsx",import.meta.url),"utf8"),
   ]);
-  assert.match(home,/sort\(\(a,b\)=>b\.hp-a\.hp\)\.slice\(0, 4\)/);
+  assert.match(home,/b\.hp-a\.hp\)\.slice\(0, 3\)/);
+  assert.match(home,/b\.popular/);
   assert.match(home,/popular=1/);
   assert.match(portal,/id:"marketing"/);
   assert.match(portal,/id:"company"/);

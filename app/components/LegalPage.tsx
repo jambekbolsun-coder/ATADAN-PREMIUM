@@ -1,10 +1,13 @@
 "use client";
 
-import { ArrowUpRight, CheckCircle2, Cookie, FileText, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { ArrowUpRight, BadgeCheck, CheckCircle2, Cookie, FileSignature, FileText, Languages, LockKeyhole, Mail, ShieldCheck, UserCheck } from "lucide-react";
+import Image from "next/image";
+import { useEffect, useState } from "react";
 import { Link } from "./SiteLink";
 import { useI18n, useLocalizedAddress } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
-import { OPEN_PRIVACY_SETTINGS_EVENT } from "./CookieConsent";
+import { OPEN_PRIVACY_SETTINGS_EVENT, PRIVACY_CHOICE_EVENT, PRIVACY_CHOICE_KEY } from "./CookieConsent";
+import { ScrollReveal } from "./ScrollReveal";
 
 export type LegalKind = "privacy" | "terms" | "cookies";
 
@@ -50,18 +53,90 @@ const content: Record<"ru" | "ky" | "en", Record<LegalKind, { kicker: string; ti
 
 const icons = [ShieldCheck, LockKeyhole, CheckCircle2, FileText, Cookie, Mail];
 
+const NEXT_LINKS = [
+  { href: "/catalog", image: "/images/banners/catalog.webp", title: "ui.legal.nextCatalog", text: "ui.legal.nextCatalogText" },
+  { href: "/finance", image: "/images/banners/finance.webp", title: "ui.legal.nextFinance", text: "ui.legal.nextFinanceText" },
+  { href: "/about", image: "/images/banners/about.webp", title: "ui.legal.nextAbout", text: "ui.legal.nextAboutText" },
+] as const;
+
+/** Текущий выбор посетителя о cookie, обновляется после нового выбора в баннере. */
+function useConsentChoice() {
+  const [choice, setChoice] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    const read = () => setChoice(window.localStorage.getItem(PRIVACY_CHOICE_KEY));
+    const timer = window.setTimeout(read, 0);
+    window.addEventListener(PRIVACY_CHOICE_EVENT, read);
+    return () => { window.clearTimeout(timer); window.removeEventListener(PRIVACY_CHOICE_EVENT, read); };
+  }, []);
+  return choice;
+}
+
+/** Подсветка в оглавлении раздела, который сейчас на экране. */
+function useActiveSection(count: number) {
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    if (!("IntersectionObserver" in window)) return;
+    const nodes = Array.from({ length: count }, (_, index) => document.getElementById(`legal-${index + 1}`)).filter((node): node is HTMLElement => Boolean(node));
+    const observer = new IntersectionObserver((entries) => {
+      const visible = entries.filter((entry) => entry.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top)[0];
+      if (visible) setActive(nodes.indexOf(visible.target as HTMLElement));
+    }, { rootMargin: "-30% 0px -55% 0px" });
+    nodes.forEach((node) => observer.observe(node));
+    return () => observer.disconnect();
+  }, [count]);
+  return active;
+}
+
 export function LegalPage({ kind }: { kind: LegalKind }) {
   const { locale, t } = useI18n();
   const address = useLocalizedAddress();
   const settings = useSiteSettings();
   const page = content[locale][kind];
-  return <main className="legal-page">
-    <section className="legal-hero"><div className="section-shell"><span>{page.kicker}</span><h1>{page.title}</h1><p>{page.intro}</p><small>{page.updated}</small></div></section>
-    <section className="section-shell legal-layout">
-      <aside><strong>ATADAN · Changfa</strong><p>{address}<br/>{settings.phone}</p><nav><Link href="/privacy">{t("ui.legal.navPrivacy")}</Link><Link href="/terms">{t("ui.legal.navTerms")}</Link><Link href="/cookies">{t("ui.legal.navCookies")}</Link></nav></aside>
-      <div className="legal-blocks">{page.blocks.map((block,index)=>{const Icon=icons[index%icons.length];return <article key={block.title}><i><Icon aria-hidden="true"/></i><div><span>{String(index+1).padStart(2,"0")}</span><h2>{block.title}</h2><p>{block.text}</p>{block.points?<ul>{block.points.map(point=><li key={point}>{point}</li>)}</ul>:null}</div></article>})}
-        <div className="legal-contact"><div><strong>ATADAN</strong><p>{settings.phone} · {address}</p></div>{kind==="cookies"?<button type="button" onClick={()=>window.dispatchEvent(new Event(OPEN_PRIVACY_SETTINGS_EVENT))}><Cookie aria-hidden="true"/>{t("ui.legal.cookieSettings")}</button>:<a href={`https://wa.me/${settings.phone.replace(/\D/g,"")}`} target="_blank" rel="noreferrer">{t("nav.contact")} <ArrowUpRight aria-hidden="true"/></a>}</div>
+  const choice = useConsentChoice();
+  const active = useActiveSection(page.blocks.length);
+  const openSettings = () => window.dispatchEvent(new Event(OPEN_PRIVACY_SETTINGS_EVENT));
+  const badges = kind === "terms"
+    ? [{ Icon: BadgeCheck, text: t("ui.prod.why1") }, { Icon: FileSignature, text: t("ui.prod.why2") }, { Icon: ShieldCheck, text: t("ui.prod.why3") }]
+    : [{ Icon: ShieldCheck, text: t("ui.legal.badge1") }, { Icon: UserCheck, text: t("ui.legal.badge2") }, { Icon: LockKeyhole, text: t("ui.legal.badge3") }];
+  const stored = [
+    { Icon: Languages, title: "ui.legal.stored.lang", note: "ui.legal.stored.langNote" },
+    { Icon: Cookie, title: "ui.legal.stored.choice", note: "ui.legal.stored.choiceNote" },
+    { Icon: FileText, title: "ui.legal.stored.visitor", note: "ui.legal.stored.visitorNote" },
+    { Icon: LockKeyhole, title: "ui.legal.stored.admin", note: "ui.legal.stored.adminNote" },
+  ];
+  const choiceText = choice === "analytics" ? t("ui.legal.choice.all") : choice === "necessary" ? t("ui.legal.choice.necessary") : t("ui.legal.choice.none");
+  const phoneDigits = settings.phone.replace(/\D/g, "");
+  return <main className="legal-page legal-v5">
+    <section className="legal-hero">
+      <div className="legal-hero-bg" aria-hidden="true"><i /><i /><i /></div>
+      <div className="section-shell legal-hero-grid">
+        <div className="legal-hero-copy"><span>{page.kicker}</span><h1>{page.title}</h1><p>{page.intro}</p><small>{page.updated}</small></div>
+        <div className="legal-hero-visual" aria-hidden="true">
+          <div className="legal-hero-ring" />
+          <Image src="/images/tractors-4k/cfg1404-g4.webp" alt="" width={720} height={540} sizes="(max-width: 900px) 70vw, 36vw" priority />
+          {badges.map(({ Icon, text }, index) => <span key={text} className={`legal-badge legal-badge-${index + 1}`}><Icon size={16} />{text}</span>)}
+        </div>
       </div>
+    </section>
+    <section className="section-shell legal-layout">
+      <aside>
+        <small className="legal-aside-label">{t("ui.legal.contents")}</small>
+        <ol className="legal-toc">{page.blocks.map((block, index) => <li key={block.title}><a href={`#legal-${index + 1}`} aria-current={active === index ? "true" : undefined}><span>{String(index + 1).padStart(2, "0")}</span>{block.title}</a></li>)}</ol>
+        <nav><Link href="/privacy" aria-current={kind === "privacy" ? "page" : undefined}>{t("ui.legal.navPrivacy")}</Link><Link href="/terms" aria-current={kind === "terms" ? "page" : undefined}>{t("ui.legal.navTerms")}</Link><Link href="/cookies" aria-current={kind === "cookies" ? "page" : undefined}>{t("ui.legal.navCookies")}</Link></nav>
+        <div className="legal-aside-contact"><strong>ATADAN · Changfa</strong><p>{address}<br/>{settings.phone}</p></div>
+      </aside>
+      <div className="legal-blocks">
+        {kind === "cookies" ? <div className="legal-cookie-panel">
+          <div className="legal-choice"><small>{t("ui.legal.choiceTitle")}</small><strong data-choice={choice ?? "none"}><i aria-hidden="true" />{choice === undefined ? "…" : choiceText}</strong><button type="button" onClick={openSettings}><Cookie size={17} aria-hidden="true" />{t("ui.legal.change")}</button></div>
+          <div className="legal-stored"><small>{t("ui.legal.storedTitle")}</small><ul>{stored.map(({ Icon, title, note }) => <li key={title}><Icon size={17} aria-hidden="true" /><span><b>{t(title)}</b>{t(note)}</span></li>)}</ul></div>
+        </div> : null}
+        <ScrollReveal className="legal-articles">{page.blocks.map((block, index) => { const Icon = icons[index % icons.length]; return <article key={block.title} id={`legal-${index + 1}`} data-reveal><i><Icon aria-hidden="true" /></i><div><span>{String(index + 1).padStart(2, "0")}</span><h2>{block.title}</h2><p>{block.text}</p>{block.points ? <ul>{block.points.map((point) => <li key={point}>{point}</li>)}</ul> : null}</div></article>; })}</ScrollReveal>
+        <div className="legal-contact"><div><strong>ATADAN</strong><p>{settings.phone} · {address}</p></div>{kind === "cookies" ? <button type="button" onClick={openSettings}><Cookie aria-hidden="true" />{t("ui.legal.cookieSettings")}</button> : <a href={`https://wa.me/${phoneDigits}`} target="_blank" rel="noreferrer">{t("nav.contact")} <ArrowUpRight aria-hidden="true" /></a>}</div>
+      </div>
+    </section>
+    <section className="section-shell legal-next" aria-labelledby="legal-next-title">
+      <h2 id="legal-next-title">{t("ui.legal.next")}</h2>
+      <ScrollReveal className="legal-next-grid">{NEXT_LINKS.map((item) => <Link key={item.href} href={item.href} className="legal-next-card" data-reveal><span className="legal-next-img"><Image src={item.image} alt="" fill sizes="(max-width: 760px) 90vw, 30vw" /></span><span className="legal-next-body"><strong>{t(item.title)}</strong><small>{t(item.text)}</small><ArrowUpRight size={18} aria-hidden="true" /></span></Link>)}</ScrollReveal>
     </section>
   </main>;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { ArrowUpFromLine, ArrowUpRight, Cog, FileDown, Gauge, ListTree, Ruler, Scale, X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Tractor } from "../types";
 import { useI18n } from "./I18n";
 import { Link } from "./SiteLink";
@@ -10,6 +10,19 @@ import { SPEC_GROUPS, tractorGearbox, tractorKw, tractorMassKg, tractorMaxSpeed,
 
 const ICONS = { engine: Gauge, drive: Cog, size: Ruler, hitch: ArrowUpFromLine, other: ListTree } as const;
 const COMPACT_ROWS = 3;
+const LONG_VALUE = 70;
+
+/** Длинное значение в окне: две строки и кнопка «Показать полностью». */
+function LongValue({ value }: { value: string }) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  return (
+    <span className={`spec-long${open ? " is-open" : ""}`}>
+      <span>{value}</span>
+      <button type="button" aria-expanded={open} onClick={() => setOpen(!open)}>{t(open ? "ui.specs.less" : "ui.specs.full")}</button>
+    </span>
+  );
+}
 
 /** Характеристики «на одном экране»: главные цифры, 4 группы по 3 строки, полный список в окне «Подробнее». */
 export function ProductSpecs({ tractor }: { tractor: Tractor }) {
@@ -54,7 +67,7 @@ export function ProductSpecs({ tractor }: { tractor: Tractor }) {
       <section className="spec-group" key={`${scope}-${group.id}`} aria-labelledby={`${scope}-${group.id}`}>
         <h3 id={`${scope}-${group.id}`}><Icon size={18} aria-hidden />{t(`ui.specs.group.${group.id}`)}</h3>
         <dl>
-          {list.map(([label, value]) => <div key={label}><dt>{label}</dt><dd title={rows === null ? undefined : value}>{value}</dd></div>)}
+          {list.map(([label, value]) => <div key={label}><dt>{label}</dt><dd title={rows === null ? undefined : value}>{rows === null && value.length > LONG_VALUE ? <LongValue value={value} /> : value}</dd></div>)}
         </dl>
       </section>
     );
@@ -84,7 +97,7 @@ export function ProductSpecs({ tractor }: { tractor: Tractor }) {
         </div>
       </div>
 
-      <dialog ref={dialogRef} className="site-dialog specs-dialog" aria-labelledby="specs-dialog-title">
+      <dialog ref={dialogRef} className="site-dialog specs-dialog" data-lenis-prevent aria-labelledby="specs-dialog-title">
         <div className="site-dialog-inner">
           <header>
             <div>
@@ -93,7 +106,7 @@ export function ProductSpecs({ tractor }: { tractor: Tractor }) {
             </div>
             <button type="button" className="dialog-close" onClick={() => dialogRef.current?.close()} aria-label={t("ui.common.close")}><X size={20} /></button>
           </header>
-          <div className="specs-v4-groups is-full">{groups.map((group) => groupBlock(group, null, "d"))}</div>
+          <div className="specs-v4-groups is-full site-dialog-body">{groups.map((group) => groupBlock(group, null, "d"))}</div>
           <footer>
             <button type="button" className="ghost-btn" onClick={printSpecs}><FileDown size={18} aria-hidden />{t("ui.specs.pdf")}</button>
             <span className="wizard-note">{t("product.specNote")}</span>

@@ -8,7 +8,8 @@ import { formatApproximateUsdPrice, formatPrice } from "../lib/format";
 import { useI18n } from "./I18n";
 import { useSiteSettings } from "./SiteSettings";
 import { localizeTractor } from "../lib/tractor-localization";
-import { tractorCabin, tractorGearbox, tractorMassKg, tractorTractionKn } from "../lib/tractor-facts";
+import { tractorCabin, tractorGearbox, tractorMassKg, tractorMaxSpeed, tractorTractionKn } from "../lib/tractor-facts";
+import { canTrimPhoto, tractorPhotoLoader } from "../lib/photo-loader";
 import type { LeasePreview } from "../lib/lease-preview";
 
 type CompareControl = { active: boolean; full: boolean; onToggle: () => void };
@@ -22,12 +23,18 @@ export function TractorCard({ tractor, featured = false, preview = null, compare
   const numberLocale = locale === "en" ? "en-US" : "ru-RU";
   const num = (value: number) => new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 1 }).format(value);
   const mass = tractorMassKg(tractor), traction = tractorTractionKn(tractor), gearbox = tractorGearbox(tractor), cabin = tractorCabin(tractor);
-  const tiles: Array<[string, string]> = [
-    [t("ui.card.power"), `${tractor.hp} ${t("common.hp")}`],
-    mass ? [t("ui.card.mass"), `${num(mass)} ${t("ui.card.kg")}`] : traction ? [t("ui.card.traction"), `${num(traction)} ${t("ui.card.kn")}`] : [t("ui.card.class"), localized.category],
-    gearbox ? [t("ui.card.gearbox"), gearbox] : [t("ui.card.drive"), "4×4"],
-    cabin ? [t("ui.card.cabin"), t(`ui.card.cabin.${cabin}`)] : [t("ui.card.class"), localized.category],
+  const speed = tractorMaxSpeed(tractor);
+  // Мощность всегда первая, дальше три разных факта по важности, без повторов.
+  const extra: Array<[string, string] | null> = [
+    mass ? [t("ui.card.mass"), `${num(mass)} ${t("ui.card.kg")}`] : null,
+    gearbox ? [t("ui.card.gearbox"), gearbox] : null,
+    cabin ? [t("ui.card.cabin"), t(`ui.card.cabin.${cabin}`)] : null,
+    traction ? [t("ui.card.traction"), `${num(traction)} ${t("ui.card.kn")}`] : null,
+    speed ? [t("ui.cat.cmp.speed"), t("ui.cat.speedUpTo", { n: speed })] : null,
+    [t("ui.card.drive"), "4×4"],
+    [t("ui.card.class"), localized.category.replace(/\s*(класс|классы|class)$/i, "")],
   ];
+  const tiles: Array<[string, string]> = [[t("ui.card.power"), `${tractor.hp} ${t("common.hp")}`], ...extra.filter((item): item is [string, string] => Boolean(item)).slice(0, 3)];
   const stockText = tractor.inStock ? (tractor.availableUnits ? t("ui.card.stockCount", { n: tractor.availableUnits }) : t("product.inStock")) : t("product.onOrder");
   const href = `/catalog/${tractor.slug}`;
   const whatsapp = `https://wa.me/${settings.phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Здравствуйте! Интересует Changfa ${tractor.model} (${tractor.hp} л.с.). Подскажите цену и наличие.`)}`;
@@ -37,7 +44,7 @@ export function TractorCard({ tractor, featured = false, preview = null, compare
       <Link href={href} className="tractor-card-image" aria-label={t("ui.card.details", { model: tractor.model })}>
         <span className={`stock-badge ${tractor.inStock ? "available" : "order"}`}>{tractor.inStock ? <Check size={13} aria-hidden /> : null}{stockText}</span>
         {discount && tractor.price ? <span className="promotion-badge"><small>{tractor.promotionLabel || t("product.promo")}</small><strong>−{discount}%</strong></span> : null}
-        <Image src={tractor.image} alt={t("ui.card.alt", { model: tractor.model })} width={620} height={470} sizes="(max-width: 760px) 92vw, (max-width: 1200px) 46vw, 31vw" />
+        <Image loader={canTrimPhoto(tractor.image) ? tractorPhotoLoader : undefined} src={tractor.image} alt={t("ui.card.alt", { model: tractor.model })} width={620} height={470} sizes="(max-width: 760px) 92vw, (max-width: 1200px) 46vw, 31vw" />
       </Link>
       <div className="tractor-card-body">
         <h3><Link href={href}>Changfa {tractor.model}</Link></h3>

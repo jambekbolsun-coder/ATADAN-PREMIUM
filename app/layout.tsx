@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { getLeasingPublicConfig } from "./lib/leasing-public";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./styles/customer-experience.css";
@@ -60,13 +61,14 @@ export default async function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [{ settings },faqRecords,locale] = await Promise.all([getSiteSettings(),getPublishedRecords("faq"),getRequestLocale()]);
+  const [{ settings },faqRecords,locale,leaseConfig] = await Promise.all([getSiteSettings(),getPublishedRecords("faq"),getRequestLocale(),getLeasingPublicConfig().catch(()=>null)]);
+  const lease=leaseConfig?{banks:leaseConfig.programs.map(program=>program.name),minDown:leaseConfig.programs.length?Math.min(...leaseConfig.programs.map(program=>program.minDownPercent)):0,maxMonths:leaseConfig.maxMonths}:null;
   const faqs=faqRecords.map(record=>({id:record.id,question:record.data.question||record.title,answer:record.data.answer||record.subtitle,buttonLabel:record.data.buttonLabel,buttonUrl:record.data.buttonUrl})).filter(item=>item.question&&item.answer);
   const organization={"@context":"https://schema.org","@type":"Organization",name:"ATADAN",url:SITE_URL,logo:`${SITE_URL}/icons/atadan-app-512.png`,telephone:settings.phone,address:{"@type":"PostalAddress",streetAddress:settings.address,addressCountry:"KG"},sameAs:settings.instagram?[settings.instagram]:[]};
   const website={"@context":"https://schema.org","@type":"WebSite",name:"ATADAN",url:SITE_URL,inLanguage:["ru-KG","ky-KG","en"],potentialAction:{"@type":"SearchAction",target:`${SITE_URL}/catalog?search={search_term_string}`,"query-input":"required name=search_term_string"}};
   return (
     <html lang={locale} data-scroll-behavior="smooth" className={`${geistSans.variable} ${geistMono.variable}`}>
-      <body className="antialiased"><script type="application/ld+json" dangerouslySetInnerHTML={{__html:jsonLd(organization)}}/><script type="application/ld+json" dangerouslySetInnerHTML={{__html:jsonLd(website)}}/><SiteSettingsProvider value={settings}><AppChrome faqs={faqs} locale={locale}>{children}</AppChrome></SiteSettingsProvider></body>
+      <body className="antialiased"><script type="application/ld+json" dangerouslySetInnerHTML={{__html:jsonLd(organization)}}/><script type="application/ld+json" dangerouslySetInnerHTML={{__html:jsonLd(website)}}/><SiteSettingsProvider value={settings}><AppChrome faqs={faqs} lease={lease} locale={locale}>{children}</AppChrome></SiteSettingsProvider></body>
     </html>
   );
 }

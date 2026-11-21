@@ -3,6 +3,7 @@
 import { powerRanges } from "../lib/customer-input";
 import { ArrowRight, ChevronDown, MessageCircle, Scale, Search, SlidersHorizontal, Sparkles, X } from "lucide-react";
 import Image from "next/image";
+import { canTrimPhoto, tractorPhotoLoader } from "../lib/photo-loader";
 import { useDeferredValue, useMemo, useRef, useState } from "react";
 import type { Tractor } from "../types";
 import { TractorCard } from "./TractorCard";
@@ -235,7 +236,7 @@ export function CatalogExplorer({
     [t("ui.cat.cmp.field"), (x) => localizeTractor(x, locale).farmArea],
     [t("ui.card.mass"), (x) => { const v = tractorMassKg(x); return v ? `${fmt(v)} ${t("ui.card.kg")}` : "–"; }],
     [t("ui.card.gearbox"), (x) => fact(x).gearbox ?? "–"],
-    [t("ui.card.cabin"), (x) => { const c = fact(x).cabin; return c ? t(`ui.card.cabin.${c}`) : "–"; }],
+    [t("ui.card.cabin"), (x) => { const c = fact(x).cabin; return c ? t(`ui.cat.cmp.cabin.${c}`) : "–"; }],
     [t("ui.card.traction"), (x) => { const v = tractorTractionKn(x); return v ? `${fmt(v, 1)} ${t("ui.card.kn")}` : "–"; }],
     [t("ui.cat.cmp.lift"), (x) => { const v = tractorLiftKn(x); return v ? `${fmt(v, 1)} ${t("ui.card.kn")}` : "–"; }],
     [t("ui.cat.cmp.speed"), (x) => { const v = tractorMaxSpeed(x); return v ? t("ui.cat.speedUpTo", { n: v }) : "–"; }],
@@ -320,20 +321,20 @@ export function CatalogExplorer({
         </div>
       ) : null}
 
-      <dialog ref={compareRef} className="site-dialog compare-dialog" aria-labelledby="compare-title">
+      <dialog ref={compareRef} className="site-dialog compare-dialog" data-lenis-prevent aria-labelledby="compare-title">
         <div className="site-dialog-inner">
           <header>
             <h2 id="compare-title">{t("ui.cat.cmp.title")}</h2>
             <button type="button" className="dialog-close" onClick={() => compareRef.current?.close()} aria-label={t("ui.common.close")}><X size={20} /></button>
           </header>
-          <div className="compare-scroll">
+          <div className="compare-scroll site-dialog-body">
             <table className="compare-table">
               <thead>
                 <tr>
                   <th scope="col"><span className="sr-only">{t("ui.cat.cmp.param")}</span></th>
                   {compared.map((item) => (
                     <th scope="col" key={item.slug}>
-                      <Image src={item.image} alt="" width={160} height={120} />
+                      <Image loader={canTrimPhoto(item.image) ? tractorPhotoLoader : undefined} src={item.image} alt="" width={160} height={120} />
                       <strong>Changfa {item.model}</strong>
                       <Link href={`/catalog/${item.slug}`}>{t("product.details")}</Link>
                     </th>
@@ -353,7 +354,7 @@ export function CatalogExplorer({
         </div>
       </dialog>
 
-      <dialog ref={wizardRef} className="site-dialog wizard-dialog" aria-labelledby="wizard-title">
+      <dialog ref={wizardRef} className="site-dialog wizard-dialog" data-lenis-prevent aria-labelledby="wizard-title">
         <div className="site-dialog-inner">
           <header>
             <div>

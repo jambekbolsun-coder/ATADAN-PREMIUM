@@ -1,6 +1,6 @@
 "use client";
 
-import { Bot, ChevronRight, MessageCircle, Sparkles, X } from "lucide-react";
+import { ChevronRight, MessageCircle, MessageCircleQuestionMark, Sparkles, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { powerRanges, regions } from "../lib/customer-input";
 import { useRouter } from "next/navigation";
@@ -96,7 +96,31 @@ export type SiteFaq = {
   buttonLabel?: string;
   buttonUrl?: string;
 };
-export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
+export type LeaseSummary = { banks: string[]; minDown: number; maxMonths: number };
+
+type Topic = "leasing" | "price" | "choose" | "service" | "more";
+type TopicItem = { id: string; question: string; answer: string; href?: string; label?: string };
+
+/** Готовые вопросы по темам. Цифры лизинга берутся из админки (банки, минимальный взнос, срок). */
+function topicItems(t: (key: string, values?: Record<string, string | number>) => string, lease: LeaseSummary | null): Record<Exclude<Topic, "more">, TopicItem[]> {
+  const item = (id: string, values?: Record<string, string | number>, href?: string, label?: string): TopicItem => ({ id, question: t(`ui.chat.${id}q`), answer: t(`ui.chat.${id}a`, values), href, label });
+  const banks = lease?.banks.length ? lease.banks.join(", ") : "";
+  const leasing = [
+    banks ? item("l1", { banks }, "/finance", t("ui.fin.calc")) : { ...item("l1"), answer: t("ui.chat.l1a0"), href: "/finance", label: t("ui.fin.calc") },
+    ...(lease?.minDown ? [item("l2", { down: lease.minDown }, "/finance", t("ui.fin.calc"))] : []),
+    ...(lease?.maxMonths ? [item("l3", { months: lease.maxMonths })] : []),
+    item("l4"),
+    item("l5"),
+  ];
+  return {
+    leasing,
+    price: [item("p1"), item("p2", undefined, "/catalog", t("home.allModels")), item("p3", undefined, "/catalog", t("home.allModels")), item("p4")],
+    choose: [item("c1", undefined, "/catalog", t("home.allModels")), item("c2"), item("c3", undefined, "/catalog", t("home.allModels")), item("c4", undefined, "/contacts", t("nav.contacts"))],
+    service: [item("s1", undefined, "/service", t("nav.service")), item("s2", undefined, "/parts", t("nav.parts")), item("s3"), item("s4")],
+  };
+}
+
+export function SiteAssist({ faqs = [], lease = null }: { faqs?: SiteFaq[]; lease?: LeaseSummary | null }) {
   const { locale, t } = useI18n(),
     l = ui[locale],
     settings = useSiteSettings();
@@ -108,7 +132,8 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
   const assistantTrigger = useRef<HTMLButtonElement>(null);
   const router = useRouter();
   const [powerIndex, setPowerIndex] = useState(0);
-  const [faq, setFaq] = useState<number | null>(null);
+  const [faq, setFaq] = useState<string | null>(null);
+  const [topic, setTopic] = useState<Topic>("leasing");
   useEffect(() => {
     if (!assistant) return;
     const trigger = assistantTrigger.current;
@@ -198,13 +223,10 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
   }
   const whatsapp = "https://wa.me/" + settings.phone.replace(/\D/g, "");
 
-  const questions: SiteFaq[] = faqs.length
-    ? faqs
-    : l.q.map((question, index) => ({
-        id: `default-${index}`,
-        question,
-        answer: l.a[index],
-      }));
+  const byTopic = topicItems(t, lease);
+  const extra: TopicItem[] = faqs.map((item) => ({ id: `faq-${item.id}`, question: item.question, answer: item.answer, href: item.buttonUrl, label: item.buttonLabel }));
+  const topics: Topic[] = ["leasing", "price", "choose", "service", ...(extra.length ? ["more" as const] : [])];
+  const questions: TopicItem[] = topic === "more" ? extra : byTopic[topic];
   return (
     <>
       <div className="site-assist">
@@ -219,7 +241,7 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
           >
             <header>
               <div>
-                <Bot aria-hidden="true" />
+                <span className="assist-head-icon"><MessageCircleQuestionMark aria-hidden="true" /><i aria-hidden="true" /></span>
                 <span>
                   <strong>{l.faq}</strong>
                   <small>{l.faqText}</small>
@@ -233,35 +255,24 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
                 <X />
               </button>
             </header>
+            <nav className="assist-topics" aria-label={l.faq}>
+              {topics.map((id) => (
+                <button key={id} type="button" aria-pressed={topic === id} onClick={() => { setTopic(id); setFaq(null); }}>{t(`ui.chat.topic.${id}`)}</button>
+              ))}
+            </nav>
             <div>
-              {questions.map((item, index) => (
+              {questions.map((item) => (
                 <article key={item.id}>
-                  <button
-                    type="button"
-                    aria-expanded={faq === index}
-                    onClick={() => setFaq(faq === index ? null : index)}
-                  >
+                  <button type="button" aria-expanded={faq === item.id} onClick={() => setFaq(faq === item.id ? null : item.id)}>
                     {item.question}
                     <ChevronRight />
                   </button>
-                  {faq === index ? (
+                  {faq === item.id ? (
                     <p>
                       {item.answer}
-                      {item.buttonUrl ? (
-                        <a
-                          href={item.buttonUrl}
-                          target={
-                            item.buttonUrl.startsWith("http")
-                              ? "_blank"
-                              : undefined
-                          }
-                          rel={
-                            item.buttonUrl.startsWith("http")
-                              ? "noreferrer"
-                              : undefined
-                          }
-                        >
-                          {item.buttonLabel || t("product.details")}
+                      {item.href ? (
+                        <a href={item.href} target={item.href.startsWith("http") ? "_blank" : undefined} rel={item.href.startsWith("http") ? "noreferrer" : undefined}>
+                          {item.label || t("product.details")}
                         </a>
                       ) : null}
                     </p>
@@ -269,6 +280,7 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
                 </article>
               ))}
             </div>
+            <p className="assist-notfound">{t("ui.chat.notFound")}</p>
             <a href={whatsapp} target="_blank" rel="noreferrer">
               <MessageCircle />
               {l.ask}
@@ -303,9 +315,9 @@ export function SiteAssist({ faqs = [] }: { faqs?: SiteFaq[] }) {
           onClick={() => setAssistant((v) => !v)}
         >
           <span className="assist-bot-symbol">
-            <Bot aria-hidden="true" />
-            <Sparkles aria-hidden="true" />
+            <MessageCircleQuestionMark aria-hidden="true" />
           </span>
+          <span className="assist-bot-label" aria-hidden="true">{t("ui.chat.button")}</span>
         </button>
       </div>
       {quiz ? (

@@ -1,7 +1,10 @@
 "use client";
 
 import Image from "next/image";
-import { ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, Banknote, Gauge, MessageCircle, ShieldCheck, Sprout, Wrench } from "lucide-react";
+import { ArrowLeft, ArrowRight, ArrowUpRight, BadgeCheck, Banknote, FileSignature, Gauge, KeyRound, MessageCircle, Package, ShieldCheck, Sprout, Wrench } from "lucide-react";
+import { ScrollReveal } from "./ScrollReveal";
+import { useSiteSettings } from "./SiteSettings";
+import { tractorGearbox, tractorMaxSpeed, tractorTractionKn } from "../lib/tractor-facts";
 import { FinanceCalculator } from "./FinanceCalculator";
 import { ProductVideo } from "./ProductVideo";
 import { ProductSpecs } from "./ProductSpecs";
@@ -25,6 +28,25 @@ export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRat
   const preferredIndex = rawGallery.findIndex((image) => !image.includes("/images/tractors"));
   const gallery = preferredIndex > 0 ? [rawGallery[preferredIndex], ...rawGallery.filter((_, index) => index !== preferredIndex)] : rawGallery;
   const [activeImage, setActiveImage] = useState(0);
+  const settings = useSiteSettings();
+  const numberLocale = locale === "en" ? "en-US" : "ru-RU";
+  const fmtNum = (value: number) => new Intl.NumberFormat(numberLocale, { maximumFractionDigits: 1 }).format(value);
+  const factGearbox = tractorGearbox(tractor), factTraction = tractorTractionKn(tractor), factSpeed = tractorMaxSpeed(tractor);
+  const modelNumbers = ([
+    [t("ui.card.power"), `${tractor.hp} ${t("common.hp")}`],
+    factGearbox ? [t("ui.card.gearbox"), factGearbox] : null,
+    factTraction ? [t("ui.card.traction"), `${fmtNum(factTraction)} ${t("ui.card.kn")}`] : null,
+    factSpeed ? [t("ui.cat.cmp.speed"), t("ui.cat.speedUpTo", { n: factSpeed })] : null,
+  ] as Array<[string, string] | null>).filter((item): item is [string, string] => Boolean(item));
+  const bankCount = leasingConfig.programs.length;
+  const whyItems = [
+    { id: 1, Icon: BadgeCheck, text: t("ui.prod.why1t"), href: "/about" },
+    { id: 2, Icon: FileSignature, text: t("ui.prod.why2t"), href: "" },
+    { id: 3, Icon: Banknote, text: bankCount ? t("ui.prod.why3t", { n: bankCount }) : t("ui.prod.why3t0"), href: "#leasing" },
+    { id: 4, Icon: KeyRound, text: t("ui.prod.why4t"), href: "" },
+    { id: 5, Icon: Wrench, text: t("ui.prod.why5t"), href: "/service" },
+    { id: 6, Icon: Package, text: t("ui.prod.why6t"), href: "/parts" },
+  ];
   const discount = Math.min(90, Math.max(0, tractor.discountPercent ?? 0));
   const salePrice = tractor.price && discount ? Math.round(tractor.price * (1 - discount / 100)) : tractor.price;
 
@@ -66,12 +88,31 @@ export function ProductDetailClient({ tractor, related, leasingConfig, usdKgsRat
       </div>
     </section>
 
-    <section className="product-comfort section-shell">
-      <div className="comfort-copy"><span className="section-label">{t("product.comfortLabel")}</span><h2>{t("product.comfortTitle")}</h2><p><strong>{localized.comfort}.</strong> {t("product.comfortText")}</p></div>
-      <div className="comfort-points">
-        <article><BadgeCheck /><span>{t("product.featureVision")}</span></article>
-        <article><Wrench /><span>{t("product.featureService")}</span></article>
-        <article><ShieldCheck /><span>{t("product.featureDrive")}</span></article>
+    <section className="product-comfort product-comfort-v5 section-shell">
+      <div className="comfort-copy"><span className="section-label">{t("product.comfortLabel")}</span><h2>{t("product.comfortTitle")}</h2><p><strong>{localized.comfort}.</strong> {t("product.comfortText")}</p>
+        {modelNumbers.length ? <div className="pc-numbers"><small>{t("ui.prod.numbers")}</small><dl>{modelNumbers.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div> : null}
+      </div>
+      <ScrollReveal className="comfort-points pc-points">
+        <article data-reveal><i><BadgeCheck aria-hidden /></i><div><h3>{t("product.featureVision")}</h3><p>{t("ui.prod.visionText")}</p></div></article>
+        <article data-reveal><i><Wrench aria-hidden /></i><div><h3>{t("product.featureService")}</h3><p>{t("ui.prod.serviceText")}</p></div></article>
+        <article data-reveal><i><ShieldCheck aria-hidden /></i><div><h3>{t("product.featureDrive")}</h3><p>{t("ui.prod.driveText")}</p></div></article>
+      </ScrollReveal>
+    </section>
+
+    <section className="why-atadan section-shell" aria-labelledby="why-atadan-title">
+      <div className="why-head">
+        <div><span className="section-label">{t("ui.prod.whyLabel")}</span><h2 id="why-atadan-title">{t("ui.prod.whyTitle")}</h2></div>
+        <p>{t("ui.prod.whyText", { year: 2024, exp: 15 })}</p>
+      </div>
+      <ScrollReveal className="why-grid">
+        {whyItems.map(({ id, Icon, text, href }) => {
+          const body = <><span className="why-icon"><Icon size={22} aria-hidden /></span><h3>{t(`ui.prod.why${id}`)}</h3><p>{text}</p>{href ? <ArrowUpRight className="why-arrow" size={18} aria-hidden /> : null}</>;
+          return href ? <Link key={id} href={href} className="why-card is-link" data-reveal>{body}</Link> : <article key={id} className="why-card" data-reveal>{body}</article>;
+        })}
+      </ScrollReveal>
+      <div className="why-cta">
+        <a className="primary-btn" href="#request">{t("ui.prod.offer")}<ArrowRight size={18} aria-hidden /></a>
+        <a className="ghost-btn" href={`https://wa.me/${settings.phone.replace(/\D/g, "")}?text=${encodeURIComponent(`Здравствуйте! Интересует Changfa ${tractor.model}. Подскажите цену и условия.`)}`} target="_blank" rel="noopener noreferrer"><MessageCircle size={18} aria-hidden />WhatsApp</a>
       </div>
     </section>
 

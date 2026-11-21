@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { Link } from "../components/SiteLink";
-import { Armchair, ArrowUpRight, BadgeCheck, Eye, Handshake, HeartHandshake, SlidersHorizontal, Sprout, Wind } from "lucide-react";
+import { Armchair, ArrowUpRight, BadgeCheck, Check, Eye, Handshake, HeartHandshake, SlidersHorizontal, Sprout, Wind } from "lucide-react";
+import { ScrollReveal } from "../components/ScrollReveal";
 import { Trans } from "../components/I18n";
 import { PageHero } from "../components/PageHero";
 import { FounderLetter } from "../components/FounderLetter";
@@ -25,13 +26,12 @@ export default async function AboutPage() {
     <section className="about-comfort">
       <div className="section-shell">
         <div className="about-comfort-heading"><span className="section-label light"><Trans id="about.comfortLabel" /></span><h2><Trans id="about.comfortTitle" /></h2><p><Trans id="about.comfortIntro" /></p></div>
-        <div className="comfort-explainer-grid">
-          <article><i><Armchair aria-hidden="true" /></i><h3><Trans id="about.comfortSeat" /></h3><p><Trans id="about.comfortSeatText" /></p></article>
-          <article><i><Eye aria-hidden="true" /></i><h3><Trans id="about.comfortView" /></h3><p><Trans id="about.comfortViewText" /></p></article>
-          <article><i><SlidersHorizontal aria-hidden="true" /></i><h3><Trans id="about.comfortControl" /></h3><p><Trans id="about.comfortControlText" /></p></article>
-          <article><i><Wind aria-hidden="true" /></i><h3><Trans id="about.comfortClimate" /></h3><p><Trans id="about.comfortClimateText" /></p></article>
-        </div>
-        <p className="about-comfort-note"><BadgeCheck size={18} aria-hidden="true" /><Trans id="about.comfortNote" /></p>
+        <ScrollReveal className="comfort-explainer-grid cx-v5">
+          {([[Armchair,"Seat",1],[Eye,"View",2],[SlidersHorizontal,"Control",3],[Wind,"Climate",4]] as const).map(([Icon,key,n])=>(
+            <article key={key} data-reveal><div className="cx-top"><i><Icon aria-hidden="true" /></i><small>{String(n).padStart(2,"0")}</small></div><h3><Trans id={`about.comfort${key}`} /></h3><p><Trans id={`about.comfort${key}Text`} /></p><span className="cx-tag"><Check size={15} aria-hidden="true" /><Trans id={`ui.about.comfortTag${n}`} /></span></article>
+          ))}
+        </ScrollReveal>
+        <div className="about-comfort-foot"><p className="about-comfort-note"><BadgeCheck size={18} aria-hidden="true" /><Trans id="about.comfortNote" /></p><Link className="cx-cta" href="/catalog"><Trans id="ui.about.comfortCta" /><ArrowUpRight size={17} aria-hidden="true" /></Link></div>
       </div>
     </section>
 
@@ -50,7 +50,14 @@ export default async function AboutPage() {
       </div>
     </section>
 
-    <section className="section-shell values-grid"><article><BadgeCheck /><h3><Trans id="about.original" /></h3><p><Trans id="about.originalText" /></p></article><article><Handshake /><h3><Trans id="about.clear" /></h3><p><Trans id="about.clearText" /></p></article><article><HeartHandshake /><h3><Trans id="about.responsibility" /></h3><p><Trans id="about.responsibilityText" /></p></article><article><Sprout /><h3><Trans id="about.benefit" /></h3><p><Trans id="about.benefitText" /></p></article></section>
+    <section className="section-shell values-v5" aria-labelledby="values-title">
+      <div className="values-v5-head"><span className="section-label"><Trans id="ui.about.valuesLabel" /></span><h2 id="values-title"><Trans id="ui.about.valuesTitle" /></h2></div>
+      <ScrollReveal className="values-v5-grid">
+        {([[BadgeCheck,"original",1],[Handshake,"clear",2],[HeartHandshake,"responsibility",3],[Sprout,"benefit",4]] as const).map(([Icon,key,n])=>(
+          <article key={key} data-reveal><div className="values-v5-top"><i><Icon aria-hidden="true" /></i><small>{String(n).padStart(2,"0")}</small></div><h3><Trans id={`about.${key}`} /></h3><p><Trans id={`about.${key}Text`} /></p><ul><li><Check size={15} aria-hidden="true" /><Trans id={`ui.about.v${n}a`} /></li><li><Check size={15} aria-hidden="true" /><Trans id={`ui.about.v${n}b`} /></li></ul></article>
+        ))}
+      </ScrollReveal>
+    </section>
     <OfficeMap />
   </main>;
 }

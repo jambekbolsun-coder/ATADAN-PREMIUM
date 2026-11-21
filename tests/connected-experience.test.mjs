@@ -183,7 +183,8 @@ test("published service and FAQ records reach their public surfaces", async () =
     source("app/components/SiteAssist.tsx"),
   ]);
   assert.match(layout, /getPublishedRecords\("faq"\)/);
-  assert.match(assist, /faqs\.length\s*\?\s*faqs/);
+  assert.match(assist, /faqs\.map\(/);
+  assert.match(assist, /extra\.length \? \["more" as const\]/);
   assert.match(service, /getPublishedRecords\("service_pages"\)/);
   assert.match(service, /service-material-image/);
 });
